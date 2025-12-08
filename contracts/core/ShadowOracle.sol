@@ -48,7 +48,29 @@ contract ShadowOracle is ZamaEthereumConfig, Ownable2Step, IShadowTypes {
     /// @notice Modifier per unit of OI imbalance
     uint64 public constant DEMAND_MODIFIER_PER_UNIT = 1; // 0.1% per 1000 units imbalance
 
+    /// @notice Authorized contracts that can update OI (Vault, MarketMaker)
+    mapping(address => bool) public authorizedContracts;
+
+    /// @notice Modifier for authorized contracts only
+    modifier onlyAuthorized() {
+        require(authorizedContracts[msg.sender] || msg.sender == owner(), "Not authorized");
+        _;
+    }
+
     constructor(address _owner) Ownable(_owner) {}
+
+    /**
+     * @notice Set contract authorization
+     * @param contractAddress Address to authorize/deauthorize
+     * @param authorized Whether to authorize
+     */
+    function setAuthorizedContract(address contractAddress, bool authorized) external onlyOwner {
+        authorizedContracts[contractAddress] = authorized;
+        emit ContractAuthorized(contractAddress, authorized);
+    }
+
+    /// @notice Event for contract authorization
+    event ContractAuthorized(address indexed contractAddress, bool authorized);
 
     /**
      * @notice Add a new Pre-IPO asset
@@ -183,7 +205,7 @@ contract ShadowOracle is ZamaEthereumConfig, Ownable2Step, IShadowTypes {
     }
 
     /**
-     * @notice Update open interest (called by vault)
+     * @notice Update open interest (called by vault or market maker)
      * @param assetId Asset identifier
      * @param longDelta Change in long OI
      * @param shortDelta Change in short OI
@@ -194,8 +216,7 @@ contract ShadowOracle is ZamaEthereumConfig, Ownable2Step, IShadowTypes {
         uint256 longDelta,
         uint256 shortDelta,
         bool isIncrease
-    ) external {
-        // TODO: Add access control - only vault can call
+    ) external onlyAuthorized {
         Asset storage asset = assets[assetId];
 
         if (isIncrease) {

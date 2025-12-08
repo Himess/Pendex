@@ -138,6 +138,22 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await shadowUSD.setVault(vaultDeployment.address);
   console.log("   ✅ Vault address set in ShadowUSD");
 
+  // 7. Deploy ShadowMarketMaker
+  console.log("\n7️⃣ Deploying ShadowMarketMaker (On-Chain Bot)...");
+  const marketMakerDeployment = await deploy("ShadowMarketMaker", {
+    from: deployer,
+    args: [deployer, oracleDeployment.address],
+    log: true,
+  });
+  console.log(`   ✅ ShadowMarketMaker: ${marketMakerDeployment.address}`);
+
+  // 8. Authorize contracts in Oracle
+  console.log("\n8️⃣ Authorizing contracts in Oracle...");
+  await oracle.setAuthorizedContract(vaultDeployment.address, true);
+  console.log("   ✅ ShadowVault authorized");
+  await oracle.setAuthorizedContract(marketMakerDeployment.address, true);
+  console.log("   ✅ ShadowMarketMaker authorized");
+
   // Summary
   console.log("\n" + "=".repeat(60));
   console.log("🎉 DEPLOYMENT COMPLETE!");
@@ -147,6 +163,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log(`   ShadowVault:         ${vaultDeployment.address}`);
   console.log(`   ShadowUSD:           ${shadowUSDDeployment.address}`);
   console.log(`   ShadowLiquidityPool: ${liquidityPoolDeployment.address}`);
+  console.log(`   ShadowMarketMaker:   ${marketMakerDeployment.address}`);
   console.log("\n📊 Pre-IPO Assets (Q3 2025 Setter 30):");
   console.log("\n   🤖 AI & ML:");
   console.log("      OPENAI @ $250 | ANTHROPIC @ $95 | XAI @ $60");
@@ -162,6 +179,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("\n" + "=".repeat(60));
   console.log("🔐 All trades are FULLY ENCRYPTED with FHE");
   console.log("👁️ No one can see your positions, leverage, or P&L");
+  console.log("=".repeat(60));
+  console.log("\n🤖 Market Maker Bot Commands:");
+  console.log("   npx hardhat run scripts/runBot.ts --network zama");
+  console.log("   npx hardhat run scripts/runBot.ts --network sepolia");
   console.log("=".repeat(60) + "\n");
 };
 

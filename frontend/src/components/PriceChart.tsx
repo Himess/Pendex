@@ -1,27 +1,28 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Lock, Shield } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { Lock, Shield, Wifi, WifiOff } from "lucide-react";
 import { Asset, formatUSD, formatPercent } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useMarketWebSocket, Candle } from "@/hooks/useMarketWebSocket";
 
 interface PriceChartProps {
   selectedAsset: Asset | null;
 }
 
-// Generate realistic candlestick data based on asset price
+// Fallback: Generate realistic candlestick data if no live data
 function generateCandlestickData(basePrice: number, days: number = 90) {
   const data: { time: number; open: number; high: number; low: number; close: number }[] = [];
-  let currentPrice = basePrice * 0.85; // Start 15% lower
+  let currentPrice = basePrice * 0.85;
   const now = new Date();
 
   for (let i = days; i >= 0; i--) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
 
-    const volatility = 0.02 + Math.random() * 0.03; // 2-5% daily volatility
-    const trend = (basePrice - currentPrice) / basePrice * 0.1; // Drift toward current price
+    const volatility = 0.02 + Math.random() * 0.03;
+    const trend = (basePrice - currentPrice) / basePrice * 0.1;
     const change = (Math.random() - 0.45 + trend) * volatility;
 
     const open = currentPrice;
@@ -43,6 +44,17 @@ function generateCandlestickData(basePrice: number, days: number = 90) {
   return data;
 }
 
+// Convert WebSocket candles to chart format
+function convertCandles(candles: Candle[]) {
+  return candles.map((c) => ({
+    time: Math.floor(c.timestamp / 1000),
+    open: c.open,
+    high: c.high,
+    low: c.low,
+    close: c.close,
+  }));
+}
+
 export function PriceChart({ selectedAsset }: PriceChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
@@ -50,19 +62,33 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
   const [timeframe, setTimeframe] = useState("1D");
   const [isChartReady, setIsChartReady] = useState(false);
 
+  // WebSocket connection
+  const { isConnected, currentAsset, candles, subscribe } = useMarketWebSocket(
+    selectedAsset?.id
+  );
+
+  // Live price from WebSocket or fallback to prop
+  const livePrice = currentAsset?.price ?? selectedAsset?.price ?? 0;
+  const liveChange = currentAsset?.change24h ?? selectedAsset?.change24h ?? 0;
+
+  // Subscribe to asset when it changes
+  useEffect(() => {
+    if (selectedAsset?.id) {
+      subscribe(selectedAsset.id);
+    }
+  }, [selectedAsset?.id, subscribe]);
+
+  // Initialize chart
   useEffect(() => {
     if (!chartContainerRef.current || !selectedAsset) return;
 
-    // Dynamic import for SSR compatibility
     void import("lightweight-charts").then(({ createChart }) => {
       if (!chartContainerRef.current) return;
 
-      // Clear any existing chart
       if (chartRef.current) {
         chartRef.current.remove();
       }
 
-      // Create chart
       const chart = createChart(chartContainerRef.current, {
         layout: {
           background: { color: "transparent" },
@@ -92,7 +118,7 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
         timeScale: {
           borderColor: "rgba(255, 255, 255, 0.1)",
           timeVisible: true,
-          secondsVisible: false,
+          secondsVisible: true,
         },
         handleScale: {
           axisPressedMouseMove: true,
@@ -107,7 +133,6 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
         },
       });
 
-      // Add candlestick series
       const candlestickSeries = (chart as any).addCandlestickSeries({
         upColor: "#10B981",
         downColor: "#EF4444",
@@ -117,29 +142,20 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
         wickDownColor: "#EF4444",
       });
 
-      // Generate and set data
-      const data = generateCandlestickData(selectedAsset.price);
-      candlestickSeries.setData(data as any);
+      // Initial data - use live candles if available, else generate
+      if (candles.length > 0) {
+        candlestickSeries.setData(convertCandles(candles) as any);
+      } else {
+        const data = generateCandlestickData(selectedAsset.price);
+        candlestickSeries.setData(data as any);
+      }
 
-      // Add price line for current price
-      candlestickSeries.createPriceLine({
-        price: selectedAsset.price,
-        color: "#F7B731",
-        lineWidth: 1,
-        lineStyle: 2, // Dashed
-        axisLabelVisible: true,
-        title: "Current",
-      });
-
-      // Fit content
       chart.timeScale().fitContent();
 
-      // Store refs
       chartRef.current = chart;
       candlestickSeriesRef.current = candlestickSeries;
       setIsChartReady(true);
 
-      // Handle resize
       const handleResize = () => {
         if (chartContainerRef.current) {
           chart.applyOptions({
@@ -165,27 +181,52 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
         setIsChartReady(false);
       }
     };
-  }, [selectedAsset]);
+  }, [selectedAsset?.id]);
 
-  // Update data when timeframe changes
+  // Update chart with live candles from WebSocket
   useEffect(() => {
-    if (!candlestickSeriesRef.current || !selectedAsset || !isChartReady) return;
+    if (!candlestickSeriesRef.current || !isChartReady || candles.length === 0) return;
 
-    const daysMap: Record<string, number> = {
-      "1H": 1,
-      "4H": 3,
-      "1D": 90,
-      "1W": 365,
-    };
+    const chartData = convertCandles(candles);
+    candlestickSeriesRef.current.setData(chartData as any);
 
-    const data = generateCandlestickData(selectedAsset.price, daysMap[timeframe] || 90);
-    candlestickSeriesRef.current.setData(data as any);
-    chartRef.current?.timeScale().fitContent();
-  }, [timeframe, selectedAsset, isChartReady]);
+    // Update last candle in realtime
+    if (chartData.length > 0) {
+      const lastCandle = chartData[chartData.length - 1];
+      candlestickSeriesRef.current.update(lastCandle as any);
+    }
+  }, [candles, isChartReady]);
+
+  // Update price line
+  useEffect(() => {
+    if (!candlestickSeriesRef.current || !isChartReady) return;
+
+    // Remove old price lines and add new one
+    try {
+      const priceLine = candlestickSeriesRef.current.createPriceLine({
+        price: livePrice,
+        color: "#F7B731",
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: "Live",
+      });
+
+      return () => {
+        try {
+          candlestickSeriesRef.current?.removePriceLine(priceLine);
+        } catch (e) {
+          // Ignore
+        }
+      };
+    } catch (e) {
+      // Ignore
+    }
+  }, [livePrice, isChartReady]);
 
   if (!selectedAsset) {
     return (
-      <div className="flex-1 bg-card border border-border rounded-xl flex items-center justify-center">
+      <div className="h-full bg-card border border-border rounded-xl flex items-center justify-center">
         <div className="text-center">
           <Lock className="w-16 h-16 text-text-muted mx-auto mb-4" />
           <p className="text-xl text-text-secondary">Select an asset to trade</p>
@@ -198,62 +239,74 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
   }
 
   return (
-    <div className="flex-1 bg-card border border-border rounded-xl overflow-hidden flex flex-col">
+    <div className="h-full bg-card border border-border rounded-xl overflow-hidden flex flex-col">
       {/* Chart Header */}
-      <div className="p-4 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-sm font-bold text-gold border border-border overflow-hidden">
-              {selectedAsset.logo ? (
-                <img
-                  src={selectedAsset.logo}
-                  alt={selectedAsset.symbol}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = "none";
-                  }}
-                />
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full bg-background flex items-center justify-center text-sm font-bold text-gold border border-border overflow-hidden">
+            {selectedAsset.logo ? (
+              <img
+                src={selectedAsset.logo}
+                alt={selectedAsset.symbol}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
+            ) : (
+              selectedAsset.symbol.slice(0, 2)
+            )}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold text-text-primary">
+                {selectedAsset.name}
+              </h2>
+              <span className="text-xs text-text-muted">(PRE-IPO)</span>
+              {/* Live indicator */}
+              {isConnected ? (
+                <span className="flex items-center gap-1 text-xs text-success">
+                  <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                  LIVE
+                </span>
               ) : (
-                selectedAsset.symbol.slice(0, 2)
+                <span className="flex items-center gap-1 text-xs text-text-muted">
+                  <WifiOff className="w-3 h-3" />
+                </span>
               )}
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-text-primary">
-                {selectedAsset.name}{" "}
-                <span className="text-text-muted">(PRE-IPO)</span>
-              </h2>
-              <div className="flex items-center gap-2">
-                <span className="text-2xl font-bold text-text-primary">
-                  {formatUSD(selectedAsset.price)}
-                </span>
-                <span
-                  className={cn(
-                    "text-sm font-medium",
-                    selectedAsset.change24h >= 0 ? "text-success" : "text-danger"
-                  )}
-                >
-                  {formatPercent(selectedAsset.change24h)}
-                </span>
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xl font-bold text-text-primary">
+                {formatUSD(livePrice)}
+              </span>
+              <span
+                className={cn(
+                  "text-sm font-medium",
+                  liveChange >= 0 ? "text-success" : "text-danger"
+                )}
+              >
+                {formatPercent(liveChange)}
+              </span>
             </div>
           </div>
         </div>
 
         <div className="badge-gold flex items-center gap-1.5">
           <Shield className="w-3.5 h-3.5" />
-          <span>Encrypted Data Stream</span>
+          <span className="hidden sm:inline">Encrypted Data Stream</span>
+          <span className="sm:hidden">FHE</span>
         </div>
       </div>
 
       {/* Chart Area */}
-      <div className="flex-1 relative min-h-[300px]">
+      <div className="flex-1 relative min-h-[350px]">
         <div ref={chartContainerRef} className="absolute inset-0" />
       </div>
 
       {/* Time Frame Selector */}
-      <div className="p-4 border-t border-border flex items-center justify-between">
+      <div className="p-3 border-t border-border flex items-center justify-between flex-shrink-0">
         <div className="flex gap-2">
-          {["1H", "4H", "1D", "1W"].map((tf) => (
+          {["1M", "5M", "1H", "1D"].map((tf) => (
             <button
               key={tf}
               onClick={() => setTimeframe(tf)}
@@ -269,10 +322,18 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
           ))}
         </div>
 
-        <div className="flex gap-2 text-xs text-text-muted">
-          <span>Scroll to zoom</span>
-          <span>|</span>
-          <span>Drag to pan</span>
+        <div className="flex items-center gap-2 text-xs text-text-muted">
+          {isConnected ? (
+            <>
+              <Wifi className="w-3.5 h-3.5 text-success" />
+              <span>Real-time</span>
+            </>
+          ) : (
+            <>
+              <WifiOff className="w-3.5 h-3.5" />
+              <span>Connecting...</span>
+            </>
+          )}
         </div>
       </div>
     </div>

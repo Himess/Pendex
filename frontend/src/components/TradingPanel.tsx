@@ -26,7 +26,7 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
   };
 
   return (
-    <div className="w-80 bg-card border-l border-border h-full overflow-y-auto">
+    <div className="w-80 bg-card border border-border rounded-xl overflow-y-auto flex-shrink-0">
       {/* Header */}
       <div className="p-4 border-b border-border">
         <h2 className="text-lg font-semibold text-text-primary">TRADING</h2>

@@ -24,30 +24,30 @@ function TradeContent() {
   }, [assetId]);
 
   return (
-    <div className="pt-16 flex h-screen">
+    <div className="pt-16 flex min-h-screen">
       {/* Left Sidebar - Assets */}
       <AssetSidebar
         selectedAsset={selectedAsset}
         onSelectAsset={setSelectedAsset}
       />
 
-      {/* Main Area */}
-      <main className="flex-1 flex flex-col p-4 gap-4 overflow-hidden">
-        {/* Top Section - Chart + Trading Panel */}
-        <div className="flex gap-4 flex-1 min-h-0">
-          {/* Left: Chart takes most space */}
-          <div className="flex-1 flex flex-col min-w-0">
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col p-4 gap-4 overflow-x-hidden">
+        {/* Chart Section - Takes primary space */}
+        <div className="flex gap-4 min-h-[500px]">
+          {/* Chart - flex-1 to take most horizontal space */}
+          <div className="flex-1 min-w-0">
             <PriceChart selectedAsset={selectedAsset} />
           </div>
-          {/* Right: Trading Panel */}
+          {/* Trading Panel - Fixed width */}
           <TradingPanel selectedAsset={selectedAsset} />
         </div>
 
-        {/* Middle Section - Market Info (compact) */}
+        {/* Market Info - Compact bar */}
         <MarketInfo selectedAsset={selectedAsset} />
 
-        {/* Bottom Section - Positions */}
-        <div className="h-56 flex-shrink-0">
+        {/* Positions Table - Collapsible section */}
+        <div className="min-h-[200px]">
           <PositionsTable />
         </div>
       </main>
