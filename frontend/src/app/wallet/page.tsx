@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Header } from "@/components";
+import { Header, Footer } from "@/components";
 import { formatUSD, formatPercent } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import {
@@ -214,10 +214,10 @@ export default function WalletPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <Header />
 
-      <main className="pt-20 px-6 pb-8 max-w-6xl mx-auto">
+      <main className="pt-20 px-6 pb-8 max-w-6xl mx-auto flex-1">
         {/* Page Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -1198,6 +1198,8 @@ export default function WalletPage() {
           <span className="text-sm">All balances are encrypted with FHE</span>
         </div>
       </main>
+
+      <Footer />
     </div>
   );
 }

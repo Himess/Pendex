@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Header } from "@/components";
+import { Header, Footer } from "@/components";
 import {
   ChevronDown,
   ChevronRight,
@@ -839,10 +839,10 @@ export default function DocsPage() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <Header />
 
-      <main className="pt-20 px-4 md:px-6 pb-16 max-w-5xl mx-auto">
+      <main className="pt-20 px-4 md:px-6 pb-16 max-w-5xl mx-auto flex-1">
         {/* Page Header */}
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-gold/10 border border-gold/30 rounded-full mb-4">
@@ -935,7 +935,9 @@ export default function DocsPage() {
               Discord
             </a>
             <a
-              href="#"
+              href="https://github.com/poppyseedDev"
+              target="_blank"
+              rel="noopener noreferrer"
               className="px-4 py-2 bg-gold text-background rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
             >
               GitHub
@@ -943,6 +945,8 @@ export default function DocsPage() {
           </div>
         </div>
       </main>
+
+      <Footer />
     </div>
   );
 }
