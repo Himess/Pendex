@@ -151,8 +151,8 @@ export function NetworkSelectorCompact() {
         <div className="border-t border-border p-3">
           <p className="text-xs text-text-secondary">
             {isFHEEnabled
-              ? "All trades are encrypted with FHE. Nobody can see your positions."
-              : "Trades are visible on Ethereum. Switch to Zama for privacy."
+              ? "All trades are encrypted with Zama FHE. Nobody can see your positions."
+              : "Local development mode with mock FHE. Switch to Sepolia for real encryption."
             }
           </p>
         </div>

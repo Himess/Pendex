@@ -4,10 +4,52 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header, TradingPanel, PositionsTable, PriceChart, OrderBook, MarketStats } from "@/components";
 import { Asset, ASSETS } from "@/lib/constants";
-import { Lock, ChevronDown } from "lucide-react";
+import { Lock, ChevronDown, X, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLiveAssetPrice } from "@/hooks/useLiveOracle";
 import { useCurrentNetwork } from "@/lib/contracts/hooks";
+
+// Mobile Bottom Sheet Component
+function MobileBottomSheet({
+  isOpen,
+  onClose,
+  title,
+  children
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/60 z-50 lg:hidden"
+        onClick={onClose}
+      />
+      {/* Sheet */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-card rounded-t-2xl max-h-[85vh] flex flex-col animate-slide-up">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <h3 className="font-semibold text-text-primary">{title}</h3>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-card-hover rounded-full transition-colors"
+          >
+            <X className="w-5 h-5 text-text-muted" />
+          </button>
+        </div>
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {children}
+        </div>
+      </div>
+    </>
+  );
+}
 
 // Asset selector dropdown for top bar
 function AssetSelector({
@@ -115,6 +157,8 @@ function TradeContent() {
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [rightPanelTab, setRightPanelTab] = useState<"orderbook" | "trades">("orderbook");
   const [bottomTab, setBottomTab] = useState<"positions" | "orders" | "history">("positions");
+  const [mobileTradeOpen, setMobileTradeOpen] = useState(false);
+  const [mobileOrderBookOpen, setMobileOrderBookOpen] = useState(false);
 
   // Get live price
   const { asset: oracleAsset } = useLiveAssetPrice(
@@ -242,13 +286,43 @@ function TradeContent() {
           </div>
         </div>
 
-        {/* Mobile Trading Panel Toggle */}
-        <div className="lg:hidden fixed bottom-4 right-4 z-50">
-          <button className="bg-gold text-background px-6 py-3 rounded-full font-semibold shadow-lg flex items-center gap-2">
+        {/* Mobile Action Buttons */}
+        <div className="lg:hidden fixed bottom-4 left-4 right-4 z-40 flex gap-3">
+          <button
+            onClick={() => setMobileOrderBookOpen(true)}
+            className="flex-1 bg-card border border-border text-text-primary px-4 py-3 rounded-xl font-semibold shadow-lg flex items-center justify-center gap-2"
+          >
+            <BookOpen className="w-4 h-4" />
+            Order Book
+          </button>
+          <button
+            onClick={() => setMobileTradeOpen(true)}
+            className="flex-1 bg-gold text-background px-4 py-3 rounded-xl font-semibold shadow-lg flex items-center justify-center gap-2"
+          >
             <Lock className="w-4 h-4" />
             Trade
           </button>
         </div>
+
+        {/* Mobile Trading Sheet */}
+        <MobileBottomSheet
+          isOpen={mobileTradeOpen}
+          onClose={() => setMobileTradeOpen(false)}
+          title={`Trade ${selectedAsset?.symbol || ""}`}
+        >
+          <TradingPanel selectedAsset={selectedAsset} />
+        </MobileBottomSheet>
+
+        {/* Mobile Order Book Sheet */}
+        <MobileBottomSheet
+          isOpen={mobileOrderBookOpen}
+          onClose={() => setMobileOrderBookOpen(false)}
+          title="Order Book"
+        >
+          <div className="h-[60vh]">
+            <OrderBook selectedAsset={selectedAsset} currentPrice={currentPrice} />
+          </div>
+        </MobileBottomSheet>
       </div>
     </div>
   );

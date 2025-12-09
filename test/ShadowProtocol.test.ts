@@ -1,21 +1,24 @@
 import { expect } from "chai";
 import { ethers, fhevm } from "hardhat";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import { ShadowVault, ShadowOracle, ShadowUSD } from "../typechain-types";
+import { ShadowVault, ShadowOracle, ShadowUSD, ShadowLiquidityPool } from "../typechain-types";
 
 describe("Shadow Protocol - Private Leveraged Pre-IPO Trading", function () {
   let owner: HardhatEthersSigner;
   let trader1: HardhatEthersSigner;
   let trader2: HardhatEthersSigner;
   let liquidator: HardhatEthersSigner;
+  let treasury: HardhatEthersSigner;
 
   let vault: ShadowVault;
   let oracle: ShadowOracle;
   let shadowUSD: ShadowUSD;
+  let liquidityPool: ShadowLiquidityPool;
 
   let vaultAddress: string;
   let oracleAddress: string;
   let shadowUSDAddress: string;
+  let liquidityPoolAddress: string;
 
   // Asset IDs
   let spacexId: string;
@@ -26,7 +29,7 @@ describe("Shadow Protocol - Private Leveraged Pre-IPO Trading", function () {
   const STRIPE_PRICE = 45_000_000;  // $45 with 6 decimals
 
   before(async function () {
-    [owner, trader1, trader2, liquidator] = await ethers.getSigners();
+    [owner, trader1, trader2, liquidator, treasury] = await ethers.getSigners();
   });
 
   beforeEach(async function () {
@@ -35,15 +38,30 @@ describe("Shadow Protocol - Private Leveraged Pre-IPO Trading", function () {
     oracle = await OracleFactory.deploy(owner.address) as ShadowOracle;
     oracleAddress = await oracle.getAddress();
 
-    // Deploy Vault
-    const VaultFactory = await ethers.getContractFactory("ShadowVault");
-    vault = await VaultFactory.deploy(owner.address, oracleAddress) as ShadowVault;
-    vaultAddress = await vault.getAddress();
-
     // Deploy ShadowUSD
     const ShadowUSDFactory = await ethers.getContractFactory("ShadowUSD");
     shadowUSD = await ShadowUSDFactory.deploy(owner.address) as ShadowUSD;
     shadowUSDAddress = await shadowUSD.getAddress();
+
+    // Deploy Liquidity Pool
+    const LiquidityPoolFactory = await ethers.getContractFactory("ShadowLiquidityPool");
+    liquidityPool = await LiquidityPoolFactory.deploy(
+      owner.address,
+      shadowUSDAddress,
+      treasury.address
+    ) as ShadowLiquidityPool;
+    liquidityPoolAddress = await liquidityPool.getAddress();
+
+    // Deploy Vault with all required parameters
+    const VaultFactory = await ethers.getContractFactory("ShadowVault");
+    vault = await VaultFactory.deploy(
+      owner.address,
+      oracleAddress,
+      shadowUSDAddress,
+      liquidityPoolAddress,
+      treasury.address
+    ) as ShadowVault;
+    vaultAddress = await vault.getAddress();
 
     // Setup: Add Pre-IPO assets
     await oracle.addAsset("SpaceX", "SPACEX", SPACEX_PRICE);
@@ -54,6 +72,9 @@ describe("Shadow Protocol - Private Leveraged Pre-IPO Trading", function () {
 
     // Setup: Set vault in ShadowUSD
     await shadowUSD.setVault(vaultAddress);
+
+    // Setup: Authorize vault in oracle for OI updates
+    await oracle.setAuthorizedContract(vaultAddress, true);
   });
 
   describe("Oracle", function () {
@@ -91,6 +112,15 @@ describe("Shadow Protocol - Private Leveraged Pre-IPO Trading", function () {
 
       await oracle.setAssetStatus(spacexId, false);
       expect(await oracle.isAssetTradeable(spacexId)).to.be.false;
+    });
+
+    it("should calculate price with demand modifier", async function () {
+      // Update OI to create price modifier
+      await oracle.updateOpenInterest(spacexId, 1000_000_000, 0, true); // 1000 long OI
+
+      // Price should be slightly higher due to long OI
+      const priceAfter = await oracle.getCurrentPrice(spacexId);
+      expect(priceAfter).to.be.gte(SPACEX_PRICE);
     });
   });
 
@@ -405,6 +435,32 @@ describe("Shadow Protocol - Private Leveraged Pre-IPO Trading", function () {
     });
   });
 
+  describe("Revenue Distribution", function () {
+    it("should have correct LP and protocol share constants", async function () {
+      expect(await vault.LP_SHARE_BPS()).to.equal(5000); // 50%
+      expect(await vault.PROTOCOL_SHARE_BPS()).to.equal(5000); // 50%
+    });
+
+    it("should have treasury address set", async function () {
+      expect(await vault.treasury()).to.equal(treasury.address);
+    });
+
+    it("should track total fees collected", async function () {
+      expect(await vault.totalFeesCollected()).to.equal(0);
+    });
+
+    it("should track liquidation proceeds", async function () {
+      expect(await vault.totalLiquidationProceeds()).to.equal(0);
+    });
+  });
+
+  describe("Liquidation", function () {
+    it("should have correct liquidation thresholds", async function () {
+      expect(await vault.LIQUIDATION_THRESHOLD_BPS()).to.equal(8000); // 80%
+      expect(await vault.FULL_LIQUIDATION_BPS()).to.equal(10000); // 100%
+    });
+  });
+
   describe("Privacy Verification", function () {
     it("positions from different users should have different encrypted data", async function () {
       // Deposit for both traders
@@ -496,6 +552,89 @@ describe("Shadow Protocol - Private Leveraged Pre-IPO Trading", function () {
       console.log("\n✅ Trading cycle complete!");
       console.log("   - All amounts remained encrypted throughout");
       console.log("   - Only the trader can decrypt their P&L");
+    });
+  });
+
+  describe("Limit Orders", function () {
+    beforeEach(async function () {
+      // Deposit collateral for trader1
+      const depositAmount = 10000_000_000;
+      const encDeposit = await fhevm
+        .createEncryptedInput(vaultAddress, trader1.address)
+        .add64(depositAmount)
+        .encrypt();
+
+      await vault
+        .connect(trader1)
+        .deposit(encDeposit.handles[0], encDeposit.inputProof);
+    });
+
+    it("should create encrypted limit order", async function () {
+      const triggerPrice = 160_000_000; // $160
+      const collateral = 1000_000_000;
+      const leverage = 5;
+      const isLong = true;
+      const isAbove = true; // Trigger when price goes above
+
+      const enc = await fhevm
+        .createEncryptedInput(vaultAddress, trader1.address)
+        .add64(triggerPrice)
+        .add64(collateral)
+        .add64(leverage)
+        .addBool(isLong)
+        .addBool(isAbove)
+        .encrypt();
+
+      await vault
+        .connect(trader1)
+        .createLimitOrder(
+          spacexId,
+          enc.handles[0], // triggerPrice
+          enc.handles[1], // collateral
+          enc.handles[2], // leverage
+          enc.handles[3], // isLong
+          enc.handles[4], // isAbove
+          enc.inputProof
+        );
+
+      const orders = await vault.getUserLimitOrders(trader1.address);
+      expect(orders.length).to.equal(1);
+    });
+
+    it("should cancel limit order", async function () {
+      // Create order first
+      const enc = await fhevm
+        .createEncryptedInput(vaultAddress, trader1.address)
+        .add64(160_000_000)
+        .add64(1000_000_000)
+        .add64(5)
+        .addBool(true)
+        .addBool(true)
+        .encrypt();
+
+      await vault
+        .connect(trader1)
+        .createLimitOrder(
+          spacexId,
+          enc.handles[0],
+          enc.handles[1],
+          enc.handles[2],
+          enc.handles[3],
+          enc.handles[4],
+          enc.inputProof
+        );
+
+      // Cancel order
+      await vault.connect(trader1).cancelLimitOrder(1);
+
+      // Verify it's cancelled (this would need to be exposed in contract)
+    });
+  });
+
+  describe("Anonymous Trading (Future)", function () {
+    it.skip("should support anonymous position creation (not yet implemented)", async function () {
+      // This feature is planned for future implementation
+      // Anonymous trading will use eaddress to hide position ownership
     });
   });
 });

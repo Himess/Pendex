@@ -2,28 +2,18 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, createConfig, http } from "wagmi";
-import { sepolia, type Chain } from "wagmi/chains";
+import { sepolia, hardhat } from "wagmi/chains";
 import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
 import { useState, createContext, useContext, useEffect } from "react";
-import { ZAMA_DEVNET, type SupportedNetwork } from "@/lib/contracts/config";
+import { type SupportedNetwork } from "@/lib/contracts/config";
 
-// Define Zama Devnet as a wagmi chain
-const zamaDevnet: Chain = {
-  id: ZAMA_DEVNET.id,
-  name: ZAMA_DEVNET.name,
-  nativeCurrency: ZAMA_DEVNET.nativeCurrency,
-  rpcUrls: ZAMA_DEVNET.rpcUrls,
-  blockExplorers: ZAMA_DEVNET.blockExplorers,
-  testnet: true,
-};
-
-// Configure chains - both Sepolia and Zama
+// Configure chains - both Sepolia (with Zama FHE) and Hardhat (local dev)
 const config = createConfig({
-  chains: [sepolia, zamaDevnet],
+  chains: [sepolia, hardhat],
   transports: {
     [sepolia.id]: http("https://sepolia.infura.io/v3/84842078b09946638c03157f83405213"),
-    [zamaDevnet.id]: http("https://devnet.zama.ai"),
+    [hardhat.id]: http("http://127.0.0.1:8545"),
   },
 });
 
@@ -37,7 +27,7 @@ interface NetworkContextType {
 const NetworkContext = createContext<NetworkContextType>({
   selectedNetwork: "sepolia",
   setSelectedNetwork: () => {},
-  isFHEEnabled: false,
+  isFHEEnabled: true,
 });
 
 export const useNetwork = () => useContext(NetworkContext);
@@ -52,7 +42,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setMounted(true);
   }, []);
 
-  const isFHEEnabled = selectedNetwork === "zama";
+  // Sepolia uses real Zama FHE, Hardhat uses mock FHE
+  const isFHEEnabled = selectedNetwork === "sepolia";
 
   return (
     <NetworkContext.Provider value={{ selectedNetwork, setSelectedNetwork, isFHEEnabled }}>

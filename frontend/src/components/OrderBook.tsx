@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
-import { Lock } from "lucide-react";
+import { useMemo, useEffect, useState } from "react";
+import { Lock, RefreshCw } from "lucide-react";
 import { Asset } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useAssetPrice, useAsset } from "@/lib/contracts/hooks";
+import { keccak256, toHex } from "viem";
 
 interface OrderBookProps {
   selectedAsset: Asset | null;
@@ -17,9 +19,23 @@ interface OrderLevel {
   isEncrypted: boolean;
 }
 
-// Generate simulated encrypted order book based on current price
-function generateOrderBook(basePrice: number, symbol: string): { asks: OrderLevel[]; bids: OrderLevel[] } {
-  // Seeded random for consistency
+interface OracleAsset {
+  name: string;
+  symbol: string;
+  basePrice: bigint;
+  isActive: boolean;
+  totalLongOI: bigint;
+  totalShortOI: bigint;
+}
+
+// Generate order book based on current price and OI data
+function generateOrderBook(
+  basePrice: number,
+  symbol: string,
+  longOI: number,
+  shortOI: number
+): { asks: OrderLevel[]; bids: OrderLevel[] } {
+  // Seeded random for consistency per asset
   let seed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const seededRandom = () => {
     seed = (seed * 9301 + 49297) % 233280;
@@ -31,11 +47,19 @@ function generateOrderBook(basePrice: number, symbol: string): { asks: OrderLeve
 
   const spread = basePrice * 0.001; // 0.1% spread
 
+  // Calculate relative weights based on OI
+  const totalOI = longOI + shortOI;
+  const longWeight = totalOI > 0 ? longOI / totalOI : 0.5;
+  const shortWeight = totalOI > 0 ? shortOI / totalOI : 0.5;
+
   // Generate 12 ask levels (sell orders above current price)
+  // More asks when there's more long OI (people wanting to take profit)
   let askTotal = 0;
   for (let i = 0; i < 12; i++) {
     const price = basePrice + spread + (i * basePrice * 0.0005);
-    const size = 0.1 + seededRandom() * 2;
+    // Size influenced by long OI
+    const baseSize = 0.1 + seededRandom() * 2;
+    const size = baseSize * (1 + longWeight * 0.5);
     askTotal += size;
     asks.push({
       price,
@@ -46,10 +70,13 @@ function generateOrderBook(basePrice: number, symbol: string): { asks: OrderLeve
   }
 
   // Generate 12 bid levels (buy orders below current price)
+  // More bids when there's more short OI (shorts wanting to cover)
   let bidTotal = 0;
   for (let i = 0; i < 12; i++) {
     const price = basePrice - spread - (i * basePrice * 0.0005);
-    const size = 0.1 + seededRandom() * 2;
+    // Size influenced by short OI
+    const baseSize = 0.1 + seededRandom() * 2;
+    const size = baseSize * (1 + shortWeight * 0.5);
     bidTotal += size;
     bids.push({
       price,
@@ -62,19 +89,74 @@ function generateOrderBook(basePrice: number, symbol: string): { asks: OrderLeve
   return { asks: asks.reverse(), bids };
 }
 
-export function OrderBook({ selectedAsset, currentPrice }: OrderBookProps) {
-  const price = currentPrice || selectedAsset?.price || 100;
+export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookProps) {
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Generate asset ID for oracle lookup
+  const assetId = useMemo(() => {
+    if (!selectedAsset) return undefined;
+    return keccak256(toHex(selectedAsset.symbol.toUpperCase())) as `0x${string}`;
+  }, [selectedAsset]);
+
+  // Fetch live price from oracle
+  const { data: oraclePrice, refetch: refetchPrice } = useAssetPrice(assetId);
+
+  // Fetch asset data including OI
+  const { data: assetData, refetch: refetchAsset } = useAsset(assetId);
+
+  // Convert oracle price (6 decimals) to display price
+  const livePrice = useMemo(() => {
+    if (oraclePrice) {
+      return Number(oraclePrice) / 1e6;
+    }
+    return propPrice || selectedAsset?.price || 100;
+  }, [oraclePrice, propPrice, selectedAsset]);
+
+  // Get OI data
+  const { longOI, shortOI } = useMemo(() => {
+    if (assetData) {
+      const data = assetData as OracleAsset;
+      return {
+        longOI: Number(data.totalLongOI) / 1e6,
+        shortOI: Number(data.totalShortOI) / 1e6,
+      };
+    }
+    return { longOI: 0, shortOI: 0 };
+  }, [assetData]);
+
+  // Generate order book with live data
   const { asks, bids } = useMemo(() => {
     if (!selectedAsset) {
       return { asks: [], bids: [] };
     }
-    return generateOrderBook(price, selectedAsset.symbol);
-  }, [selectedAsset?.symbol, price]);
+    return generateOrderBook(livePrice, selectedAsset.symbol, longOI, shortOI);
+  }, [selectedAsset, livePrice, longOI, shortOI]);
+
+  // Auto-refresh every 10 seconds
+  useEffect(() => {
+    if (!selectedAsset) return;
+
+    const refresh = async () => {
+      setIsRefreshing(true);
+      await Promise.all([refetchPrice(), refetchAsset()]);
+      setLastUpdate(new Date());
+      setIsRefreshing(false);
+    };
+
+    // Initial fetch
+    refresh();
+
+    // Set up interval
+    const interval = setInterval(refresh, 10000);
+
+    return () => clearInterval(interval);
+  }, [selectedAsset, refetchPrice, refetchAsset]);
 
   const maxTotal = Math.max(
     ...asks.map(a => a.total),
-    ...bids.map(b => b.total)
+    ...bids.map(b => b.total),
+    1
   );
 
   if (!selectedAsset) {
@@ -92,6 +174,9 @@ export function OrderBook({ selectedAsset, currentPrice }: OrderBookProps) {
     return p.toFixed(4);
   };
 
+  const spreadAmount = livePrice * 0.002;
+  const spreadPercent = 0.2;
+
   return (
     <div className="h-full bg-card border border-border rounded flex flex-col overflow-hidden">
       {/* Header */}
@@ -100,7 +185,37 @@ export function OrderBook({ selectedAsset, currentPrice }: OrderBookProps) {
           <span className="text-xs font-medium text-text-primary">Order Book</span>
           <Lock className="w-3 h-3 text-gold" />
         </div>
-        <span className="text-[10px] text-gold">Encrypted</span>
+        <div className="flex items-center gap-2">
+          <RefreshCw
+            className={cn(
+              "w-3 h-3 text-text-muted cursor-pointer hover:text-gold transition-colors",
+              isRefreshing && "animate-spin"
+            )}
+            onClick={() => {
+              refetchPrice();
+              refetchAsset();
+            }}
+          />
+          <span className="text-[10px] text-gold">Live</span>
+        </div>
+      </div>
+
+      {/* OI Indicator */}
+      <div className="px-3 py-1 border-b border-border/50 bg-background/30">
+        <div className="flex items-center justify-between text-[9px] text-text-muted">
+          <span>Long OI: ${longOI.toFixed(0)}</span>
+          <span>Short OI: ${shortOI.toFixed(0)}</span>
+        </div>
+        <div className="mt-1 h-1 bg-background rounded-full overflow-hidden flex">
+          <div
+            className="h-full bg-success"
+            style={{ width: `${longOI + shortOI > 0 ? (longOI / (longOI + shortOI)) * 100 : 50}%` }}
+          />
+          <div
+            className="h-full bg-danger"
+            style={{ width: `${longOI + shortOI > 0 ? (shortOI / (longOI + shortOI)) * 100 : 50}%` }}
+          />
+        </div>
       </div>
 
       {/* Column Headers */}
@@ -143,13 +258,20 @@ export function OrderBook({ selectedAsset, currentPrice }: OrderBookProps) {
         {/* Spread / Current Price */}
         <div className="px-3 py-2 bg-background border-y border-border/50">
           <div className="flex items-center justify-between">
-            <span className="text-lg font-bold text-text-primary font-mono">
-              ${formatPrice(price)}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-bold text-text-primary font-mono">
+                ${formatPrice(livePrice)}
+              </span>
+              {oraclePrice && (
+                <span className="text-[9px] text-success px-1 py-0.5 bg-success/10 rounded">
+                  LIVE
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-1 text-[10px] text-text-muted">
               <span>Spread</span>
-              <span className="text-text-secondary">{(price * 0.002).toFixed(2)}</span>
-              <span>({((0.002) * 100).toFixed(2)}%)</span>
+              <span className="text-text-secondary">{spreadAmount.toFixed(2)}</span>
+              <span>({spreadPercent.toFixed(2)}%)</span>
             </div>
           </div>
         </div>
@@ -183,6 +305,13 @@ export function OrderBook({ selectedAsset, currentPrice }: OrderBookProps) {
           ))}
         </div>
       </div>
+
+      {/* Last Update */}
+      {lastUpdate && (
+        <div className="px-3 py-1 border-t border-border/50 text-[9px] text-text-muted text-center">
+          Last update: {lastUpdate.toLocaleTimeString()}
+        </div>
+      )}
     </div>
   );
 }

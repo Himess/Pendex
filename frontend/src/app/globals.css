@@ -235,6 +235,20 @@ body {
   animation: scaleIn 0.2s ease-out;
 }
 
+/* Slide up animation for mobile sheets */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
 /* Glow effect */
 .glow-gold {
   box-shadow: 0 0 20px rgba(247, 183, 49, 0.3);

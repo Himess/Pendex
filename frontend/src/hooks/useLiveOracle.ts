@@ -12,9 +12,9 @@ const ORACLE_ABI = [
 ];
 
 // RPC endpoints
-const RPC_URLS = {
+const RPC_URLS: Record<SupportedNetwork, string> = {
   sepolia: "https://sepolia.infura.io/v3/84842078b09946638c03157f83405213",
-  zama: "https://devnet.zama.ai",
+  hardhat: "http://127.0.0.1:8545",
 };
 
 export interface LiveAsset {

@@ -8,7 +8,7 @@ import { SHADOW_VAULT_ABI, SHADOW_ORACLE_ABI, SHADOW_USD_ABI, SHADOW_LIQUIDITY_P
 
 export function useCurrentNetwork(): SupportedNetwork {
   const chainId = useChainId();
-  return chainId === 8009 ? "zama" : "sepolia";
+  return chainId === 31337 ? "hardhat" : "sepolia";
 }
 
 export function useNetworkContracts() {

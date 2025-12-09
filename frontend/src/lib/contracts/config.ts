@@ -1,5 +1,5 @@
 // Network types
-export type SupportedNetwork = "sepolia" | "zama";
+export type SupportedNetwork = "sepolia" | "hardhat";
 
 // Contract addresses per network
 export const NETWORK_CONTRACTS = {
@@ -9,15 +9,15 @@ export const NETWORK_CONTRACTS = {
     shadowUsd: "0x9093B02c4Ea2402EC72C2ca9dAAb994F7578fAFb" as `0x${string}`,
     shadowLiquidityPool: "0xF6d944B4B4cDE683111135e43C4D0235Cf14ECDc" as `0x${string}`,
     shadowMarketMaker: "0x4831ac8D60cF7f1B01DeEeA12B3A0fDB083355fb" as `0x${string}`,
-    hasFHE: false, // Sepolia uses mock/simple contracts
+    hasFHE: true, // Sepolia with Zama FHE encryption
   },
-  zama: {
-    shadowVault: "0x..." as `0x${string}`, // Will be updated after Zama deployment
-    shadowOracle: "0x..." as `0x${string}`,
-    shadowUsd: "0x..." as `0x${string}`,
-    shadowLiquidityPool: "0x..." as `0x${string}`,
-    shadowMarketMaker: "0x..." as `0x${string}`,
-    hasFHE: true, // Zama has real FHE encryption
+  hardhat: {
+    shadowVault: "0x5FbDB2315678afecb367f032d93F642f64180aa3" as `0x${string}`,
+    shadowOracle: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512" as `0x${string}`,
+    shadowUsd: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0" as `0x${string}`,
+    shadowLiquidityPool: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9" as `0x${string}`,
+    shadowMarketMaker: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9" as `0x${string}`,
+    hasFHE: false, // Hardhat uses mock FHE
   },
 } as const;
 
@@ -51,28 +51,28 @@ export const SEPOLIA_CONFIG = {
   testnet: true,
 } as const;
 
-// Zama Devnet chain config
-export const ZAMA_DEVNET = {
-  id: 8009,
-  name: "Zama Devnet",
-  network: "zama-devnet",
+// Hardhat Localhost chain config
+export const HARDHAT_LOCALHOST = {
+  id: 31337,
+  name: "Hardhat Localhost",
+  network: "hardhat",
   nativeCurrency: {
     decimals: 18,
-    name: "Zama",
-    symbol: "ZAMA",
+    name: "Ether",
+    symbol: "ETH",
   },
   rpcUrls: {
     default: {
-      http: ["https://devnet.zama.ai"],
+      http: ["http://127.0.0.1:8545"],
     },
     public: {
-      http: ["https://devnet.zama.ai"],
+      http: ["http://127.0.0.1:8545"],
     },
   },
   blockExplorers: {
     default: {
-      name: "Zama Explorer",
-      url: "https://explorer.devnet.zama.ai",
+      name: "Local Explorer",
+      url: "http://localhost:8545",
     },
   },
   testnet: true,
@@ -81,22 +81,22 @@ export const ZAMA_DEVNET = {
 // Network info for UI
 export const NETWORK_INFO = {
   sepolia: {
-    name: "Sepolia Testnet",
+    name: "Sepolia + Zama FHE",
     shortName: "Sepolia",
     chainId: 11155111,
-    icon: "ethereum",
-    description: "Ethereum testnet - trades visible on-chain",
-    badge: "Public",
-    badgeColor: "text-yellow-500",
-  },
-  zama: {
-    name: "Zama Devnet",
-    shortName: "Zama FHE",
-    chainId: 8009,
     icon: "lock",
-    description: "FHE encrypted - all trades private",
-    badge: "Private",
+    description: "FHE encrypted - all trades private on Sepolia",
+    badge: "FHE",
     badgeColor: "text-green-500",
+  },
+  hardhat: {
+    name: "Hardhat Localhost",
+    shortName: "Localhost",
+    chainId: 31337,
+    icon: "ethereum",
+    description: "Local development - mock FHE",
+    badge: "Dev",
+    badgeColor: "text-yellow-500",
   },
 } as const;
 
@@ -110,7 +110,7 @@ export function getContractsForNetwork(network: SupportedNetwork) {
 
 // Helper to get chain ID
 export function getChainId(network: SupportedNetwork): number {
-  return network === "sepolia" ? 11155111 : 8009;
+  return network === "sepolia" ? 11155111 : 31337;
 }
 
 // Asset IDs (keccak256 of asset symbols)

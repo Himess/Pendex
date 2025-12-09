@@ -127,10 +127,12 @@ export const SHADOW_ORACLE_ABI = [
     outputs: [
       {
         components: [
+          { name: "name", type: "string" },
           { name: "symbol", type: "string" },
-          { name: "category", type: "uint8" },
           { name: "basePrice", type: "uint64" },
           { name: "isActive", type: "bool" },
+          { name: "totalLongOI", type: "uint256" },
+          { name: "totalShortOI", type: "uint256" },
         ],
         name: "",
         type: "tuple",
@@ -157,6 +159,13 @@ export const SHADOW_ORACLE_ABI = [
     inputs: [],
     name: "getAllAssetIds",
     outputs: [{ name: "", type: "bytes32[]" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "assetId", type: "bytes32" }],
+    name: "isAssetTradeable",
+    outputs: [{ name: "", type: "bool" }],
     stateMutability: "view",
     type: "function",
   },
