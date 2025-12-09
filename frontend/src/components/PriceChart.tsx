@@ -1,19 +1,29 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Lock, Shield, Wifi, WifiOff } from "lucide-react";
 import { Asset, formatUSD, formatPercent } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { useMarketWebSocket, Candle } from "@/hooks/useMarketWebSocket";
+import { useLiveAssetPrice } from "@/hooks/useLiveOracle";
+import { useCurrentNetwork } from "@/lib/contracts/hooks";
 
 interface PriceChartProps {
   selectedAsset: Asset | null;
 }
 
-// Fallback: Generate realistic candlestick data if no live data
-function generateCandlestickData(basePrice: number, days: number = 90) {
+// Generate realistic candlestick data based on current price
+// Uses seeded random for consistent chart per asset
+function generateCandlestickData(basePrice: number, symbol: string, days: number = 90) {
   const data: { time: number; open: number; high: number; low: number; close: number }[] = [];
+
+  // Simple seeded random based on symbol
+  let seed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const seededRandom = () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
+
   let currentPrice = basePrice * 0.85;
   const now = new Date();
 
@@ -21,14 +31,14 @@ function generateCandlestickData(basePrice: number, days: number = 90) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
 
-    const volatility = 0.02 + Math.random() * 0.03;
+    const volatility = 0.02 + seededRandom() * 0.03;
     const trend = (basePrice - currentPrice) / basePrice * 0.1;
-    const change = (Math.random() - 0.45 + trend) * volatility;
+    const change = (seededRandom() - 0.45 + trend) * volatility;
 
     const open = currentPrice;
     const close = currentPrice * (1 + change);
-    const high = Math.max(open, close) * (1 + Math.random() * 0.015);
-    const low = Math.min(open, close) * (1 - Math.random() * 0.015);
+    const high = Math.max(open, close) * (1 + seededRandom() * 0.015);
+    const low = Math.min(open, close) * (1 - seededRandom() * 0.015);
 
     data.push({
       time: Math.floor(date.getTime() / 1000),
@@ -44,52 +54,53 @@ function generateCandlestickData(basePrice: number, days: number = 90) {
   return data;
 }
 
-// Convert WebSocket candles to chart format
-function convertCandles(candles: Candle[]) {
-  return candles.map((c) => ({
-    time: Math.floor(c.timestamp / 1000),
-    open: c.open,
-    high: c.high,
-    low: c.low,
-    close: c.close,
-  }));
-}
-
 export function PriceChart({ selectedAsset }: PriceChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candlestickSeriesRef = useRef<any>(null);
   const [timeframe, setTimeframe] = useState("1D");
   const [isChartReady, setIsChartReady] = useState(false);
+  const [chartInitialized, setChartInitialized] = useState(false);
 
-  // WebSocket connection
-  const { isConnected, currentAsset, candles, subscribe } = useMarketWebSocket(
-    selectedAsset?.id
+  // On-chain oracle price (primary source)
+  const network = useCurrentNetwork();
+  const { asset: oracleAsset } = useLiveAssetPrice(
+    selectedAsset?.symbol || "",
+    network
   );
 
-  // Live price from WebSocket or fallback to prop
-  const livePrice = currentAsset?.price ?? selectedAsset?.price ?? 0;
-  const liveChange = currentAsset?.change24h ?? selectedAsset?.change24h ?? 0;
-
-  // Subscribe to asset when it changes
-  useEffect(() => {
-    if (selectedAsset?.id) {
-      subscribe(selectedAsset.id);
-    }
-  }, [selectedAsset?.id, subscribe]);
+  // Use oracle data if available, else props
+  const livePrice = oracleAsset?.price ?? selectedAsset?.price ?? 0;
+  const liveChange = oracleAsset?.change24h ?? selectedAsset?.change24h ?? 0;
+  const isConnected = !!oracleAsset;
 
   // Initialize chart
   useEffect(() => {
     if (!chartContainerRef.current || !selectedAsset) return;
 
+    // Cleanup previous chart
+    if (chartRef.current) {
+      chartRef.current.remove();
+      chartRef.current = null;
+      candlestickSeriesRef.current = null;
+      setIsChartReady(false);
+      setChartInitialized(false);
+    }
+
+    let chart: any = null;
+    let resizeHandler: (() => void) | null = null;
+
     void import("lightweight-charts").then(({ createChart }) => {
       if (!chartContainerRef.current) return;
 
-      if (chartRef.current) {
-        chartRef.current.remove();
-      }
+      // Get container dimensions
+      const container = chartContainerRef.current;
+      const width = container.clientWidth || 800;
+      const height = container.clientHeight || 400;
 
-      const chart = createChart(chartContainerRef.current, {
+      chart = createChart(container, {
+        width,
+        height,
         layout: {
           background: { color: "transparent" },
           textColor: "#9CA3AF",
@@ -118,7 +129,7 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
         timeScale: {
           borderColor: "rgba(255, 255, 255, 0.1)",
           timeVisible: true,
-          secondsVisible: true,
+          secondsVisible: false,
         },
         handleScale: {
           axisPressedMouseMove: true,
@@ -133,7 +144,7 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
         },
       });
 
-      const candlestickSeries = (chart as any).addCandlestickSeries({
+      const candlestickSeries = chart.addCandlestickSeries({
         upColor: "#10B981",
         downColor: "#EF4444",
         borderUpColor: "#10B981",
@@ -142,22 +153,18 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
         wickDownColor: "#EF4444",
       });
 
-      // Initial data - use live candles if available, else generate
-      if (candles.length > 0) {
-        candlestickSeries.setData(convertCandles(candles) as any);
-      } else {
-        const data = generateCandlestickData(selectedAsset.price);
-        candlestickSeries.setData(data as any);
-      }
-
+      // Generate and set chart data immediately
+      const chartData = generateCandlestickData(selectedAsset.price, selectedAsset.symbol);
+      candlestickSeries.setData(chartData as any);
       chart.timeScale().fitContent();
 
       chartRef.current = chart;
       candlestickSeriesRef.current = candlestickSeries;
       setIsChartReady(true);
+      setChartInitialized(true);
 
-      const handleResize = () => {
-        if (chartContainerRef.current) {
+      resizeHandler = () => {
+        if (chartContainerRef.current && chart) {
           chart.applyOptions({
             width: chartContainerRef.current.clientWidth,
             height: chartContainerRef.current.clientHeight,
@@ -165,37 +172,46 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
         }
       };
 
-      window.addEventListener("resize", handleResize);
-      handleResize();
+      window.addEventListener("resize", resizeHandler);
 
-      return () => {
-        window.removeEventListener("resize", handleResize);
-      };
+      // Trigger initial resize after a small delay to ensure proper sizing
+      setTimeout(resizeHandler, 100);
     });
 
     return () => {
-      if (chartRef.current) {
-        chartRef.current.remove();
-        chartRef.current = null;
-        candlestickSeriesRef.current = null;
-        setIsChartReady(false);
+      if (resizeHandler) {
+        window.removeEventListener("resize", resizeHandler);
       }
+      if (chart) {
+        chart.remove();
+      }
+      chartRef.current = null;
+      candlestickSeriesRef.current = null;
+      setIsChartReady(false);
+      setChartInitialized(false);
     };
-  }, [selectedAsset?.id]);
+  }, [selectedAsset?.id, selectedAsset?.symbol, selectedAsset?.price]);
 
-  // Update chart with live candles from WebSocket
+  // Update last candle with live price from oracle
   useEffect(() => {
-    if (!candlestickSeriesRef.current || !isChartReady || candles.length === 0) return;
+    if (!candlestickSeriesRef.current || !isChartReady || !livePrice || !chartInitialized) return;
 
-    const chartData = convertCandles(candles);
-    candlestickSeriesRef.current.setData(chartData as any);
+    // Update the last candle's close price with live data
+    const now = Math.floor(Date.now() / 1000);
+    const today = now - (now % 86400); // Start of today
 
-    // Update last candle in realtime
-    if (chartData.length > 0) {
-      const lastCandle = chartData[chartData.length - 1];
-      candlestickSeriesRef.current.update(lastCandle as any);
+    try {
+      candlestickSeriesRef.current.update({
+        time: today,
+        open: livePrice * 0.998,
+        high: livePrice * 1.005,
+        low: livePrice * 0.995,
+        close: livePrice,
+      } as any);
+    } catch {
+      // Ignore update errors
     }
-  }, [candles, isChartReady]);
+  }, [livePrice, isChartReady, chartInitialized]);
 
   // Update price line
   useEffect(() => {

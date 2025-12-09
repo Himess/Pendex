@@ -4,8 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { Lock, Shield, BarChart3, LineChart, Wallet, Menu, X, HelpCircle, Building2 } from "lucide-react";
+import { Lock, BarChart3, LineChart, Wallet, Menu, X, HelpCircle, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NetworkSelectorCompact } from "./NetworkSelector";
 
 const NAV_ITEMS = [
   { href: "/markets", label: "Markets", icon: <BarChart3 className="w-4 h-4" /> },
@@ -55,11 +56,11 @@ export function Header() {
           ))}
         </nav>
 
-        {/* Right - Network Badge + Wallet */}
+        {/* Right - Network Selector + Wallet */}
         <div className="flex items-center gap-2 md:gap-4">
-          <div className="hidden lg:flex badge-gold items-center gap-1.5">
-            <Shield className="w-3.5 h-3.5" />
-            <span>FHE Secured</span>
+          {/* Network Selector */}
+          <div className="hidden md:block">
+            <NetworkSelectorCompact />
           </div>
           <div className="hidden sm:block">
             <ConnectButton

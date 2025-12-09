@@ -1,8 +1,32 @@
 "use client";
 
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { CONTRACTS } from "./config";
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
+import { CONTRACTS, NETWORK_CONTRACTS, type SupportedNetwork } from "./config";
 import { SHADOW_VAULT_ABI, SHADOW_ORACLE_ABI, SHADOW_USD_ABI, SHADOW_LIQUIDITY_POOL_ABI } from "./abis";
+
+// ============ NETWORK-AWARE CONTRACT ADDRESSES ============
+
+export function useCurrentNetwork(): SupportedNetwork {
+  const chainId = useChainId();
+  return chainId === 8009 ? "zama" : "sepolia";
+}
+
+export function useNetworkContracts() {
+  const network = useCurrentNetwork();
+  return NETWORK_CONTRACTS[network];
+}
+
+export function useContractAddresses() {
+  const contracts = useNetworkContracts();
+  return {
+    shadowVault: contracts.shadowVault,
+    shadowOracle: contracts.shadowOracle,
+    shadowUsd: contracts.shadowUsd,
+    shadowLiquidityPool: contracts.shadowLiquidityPool,
+    shadowMarketMaker: contracts.shadowMarketMaker,
+    hasFHE: contracts.hasFHE,
+  };
+}
 
 // ============ SHADOW USD HOOKS ============
 

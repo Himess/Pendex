@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Header, Footer } from "@/components";
 import { ASSETS, CATEGORIES, Asset, formatUSD, formatPercent, formatMarketCap } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useLiveOracle, LiveAsset } from "@/hooks/useLiveOracle";
+import { useCurrentNetwork } from "@/lib/contracts/hooks";
 import {
   TrendingUp,
   TrendingDown,
@@ -113,6 +115,16 @@ function SortableHeader({
   );
 }
 
+// Extend Asset type with live data
+interface AssetWithLiveData extends Asset {
+  livePrice?: number;
+  liveChange24h?: number;
+  totalLongOI?: number;
+  totalShortOI?: number;
+  longRatio?: number;
+  isLive?: boolean;
+}
+
 export default function MarketsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField | null>("marketCap");
@@ -120,6 +132,38 @@ export default function MarketsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
+
+  // Live oracle data
+  const network = useCurrentNetwork();
+  const { assets: liveAssets, isLoading: oracleLoading, lastUpdate } = useLiveOracle(network);
+
+  // Create a map for quick lookup of live data
+  const liveDataMap = useMemo(() => {
+    const map = new Map<string, LiveAsset>();
+    liveAssets.forEach(asset => {
+      map.set(asset.symbol.toLowerCase(), asset);
+    });
+    return map;
+  }, [liveAssets]);
+
+  // Merge static ASSETS with live data
+  const assetsWithLiveData: AssetWithLiveData[] = useMemo(() => {
+    return ASSETS.map(asset => {
+      const liveData = liveDataMap.get(asset.symbol.toLowerCase());
+      if (liveData) {
+        return {
+          ...asset,
+          livePrice: liveData.price,
+          liveChange24h: liveData.change24h,
+          totalLongOI: liveData.totalLongOI,
+          totalShortOI: liveData.totalShortOI,
+          longRatio: liveData.longRatio,
+          isLive: true,
+        };
+      }
+      return { ...asset, isLive: false };
+    });
+  }, [liveDataMap]);
 
   // Load bookmarks from localStorage (client-side only)
   useEffect(() => {
@@ -173,8 +217,8 @@ export default function MarketsPage() {
   const processedAssets = useMemo(() => {
     // Step 1: Filter by category
     let filtered = selectedCategory
-      ? ASSETS.filter(a => a.category === selectedCategory)
-      : [...ASSETS];
+      ? assetsWithLiveData.filter(a => a.category === selectedCategory)
+      : [...assetsWithLiveData];
 
     // Step 2: Search (global - searches all data)
     if (searchQuery.trim()) {
@@ -191,7 +235,7 @@ export default function MarketsPage() {
     const nonBookmarked = filtered.filter(a => !bookmarks.has(a.id));
 
     // Step 4: Sort each group
-    const sortItems = (items: Asset[]) => {
+    const sortItems = (items: AssetWithLiveData[]) => {
       if (!sortField || !sortDirection) return items;
 
       return [...items].sort((a, b) => {
@@ -233,7 +277,7 @@ export default function MarketsPage() {
 
     // Sort both groups and combine (bookmarked first)
     return [...sortItems(bookmarked), ...sortItems(nonBookmarked)];
-  }, [selectedCategory, sortField, sortDirection, searchQuery, bookmarks]);
+  }, [selectedCategory, sortField, sortDirection, searchQuery, bookmarks, assetsWithLiveData]);
 
   // Pagination
   const totalPages = Math.ceil(processedAssets.length / ITEMS_PER_PAGE);
@@ -263,6 +307,16 @@ export default function MarketsPage() {
             Trade Pre-IPO synthetic assets with encrypted positions
           </p>
         </div>
+
+        {/* Live Data Status */}
+        {liveAssets.length > 0 && (
+          <div className="flex items-center gap-2 mb-4 text-sm text-text-muted">
+            <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
+            <span>
+              Live data from oracle • {liveAssets.length} assets • Updated {lastUpdate ? new Date(lastUpdate).toLocaleTimeString() : "..."}
+            </span>
+          </div>
+        )}
 
         {/* Platform Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -494,28 +548,38 @@ export default function MarketsPage() {
                         </div>
                       </td>
 
-                      {/* Price */}
+                      {/* Price - use live data if available */}
                       <td className="px-3 py-3">
-                        <span className="font-semibold text-text-primary text-sm">
-                          {formatUSD(asset.price)}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="font-semibold text-text-primary text-sm">
+                            {formatUSD(asset.livePrice ?? asset.price)}
+                          </span>
+                          {asset.isLive && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" title="Live" />
+                          )}
+                        </div>
                       </td>
 
-                      {/* 24h Change */}
+                      {/* 24h Change - use live data if available */}
                       <td className="px-3 py-3">
-                        <span
-                          className={cn(
-                            "flex items-center gap-1 font-medium text-sm",
-                            asset.change24h >= 0 ? "text-success" : "text-danger"
-                          )}
-                        >
-                          {asset.change24h >= 0 ? (
-                            <TrendingUp className="w-3 h-3" />
-                          ) : (
-                            <TrendingDown className="w-3 h-3" />
-                          )}
-                          {formatPercent(asset.change24h)}
-                        </span>
+                        {(() => {
+                          const change = asset.liveChange24h ?? asset.change24h;
+                          return (
+                            <span
+                              className={cn(
+                                "flex items-center gap-1 font-medium text-sm",
+                                change >= 0 ? "text-success" : "text-danger"
+                              )}
+                            >
+                              {change >= 0 ? (
+                                <TrendingUp className="w-3 h-3" />
+                              ) : (
+                                <TrendingDown className="w-3 h-3" />
+                              )}
+                              {formatPercent(change)}
+                            </span>
+                          );
+                        })()}
                       </td>
 
                       {/* Market Cap */}
@@ -532,10 +596,10 @@ export default function MarketsPage() {
                         </span>
                       </td>
 
-                      {/* Open Interest */}
+                      {/* Open Interest - use live data if available */}
                       <td className="px-3 py-3 hidden xl:table-cell">
                         <span className="flex items-center gap-1 text-text-primary text-sm">
-                          {formatUSD(marketData.openInterest)}
+                          {formatUSD(asset.isLive ? (asset.totalLongOI! + asset.totalShortOI!) : marketData.openInterest)}
                           <Lock className="w-3 h-3 text-gold" />
                         </span>
                       </td>
@@ -553,23 +617,28 @@ export default function MarketsPage() {
                         </span>
                       </td>
 
-                      {/* Long/Short */}
+                      {/* Long/Short - use live data if available */}
                       <td className="px-3 py-3 hidden md:table-cell">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 bg-background rounded-full overflow-hidden flex">
-                            <div
-                              className="h-full bg-success"
-                              style={{ width: `${marketData.longRatio}%` }}
-                            />
-                            <div
-                              className="h-full bg-danger"
-                              style={{ width: `${100 - marketData.longRatio}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-text-muted">
-                            {marketData.longRatio.toFixed(0)}%
-                          </span>
-                        </div>
+                        {(() => {
+                          const ratio = asset.longRatio ?? marketData.longRatio;
+                          return (
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 h-1.5 bg-background rounded-full overflow-hidden flex">
+                                <div
+                                  className="h-full bg-success"
+                                  style={{ width: `${ratio}%` }}
+                                />
+                                <div
+                                  className="h-full bg-danger"
+                                  style={{ width: `${100 - ratio}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-text-muted">
+                                {ratio.toFixed(0)}%
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Trade Button */}

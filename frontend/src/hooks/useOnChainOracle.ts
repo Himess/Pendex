@@ -125,7 +125,7 @@ export function useOnChainOracle(preferredNetwork: "zama" | "sepolia" = "zama"):
         await loadAssets();
         await loadBotStats();
 
-      } catch (e) {
+      } catch (_e) {
         console.warn(`⚠️ Failed to connect to ${preferredNetwork}, trying fallback...`);
 
         // Try fallback network
@@ -147,7 +147,7 @@ export function useOnChainOracle(preferredNetwork: "zama" | "sepolia" = "zama"):
           await loadAssets();
           await loadBotStats();
 
-        } catch (e2) {
+        } catch (_e2) {
           throw new Error("Failed to connect to any network");
         }
       }

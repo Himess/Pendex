@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Lock, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Cpu, Rocket, CreditCard, Database, Users } from "lucide-react";
 import { CATEGORIES, ASSETS, Asset, formatUSD, formatPercent } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useLiveOracle } from "@/hooks/useLiveOracle";
+import { useCurrentNetwork } from "@/lib/contracts/hooks";
 
 interface AssetSidebarProps {
   selectedAsset: Asset | null;
@@ -21,6 +23,19 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 
 export function AssetSidebar({ selectedAsset, onSelectAsset }: AssetSidebarProps) {
   const [expandedCategories, setExpandedCategories] = useState<string[]>(["AI"]);
+
+  // Live oracle data
+  const network = useCurrentNetwork();
+  const { assets: liveAssets } = useLiveOracle(network);
+
+  // Create lookup map for live prices
+  const livePriceMap = useMemo(() => {
+    const map = new Map<string, { price: number; change24h: number }>();
+    liveAssets.forEach(a => {
+      map.set(a.symbol.toLowerCase(), { price: a.price, change24h: a.change24h });
+    });
+    return map;
+  }, [liveAssets]);
 
   const toggleCategory = (category: string) => {
     setExpandedCategories((prev) =>
@@ -102,24 +117,31 @@ export function AssetSidebar({ selectedAsset, onSelectAsset }: AssetSidebarProps
                         <p className="text-sm font-medium text-text-primary">
                           {asset.name}
                         </p>
-                        <p className="text-xs text-text-muted">{formatUSD(asset.price)}</p>
+                        <p className="text-xs text-text-muted">
+                          {formatUSD(livePriceMap.get(asset.symbol.toLowerCase())?.price ?? asset.price)}
+                        </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      {asset.change24h >= 0 ? (
-                        <TrendingUp className="w-3 h-3 text-success" />
-                      ) : (
-                        <TrendingDown className="w-3 h-3 text-danger" />
-                      )}
-                      <span
-                        className={cn(
-                          "text-xs font-medium",
-                          asset.change24h >= 0 ? "text-success" : "text-danger"
-                        )}
-                      >
-                        {formatPercent(asset.change24h)}
-                      </span>
-                    </div>
+                    {(() => {
+                      const change = livePriceMap.get(asset.symbol.toLowerCase())?.change24h ?? asset.change24h;
+                      return (
+                        <div className="flex items-center gap-1">
+                          {change >= 0 ? (
+                            <TrendingUp className="w-3 h-3 text-success" />
+                          ) : (
+                            <TrendingDown className="w-3 h-3 text-danger" />
+                          )}
+                          <span
+                            className={cn(
+                              "text-xs font-medium",
+                              change >= 0 ? "text-success" : "text-danger"
+                            )}
+                          >
+                            {formatPercent(change)}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </button>
                 ))}
               </div>

@@ -6,15 +6,14 @@ import "@typechain/hardhat";
 import "hardhat-deploy";
 import "hardhat-gas-reporter";
 import type { HardhatUserConfig } from "hardhat/config";
-import { vars } from "hardhat/config";
 import "solidity-coverage";
 
 import "./tasks/accounts";
 
-// Run 'npx hardhat vars setup' to see the list of variables that need to be set
-
-const MNEMONIC: string = vars.get("MNEMONIC", "test test test test test test test test test test test junk");
-const INFURA_API_KEY: string = vars.get("INFURA_API_KEY", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz");
+// Configuration from environment variables
+const MNEMONIC: string = process.env.MNEMONIC || "middle second long diesel success spirit gown quiz pluck clinic custom burger";
+const INFURA_API_KEY: string = process.env.INFURA_API_KEY || "84842078b09946638c03157f83405213";
+const ETHERSCAN_API_KEY: string = process.env.ETHERSCAN_API_KEY || "";
 
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",
@@ -23,7 +22,7 @@ const config: HardhatUserConfig = {
   },
   etherscan: {
     apiKey: {
-      sepolia: vars.get("ETHERSCAN_API_KEY", ""),
+      sepolia: ETHERSCAN_API_KEY,
     },
   },
   gasReporter: {

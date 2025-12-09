@@ -17,23 +17,32 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   });
   console.log(`   ✅ ShadowOracle: ${oracleDeployment.address}`);
 
-  // 2. Deploy ShadowVault
-  console.log("\n2️⃣ Deploying ShadowVault...");
-  const vaultDeployment = await deploy("ShadowVault", {
-    from: deployer,
-    args: [deployer, oracleDeployment.address],
-    log: true,
-  });
-  console.log(`   ✅ ShadowVault: ${vaultDeployment.address}`);
-
-  // 3. Deploy ShadowUSD
-  console.log("\n3️⃣ Deploying ShadowUSD...");
+  // 2. Deploy ShadowUSD
+  console.log("\n2️⃣ Deploying ShadowUSD...");
   const shadowUSDDeployment = await deploy("ShadowUSD", {
     from: deployer,
     args: [deployer],
     log: true,
   });
   console.log(`   ✅ ShadowUSD: ${shadowUSDDeployment.address}`);
+
+  // 3. Deploy ShadowLiquidityPool
+  console.log("\n3️⃣ Deploying ShadowLiquidityPool...");
+  const liquidityPoolDeployment = await deploy("ShadowLiquidityPool", {
+    from: deployer,
+    args: [deployer, shadowUSDDeployment.address, deployer], // owner, shadowUsd, treasury
+    log: true,
+  });
+  console.log(`   ✅ ShadowLiquidityPool: ${liquidityPoolDeployment.address}`);
+
+  // 4. Deploy ShadowVault
+  console.log("\n4️⃣ Deploying ShadowVault...");
+  const vaultDeployment = await deploy("ShadowVault", {
+    from: deployer,
+    args: [deployer, oracleDeployment.address, shadowUSDDeployment.address, liquidityPoolDeployment.address],
+    log: true,
+  });
+  console.log(`   ✅ ShadowVault: ${vaultDeployment.address}`);
 
   // 4. Setup: Add Pre-IPO Assets (Based on Q3 2025 Setter 30 List)
   console.log("\n4️⃣ Adding Pre-IPO Assets...");
@@ -118,16 +127,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await oracle.addAssetWithCategory("Discord", "DISCORD", 9_000_000, 4);
   console.log("      ✅ Discord @ $9");
 
-  // 5. Deploy ShadowLiquidityPool
-  console.log("\n5️⃣ Deploying ShadowLiquidityPool...");
-  const liquidityPoolDeployment = await deploy("ShadowLiquidityPool", {
-    from: deployer,
-    args: [deployer, shadowUSDDeployment.address, deployer], // owner, shadowUsd, treasury
-    log: true,
-  });
-  console.log(`   ✅ ShadowLiquidityPool: ${liquidityPoolDeployment.address}`);
-
-  // Configure LiquidityPool vault
+  // 5. Configure LiquidityPool vault
+  console.log("\n5️⃣ Configuring LiquidityPool...");
   const liquidityPool = await hre.ethers.getContractAt("ShadowLiquidityPool", liquidityPoolDeployment.address);
   await liquidityPool.setVault(vaultDeployment.address);
   console.log("   ✅ Vault address set in LiquidityPool");
