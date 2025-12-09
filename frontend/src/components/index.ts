@@ -6,3 +6,5 @@ export { PositionsTable } from "./PositionsTable";
 export { PriceChart } from "./PriceChart";
 export { MarketInfo } from "./MarketInfo";
 export { NetworkSelector, NetworkSelectorCompact } from "./NetworkSelector";
+export { OrderBook } from "./OrderBook";
+export { MarketStats } from "./MarketStats";
