@@ -1,16 +1,19 @@
 "use client";
 
-import { Asset, formatUSD, formatPercent } from "@/lib/constants";
+import { useState } from "react";
+import { Asset, ASSETS, formatUSD, formatPercent } from "@/lib/constants";
 import { useLiveAssetPrice } from "@/hooks/useLiveOracle";
 import { useCurrentNetwork } from "@/lib/contracts/hooks";
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { TrendingUp, TrendingDown, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MarketStatsProps {
   selectedAsset: Asset | null;
+  onSelectAsset?: (asset: Asset) => void;
 }
 
-export function MarketStats({ selectedAsset }: MarketStatsProps) {
+export function MarketStats({ selectedAsset, onSelectAsset }: MarketStatsProps) {
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const network = useCurrentNetwork();
   const { asset: oracleAsset } = useLiveAssetPrice(
     selectedAsset?.symbol || "",
@@ -36,28 +39,94 @@ export function MarketStats({ selectedAsset }: MarketStatsProps) {
   return (
     <div className="bg-card border-b border-border">
       <div className="flex items-center gap-6 px-4 py-2 overflow-x-auto">
-        {/* Asset Info */}
-        <div className="flex items-center gap-3 pr-4 border-r border-border">
-          <div className="w-8 h-8 rounded-full bg-background flex items-center justify-center overflow-hidden border border-border">
-            {selectedAsset.logo ? (
-              <img
-                src={selectedAsset.logo}
-                alt={selectedAsset.symbol}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <span className="text-xs font-bold text-gold">
-                {selectedAsset.symbol.slice(0, 2)}
-              </span>
+        {/* Asset Info with Dropdown */}
+        <div className="relative flex items-center gap-3 pr-4 border-r border-border">
+          <button
+            onClick={() => onSelectAsset && setIsDropdownOpen(!isDropdownOpen)}
+            className={cn(
+              "flex items-center gap-3",
+              onSelectAsset && "cursor-pointer hover:opacity-80 transition-opacity"
             )}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-text-primary">{selectedAsset.symbol}</span>
-              <span className="text-xs px-1.5 py-0.5 bg-gold/20 text-gold rounded">10x</span>
+          >
+            <div className="w-8 h-8 rounded-full bg-background flex items-center justify-center overflow-hidden border border-border">
+              {selectedAsset.logo ? (
+                <img
+                  src={selectedAsset.logo}
+                  alt={selectedAsset.symbol}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-xs font-bold text-gold">
+                  {selectedAsset.symbol.slice(0, 2)}
+                </span>
+              )}
             </div>
-            <span className="text-[10px] text-text-muted">Pre-IPO Perpetual</span>
-          </div>
+            <div className="text-left">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-text-primary">{selectedAsset.symbol}</span>
+                <span className="text-xs px-1.5 py-0.5 bg-gold/20 text-gold rounded">10x</span>
+                {onSelectAsset && (
+                  <ChevronDown className={cn(
+                    "w-4 h-4 text-text-muted transition-transform",
+                    isDropdownOpen && "rotate-180"
+                  )} />
+                )}
+              </div>
+              <span className="text-[10px] text-text-muted">Pre-IPO Perpetual</span>
+            </div>
+          </button>
+
+          {/* Dropdown */}
+          {isDropdownOpen && onSelectAsset && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setIsDropdownOpen(false)}
+              />
+              <div className="absolute top-full left-0 mt-2 w-72 max-h-96 overflow-y-auto bg-card border border-border rounded-lg shadow-xl z-50">
+                {ASSETS.map((asset) => (
+                  <button
+                    key={asset.id}
+                    onClick={() => {
+                      onSelectAsset(asset);
+                      setIsDropdownOpen(false);
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 hover:bg-card-hover transition-colors",
+                      selectedAsset?.id === asset.id && "bg-gold/10"
+                    )}
+                  >
+                    <div className="w-7 h-7 rounded-full bg-background flex items-center justify-center overflow-hidden border border-border flex-shrink-0">
+                      {asset.logo ? (
+                        <img
+                          src={asset.logo}
+                          alt={asset.symbol}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-[10px] font-bold text-gold">
+                          {asset.symbol.slice(0, 2)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-left flex-1 min-w-0">
+                      <div className="text-sm font-medium text-text-primary">{asset.symbol}</div>
+                      <div className="text-xs text-text-muted truncate">{asset.name}</div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-sm font-mono text-text-primary">{formatUSD(asset.price)}</div>
+                      <div className={cn(
+                        "text-xs font-mono",
+                        asset.change24h >= 0 ? "text-success" : "text-danger"
+                      )}>
+                        {formatPercent(asset.change24h)}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Mark Price */}

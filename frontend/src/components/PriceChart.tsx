@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Lock, Shield, Wifi, WifiOff } from "lucide-react";
 import { Asset, formatUSD, formatPercent } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,9 @@ import { useCurrentNetwork } from "@/lib/contracts/hooks";
 interface PriceChartProps {
   selectedAsset: Asset | null;
 }
+
+// Check if we're in browser environment
+const isBrowser = typeof window !== "undefined";
 
 // Generate realistic candlestick data based on current price
 // Uses seeded random for consistent chart per asset
@@ -61,6 +64,7 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
   const [timeframe, setTimeframe] = useState("1D");
   const [isChartReady, setIsChartReady] = useState(false);
   const [chartInitialized, setChartInitialized] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   // On-chain oracle price (primary source)
   const network = useCurrentNetwork();
@@ -74,31 +78,38 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
   const liveChange = oracleAsset?.change24h ?? selectedAsset?.change24h ?? 0;
   const isConnected = !!oracleAsset;
 
-  // Initialize chart
+  // Set mounted state on client
   useEffect(() => {
-    if (!chartContainerRef.current || !selectedAsset) return;
+    setMounted(true);
+  }, []);
+
+  // Initialize chart - only runs on client side
+  const initChart = useCallback(async () => {
+    if (!isBrowser || !mounted || !chartContainerRef.current || !selectedAsset) return;
 
     // Cleanup previous chart
     if (chartRef.current) {
-      chartRef.current.remove();
+      try {
+        chartRef.current.remove();
+      } catch (e) {
+        // Ignore cleanup errors
+      }
       chartRef.current = null;
       candlestickSeriesRef.current = null;
-      setIsChartReady(false);
-      setChartInitialized(false);
     }
 
-    let chart: any = null;
-    let resizeHandler: (() => void) | null = null;
+    try {
+      const { createChart } = await import("lightweight-charts");
 
-    void import("lightweight-charts").then(({ createChart }) => {
       if (!chartContainerRef.current) return;
 
-      // Get container dimensions
+      // Get container dimensions - use setTimeout to ensure layout is complete
       const container = chartContainerRef.current;
-      const width = container.clientWidth || 800;
-      const height = container.clientHeight || 400;
+      const rect = container.getBoundingClientRect();
+      const width = rect.width || container.clientWidth || 800;
+      const height = rect.height || container.clientHeight || 400;
 
-      chart = createChart(container, {
+      const chart = createChart(container, {
         width,
         height,
         layout: {
@@ -144,7 +155,7 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
         },
       });
 
-      const candlestickSeries = chart.addCandlestickSeries({
+      const candlestickSeries = (chart as any).addCandlestickSeries({
         upColor: "#10B981",
         downColor: "#EF4444",
         borderUpColor: "#10B981",
@@ -163,34 +174,63 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
       setIsChartReady(true);
       setChartInitialized(true);
 
-      resizeHandler = () => {
-        if (chartContainerRef.current && chart) {
-          chart.applyOptions({
-            width: chartContainerRef.current.clientWidth,
-            height: chartContainerRef.current.clientHeight,
-          });
+      // Handle resize
+      const resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const { width, height } = entry.contentRect;
+          if (chartRef.current && width > 0 && height > 0) {
+            chartRef.current.applyOptions({ width, height });
+          }
         }
+      });
+
+      resizeObserver.observe(container);
+
+      // Cleanup function
+      return () => {
+        resizeObserver.disconnect();
+        if (chartRef.current) {
+          try {
+            chartRef.current.remove();
+          } catch (e) {
+            // Ignore
+          }
+        }
+        chartRef.current = null;
+        candlestickSeriesRef.current = null;
       };
+    } catch (error) {
+      console.error("Failed to initialize chart:", error);
+    }
+  }, [mounted, selectedAsset?.id, selectedAsset?.symbol, selectedAsset?.price]);
 
-      window.addEventListener("resize", resizeHandler);
+  // Initialize chart when mounted and asset changes
+  useEffect(() => {
+    if (!mounted || !selectedAsset) return;
 
-      // Trigger initial resize after a small delay to ensure proper sizing
-      setTimeout(resizeHandler, 100);
-    });
+    setIsChartReady(false);
+    setChartInitialized(false);
+
+    // Small delay to ensure container has dimensions
+    const timer = setTimeout(() => {
+      initChart();
+    }, 100);
 
     return () => {
-      if (resizeHandler) {
-        window.removeEventListener("resize", resizeHandler);
+      clearTimeout(timer);
+      if (chartRef.current) {
+        try {
+          chartRef.current.remove();
+        } catch (e) {
+          // Ignore
+        }
+        chartRef.current = null;
+        candlestickSeriesRef.current = null;
+        setIsChartReady(false);
+        setChartInitialized(false);
       }
-      if (chart) {
-        chart.remove();
-      }
-      chartRef.current = null;
-      candlestickSeriesRef.current = null;
-      setIsChartReady(false);
-      setChartInitialized(false);
     };
-  }, [selectedAsset?.id, selectedAsset?.symbol, selectedAsset?.price]);
+  }, [mounted, selectedAsset?.id, initChart]);
 
   // Update last candle with live price from oracle
   useEffect(() => {
@@ -316,7 +356,27 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
 
       {/* Chart Area */}
       <div className="flex-1 relative min-h-[350px]">
-        <div ref={chartContainerRef} className="absolute inset-0" />
+        {!mounted && (
+          <div className="absolute inset-0 flex items-center justify-center bg-card">
+            <div className="text-center">
+              <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              <p className="text-sm text-text-muted">Loading chart...</p>
+            </div>
+          </div>
+        )}
+        <div
+          ref={chartContainerRef}
+          className="absolute inset-0"
+          style={{ visibility: mounted && isChartReady ? 'visible' : 'hidden' }}
+        />
+        {mounted && !isChartReady && (
+          <div className="absolute inset-0 flex items-center justify-center bg-card">
+            <div className="text-center">
+              <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              <p className="text-sm text-text-muted">Initializing chart...</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Time Frame Selector */}

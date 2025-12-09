@@ -141,7 +141,7 @@ function TradeContent() {
 
       {/* Market Stats Bar */}
       <div className="pt-16">
-        <MarketStats selectedAsset={selectedAsset} />
+        <MarketStats selectedAsset={selectedAsset} onSelectAsset={setSelectedAsset} />
       </div>
 
       {/* Main Trading Area */}

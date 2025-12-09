@@ -14,12 +14,14 @@ FHE (Fully Homomorphic Encryption) kullanan Private Pre-IPO Leverage Trading Pla
 ## TODO Listesi
 
 ### 1. Arayuz Yenileme (Lighter benzeri)
-- [ ] Profesyonel trading layout
-- [ ] Chart tam genislik + volume bar
-- [ ] Ust bar: Mark Price, Index Price, 24h Volume, Open Interest, Funding Rate
-- [ ] Trading panel: Market/Limit tabs, TP/SL
-- [ ] Positions panel (alt kisim)
-- [ ] Monospace fontlar, kompakt spacing
+- [x] Profesyonel trading layout
+- [x] Chart tam genislik + volume bar
+- [x] Ust bar: Mark Price, Index Price, 24h Volume, Open Interest, Funding Rate
+- [x] Trading panel: Market/Limit tabs, TP/SL
+- [x] Positions panel (alt kisim)
+- [x] Monospace fontlar, kompakt spacing
+- [x] Sol ustten asset secimi (dropdown)
+- [x] Chart SSR sorunu cozuldu (mounted state)
 
 ### 2. Encrypted Order Book
 **Konsept:** Order book gosterilecek ama emirler sifreli
@@ -42,6 +44,13 @@ BIDS (Alis)
 - Bu sayede FHE anlamli kaliyor
 
 **Not:** Bot trade'leri bu order book'a yansiyacak (simule)
+
+### 2.1 Order Book Live Guncelleme (YENI TODO)
+- [ ] Order book'un live fiyat degisimiyle guncellenmesi
+- [ ] Bot trade'lerinden sonra order book revize olsun
+- [ ] Daha az trade ama daha anlamli order book hareketi
+- Bot interval: 30-60 saniyeye cikarilabilir
+- Her fiyat degisiminde order book'taki fiyat seviyeleri kaysin
 
 ### 3. Zama Devnet Deploy
 - ETH lazim (faucet'ten al)
