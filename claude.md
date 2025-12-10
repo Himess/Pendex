@@ -1,5 +1,5 @@
 # Shadow Protocol - Claude Memory File
-**Son Güncelleme:** 2025-12-10
+**Son Güncelleme:** 2025-12-11
 
 ## Project Overview
 **Shadow Protocol** - FHE Pre-IPO Leverage Trading Platform for Zama Builder Track Hackathon
@@ -10,7 +10,7 @@
 - Pre-IPO sirketlerde kaldiracli islem (2x-100x)
 
 **GitHub:** https://github.com/Himess/shadow-protocol
-**Vercel:** Yeniden baglanmasi gerekiyor (repo silindi/yeniden olusturuldu)
+**Vercel:** https://shadow-protocol-nine.vercel.app (CANLI!)
 
 ---
 
@@ -36,187 +36,179 @@ ShadowUSD:               0x9093B02c4Ea2402EC72C2ca9dAAb994F7578fAFb
 
 ---
 
-## PROJE DURUMU (10 Aralik 2025)
+## PROJE DURUMU (11 Aralik 2025)
 
-### PUAN: 8.5/10 🎉
+### PUAN: 9/10
 
-### TAMAMLANAN OZELLIKLER
+### BU SESSION'DA YAPILANLAR (10-11 Aralik 2025)
 
-#### Smart Contracts (3500+ lines)
+#### Vercel Deployment Fix (7 Commit)
+1. `655c5a3` - ACL permissions fix (view → non-view + FHE.allow)
+2. `4bc80ab` - global polyfill for browser compatibility
+3. `278ad8c` - WalletConnect polyfills (transpilePackages)
+4. `80c310d` - require.resolve for events/buffer/process
+5. `b79c12d` - DefinePlugin for global (NOT ProvidePlugin!)
+6. `194c6e9` - Chart retry logic + unified price source
+7. `bdda987` - Chart v5 API + public RPC for rate limiting
+
+#### Asset & Chart Improvements
+8. `a02cdad` - Asset sayisi 17 → 6 (en degerli sirketler)
+9. `f0f8a07` - Professional TradingView-style drawing tools
+
+### ASSET LISTESI (6 Sirket)
+| Sira | Sirket | Valuation | Kategori |
+|------|--------|-----------|----------|
+| 1 | SpaceX | $350B | Aerospace |
+| 2 | ByteDance | $300B | Social |
+| 3 | OpenAI | $157B | AI |
+| 4 | Stripe | $70B | FinTech |
+| 5 | Databricks | $62B | Data |
+| 6 | Anthropic | $61B | AI |
+
+### CHART OZELLIKLERI
+- **Timeframes:** 1M, 5M, 1H, 1D (hepsi calisiyor!)
+- **2 Aylik History:** FHE Launch badge ile (Oct 11)
+- **TradingView Cizim Araclari:**
+
+| Tool | Shortcut | Aciklama |
+|------|----------|----------|
+| Cursor | V | Normal secim |
+| Crosshair | C | Hassas crosshair |
+| Horizontal Line | H | Tek tikla yatay cizgi |
+| Trend Line | T | 2 tikla trend cizgisi |
+| Ray | R | 2 tikla uzayan isin |
+| Rectangle | G | 2 tikla dikdortgen |
+| Fib Retracement | F | Fibonacci seviyeleri |
+| Price Range | P | Fiyat araligi + % degisim |
+| Text Note | N | Metin notu |
+
+- **Color Picker:** 8 renk secenegi
+- **Keyboard Shortcuts:** ESC iptal, Delete son cizimi sil
+- **Cursor Info:** Realtime fiyat + tarih gosterimi
+
+---
+
+## TAMAMLANAN OZELLIKLER
+
+### Smart Contracts (3500+ lines)
 - [x] **ShadowVault.sol** (1800+ lines) - Ana trading vault
-  - Encrypted positions (collateral, size, entry, leverage, direction)
-  - Anonymous positions (eaddress encryptedOwner) - UNIQUE!
-  - Encrypted limit orders (anti-frontrunning)
-  - Public decryption pattern (prepareClose → finalizeClose)
-  - FHE.checkSignatures() verification
-  - Revenue distribution (5% liquidator, 47.5% LP, 47.5% protocol)
-- [x] **ShadowUSD.sol** (527 lines) - ERC-7984 style confidential stablecoin
-  - Encrypted balances
-  - Confidential transfers
-  - Operator pattern (session-based trading)
+- [x] **ShadowUSD.sol** (527 lines) - ERC-7984 confidential stablecoin
 - [x] **ShadowOracle.sol** (448 lines) - Demand-based pricing
-  - 17 Pre-IPO assets (SpaceX, OpenAI, Stripe, etc.)
-  - Price = BasePrice + (LongOI - ShortOI) modifier
 - [x] **ShadowLiquidityPool.sol** (618 lines) - GMX-style LP
-  - Encrypted LP balances
-  - Epoch-based rewards
-  - Random bonus multiplier (FHE.randEuint8)
 - [x] **ShadowMarketMaker.sol** - Trading bot
 
-#### Frontend (Next.js 14)
-- [x] Professional trading UI (Lighter-style)
-- [x] Trade page with chart, order book, positions
-- [x] Wallet page with multiple tabs:
-  - Decrypt Balance (User Decryption UI)
-  - Operators (ERC-7984 management)
-  - Transfer, Liquidity Pool, History
-- [x] Markets page (17 assets)
+### Frontend (Next.js 14)
+- [x] Professional trading UI
+- [x] **PriceChart.tsx** - TradingView-style with drawing tools
+- [x] Wallet page (Decrypt, Operators, Transfer, LP, History)
+- [x] Markets page (6 assets)
 - [x] Admin dashboard
-- [x] Dark/Light theme toggle
-- [x] Mobile responsive
+- [x] Dark/Light theme
 
-#### Documentation
-- [x] Professional README with badges
-- [x] Architecture diagrams (ASCII art)
-- [x] Data flow diagrams
-- [x] Privacy guarantees section
+### Documentation
+- [x] README with diagrams
 - [x] **docs/FHEVM_INTEGRATION.md** (500+ lines)
-  - All FHE types and locations
-  - Operations reference table
-  - Decryption patterns
-  - ACL guide
-  - Troubleshooting
 
-#### Tests
+### Tests
 - [x] 53 passing tests
-- [x] Oracle, ShadowUSD, Vault, Revenue, Liquidation tests
 
 ---
 
-### UNIQUE FEATURES (Rakiplerden Farkimiz)
+## KRITIK TEKNIK BILGILER
 
-1. **Anonymous Trading (eaddress)**
-   - Position owner encrypted
-   - Kimse kimin islemi oldugunu bilemiyor
-   - Zolymarket'te YOK
+### Webpack Polyfills (Vercel icin)
+```javascript
+// next.config.js - DOGRU YAPILANDIRMA
+config.plugins.push(
+  new webpack.DefinePlugin({
+    "global": "globalThis",  // DefinePlugin KULLAN, ProvidePlugin DEGIL!
+  })
+);
 
-2. **Encrypted Limit Orders**
-   - Trigger price encrypted
-   - Front-running IMKANSIZ
-   - MEV protection built-in
+// Polyfills - require.resolve KULLAN
+resolve: {
+  fallback: {
+    events: require.resolve("events/"),
+    buffer: require.resolve("buffer/"),
+    process: require.resolve("process/browser"),
+  }
+}
 
-3. **GMX-Style LP Pool**
-   - Trader losses = LP gains
-   - Encrypted LP balances
-   - Random bonus rewards
+// transpilePackages - WalletConnect icin GEREKLI
+transpilePackages: [
+  "@rainbow-me/rainbowkit",
+  "@walletconnect/core",
+  "@walletconnect/sign-client",
+  "@reown/appkit",
+  "@metamask/sdk",
+]
+```
 
-4. **Leverage Trading (2x-100x)**
-   - Encrypted P&L calculation
-   - Auto-liquidation at 100% loss
+### lightweight-charts v5 API Degisikligi
+```javascript
+// ESKI (v4) - CALISMAZ!
+chart.addCandlestickSeries({...})
 
-5. **FHE Random**
-   - FHE.randEuint64() for market maker
-   - FHE.randEuint8() for bonus multiplier
+// YENI (v5) - DOGRU
+const { CandlestickSeries } = await import("lightweight-charts");
+chart.addSeries(CandlestickSeries, {...})
+```
+
+### RPC Rate Limiting
+```javascript
+// YANLIS - Infura free tier hizla dolar
+const RPC = "https://sepolia.infura.io/v3/...";
+const POLL_INTERVAL = 3000; // 3 saniye
+
+// DOGRU - Public RPC + yavas polling
+const RPC = "https://rpc.sepolia.org";
+const POLL_INTERVAL = 10000; // 10 saniye
+```
+
+### ShadowUSD ACL Pattern
+```solidity
+// YANLIS - view function ACL veremez!
+function confidentialBalanceOf() public view returns (euint64) {
+    return _balances[msg.sender];  // ACL yok, decrypt edilemez
+}
+
+// DOGRU - non-view + ACL grants
+function confidentialBalanceOf() public returns (euint64 balance) {
+    balance = _balances[msg.sender];
+    if (FHE.isInitialized(balance)) {
+        FHE.allowThis(balance);
+        FHE.allow(balance, msg.sender);
+    }
+}
+```
 
 ---
 
-### ZOLYMARKET KARSILASTIRMASI
+## UNIQUE FEATURES
 
-| Ozellik | Shadow | Zolymarket |
-|---------|--------|------------|
-| Contract Complexity | 3500+ lines | ~1200 lines |
-| Anonymous Trading | ✅ eaddress | ❌ |
-| Encrypted Limit Orders | ✅ | ❌ |
-| Leverage | ✅ 2x-100x | ❌ |
-| LP Pool | ✅ GMX-style | ❌ |
-| FHE Random | ✅ | ❌ |
-| checkSignatures() | ✅ | ✅ |
-| User Decryption UI | ✅ | ✅ |
-| FHEVM Doc | ✅ 500+ lines | ✅ 1200+ lines |
-| Backend | ❌ | ✅ Node.js |
-
-**Shadow teknik olarak daha guclu, Zolymarket daha "demo-ready" idi**
-
----
-
-## KALAN ISLER
-
-### Yapilacak
-- [ ] Vercel'i yeniden bagla
-- [ ] Demo video cek (2-3 dk)
-
-### Potansiyel Iyilestirmeler (Nice to Have)
-- [ ] Backend API (off-chain position tracking)
-- [ ] Transaction history page
-- [ ] Advanced chart indicators
-- [ ] Gas optimization metrics
-
----
-
-## BILINEN SORUNLAR / KONTROL EDILECEKLER
-
-### Frontend
-1. **Trade page asset selector** - Kod incelendi, calisiyor olmasi lazim
-2. **Fiyat tutarsizliklari** - seededRandom ile stable values kullaniliyor
-
-### Contract
-1. **ACL izinleri** - deposit/withdraw'da veriliyor mu kontrol et
-2. **View fonksiyonlarda FHE.allow()** - calismaz, state-changing olmalı
+1. **Anonymous Trading (eaddress)** - Position owner encrypted
+2. **Encrypted Limit Orders** - Front-running IMKANSIZ
+3. **GMX-Style LP Pool** - Trader losses = LP gains
+4. **Leverage Trading (2x-100x)** - Encrypted P&L
+5. **FHE Random** - randEuint64/randEuint8
+6. **Professional Chart** - TradingView-style drawing tools
 
 ---
 
 ## QUICK COMMANDS
 
 ```bash
-# Local development
-npx hardhat node
-npx hardhat test
-
-# Deploy to Sepolia
-npx hardhat run scripts/deploy.ts --network sepolia
+# Test
+npx hardhat test  # 53 passing
 
 # Frontend
 cd frontend && npm run dev
+cd frontend && npm run build
 
 # Trading Bot
 MARKET_MAKER_ADDRESS=0x4831ac8D60cF7f1B01DeEeA12B3A0fDB083355fb \
 ORACLE_ADDRESS=0xe0Fa3bbeF65d8Cda715645AE02a50874C04BCb17 \
 npx hardhat run scripts/runBotSimple.ts --network sepolia
-```
-
----
-
-## FHE KULLANIM OZETI
-
-### Encrypted Types
-- `euint64` - Balances, positions, prices
-- `euint8` - Error codes, bonus multiplier
-- `ebool` - Direction (long/short)
-- `eaddress` - Anonymous trading (UNIQUE!)
-
-### FHE Operations
-- Arithmetic: `add`, `sub`, `mul`, `div`
-- Comparison: `gt`, `lt`, `ge`, `le`, `eq`
-- Conditional: `select` (if/else yerine)
-- Random: `randEbool`, `randEuint8`, `randEuint64`
-- Min/Max: `min`, `max`
-
-### ACL Pattern
-```solidity
-FHE.allowThis(value);           // Contract access
-FHE.allow(value, msg.sender);   // User access
-FHE.allowTransient(value, addr); // Temp access (gas opt)
-```
-
-### Public Decryption Pattern
-```solidity
-// Step 1: Mark for decryption
-FHE.makePubliclyDecryptable(value);
-
-// Step 2: Off-chain decrypt via SDK
-
-// Step 3: Verify on-chain
-FHE.checkSignatures(cts, clearValues, proof);
 ```
 
 ---
@@ -242,28 +234,37 @@ shadow-protocol/
 │   └── bots/
 │       └── ShadowMarketMakerSimple.sol (421 lines)
 ├── frontend/
+│   ├── next.config.js            - Webpack polyfills (KRITIK!)
 │   └── src/
 │       ├── app/
 │       │   ├── trade/            - Trading UI
-│       │   ├── wallet/           - Wallet + Decrypt + Operators
-│       │   ├── markets/          - Asset listing
-│       │   └── admin/            - Dashboard
+│       │   ├── wallet/           - Decrypt + Operators
+│       │   ├── markets/          - 6 assets
+│       │   └── providers.tsx     - RPC config
+│       ├── components/
+│       │   └── PriceChart.tsx    - TradingView drawing tools (850+ lines)
+│       ├── hooks/
+│       │   └── useLiveOracle.ts  - Unified price source
 │       └── lib/
+│           ├── constants.ts      - 6 asset definitions
+│           ├── polyfills.ts      - Browser globals
 │           └── fhe/client.ts     - Relayer SDK
 ├── docs/
 │   └── FHEVM_INTEGRATION.md      (500+ lines)
 ├── test/
 │   └── ShadowProtocol.test.ts    (53 tests)
-└── README.md                     (Professional + Diagrams)
+└── README.md
 ```
 
 ---
 
 ## SONUC
 
-Shadow Protocol hackathon icin hazir. Teknik olarak Zolymarket'ten daha guclu:
-- Daha fazla FHE feature kullanimi
-- Unique ozellikler (anonymous trading, leverage, LP pool)
-- Profesyonel dokumantasyon
+Shadow Protocol hackathon icin tamamen hazir:
+- Vercel CANLI ve calisiyor
+- Chart profesyonel (TradingView-style tools)
+- 6 buyuk Pre-IPO asset
+- Tum FHE features calisir durumda
+- 9 commit bu session'da push edildi
 
-Eksik: Demo video (kullanici cekecek)
+**Eksik:** Demo video (kullanici cekecek)
