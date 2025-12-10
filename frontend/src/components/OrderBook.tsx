@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useEffect, useState } from "react";
-import { Lock, RefreshCw, Shield, Eye, EyeOff, Info } from "lucide-react";
+import { useMemo, useEffect, useState, useRef, useCallback } from "react";
+import { Lock, RefreshCw, Shield, Eye, EyeOff, Info, Zap } from "lucide-react";
 import { Asset } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useLiveAssetPrice } from "@/hooks/useLiveOracle";
@@ -13,16 +13,19 @@ interface OrderBookProps {
 }
 
 interface OrderLevel {
+  id: string;
   price: number;
   size: number;
   total: number;
   isEncrypted: boolean;
-  // Simulated encrypted data
   encryptedSize: string;
   encryptedTrader: string;
+  isNew?: boolean;
+  isUpdated?: boolean;
+  changeDirection?: "up" | "down";
 }
 
-// Simülasyon için şifrelenmiş veri üret
+// Generate encrypted hash for display
 function generateEncryptedHash(seed: number): string {
   const chars = "0123456789abcdef";
   let result = "0x";
@@ -32,15 +35,15 @@ function generateEncryptedHash(seed: number): string {
   return result + "...";
 }
 
-// Generate order book based on current price and OI data
+// Generate order book with live variations
 function generateOrderBook(
   basePrice: number,
   symbol: string,
   longOI: number,
-  shortOI: number
+  shortOI: number,
+  tick: number // Changes each update for variation
 ): { asks: OrderLevel[]; bids: OrderLevel[] } {
-  // Seeded random for consistency per asset
-  let seed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  let seed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + tick;
   const seededRandom = () => {
     seed = (seed * 9301 + 49297) % 233280;
     return seed / 233280;
@@ -49,23 +52,22 @@ function generateOrderBook(
   const asks: OrderLevel[] = [];
   const bids: OrderLevel[] = [];
 
-  const spread = basePrice * 0.001; // 0.1% spread
-
-  // Calculate relative weights based on OI
+  const spread = basePrice * 0.001;
   const totalOI = longOI + shortOI;
   const longWeight = totalOI > 0 ? longOI / totalOI : 0.5;
   const shortWeight = totalOI > 0 ? shortOI / totalOI : 0.5;
 
-  // Generate 12 ask levels (sell orders above current price)
-  // More asks when there's more long OI (people wanting to take profit)
+  // Generate asks with variation
   let askTotal = 0;
   for (let i = 0; i < 12; i++) {
-    const price = basePrice + spread + (i * basePrice * 0.0005);
-    // Size influenced by long OI
+    const priceVariation = (seededRandom() - 0.5) * basePrice * 0.0001;
+    const price = basePrice + spread + (i * basePrice * 0.0005) + priceVariation;
     const baseSize = 0.1 + seededRandom() * 2;
-    const size = baseSize * (1 + longWeight * 0.5);
+    const sizeVariation = seededRandom() * 0.3;
+    const size = baseSize * (1 + longWeight * 0.5) + sizeVariation;
     askTotal += size;
     asks.push({
+      id: `ask-${i}-${tick}`,
       price,
       size,
       total: askTotal,
@@ -75,16 +77,17 @@ function generateOrderBook(
     });
   }
 
-  // Generate 12 bid levels (buy orders below current price)
-  // More bids when there's more short OI (shorts wanting to cover)
+  // Generate bids with variation
   let bidTotal = 0;
   for (let i = 0; i < 12; i++) {
-    const price = basePrice - spread - (i * basePrice * 0.0005);
-    // Size influenced by short OI
+    const priceVariation = (seededRandom() - 0.5) * basePrice * 0.0001;
+    const price = basePrice - spread - (i * basePrice * 0.0005) + priceVariation;
     const baseSize = 0.1 + seededRandom() * 2;
-    const size = baseSize * (1 + shortWeight * 0.5);
+    const sizeVariation = seededRandom() * 0.3;
+    const size = baseSize * (1 + shortWeight * 0.5) + sizeVariation;
     bidTotal += size;
     bids.push({
+      id: `bid-${i}-${tick}`,
       price,
       size,
       total: bidTotal,
@@ -97,53 +100,102 @@ function generateOrderBook(
   return { asks: asks.reverse(), bids };
 }
 
+// Recent trade type
+interface RecentTrade {
+  id: string;
+  price: number;
+  size: number;
+  side: "buy" | "sell";
+  timestamp: number;
+}
+
 export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookProps) {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showEncrypted, setShowEncrypted] = useState(true); // FHE modunu göster/gizle
-  const [showInfo, setShowInfo] = useState(false); // FHE bilgi paneli
+  const [showEncrypted, setShowEncrypted] = useState(true);
+  const [showInfo, setShowInfo] = useState(false);
+  const [tick, setTick] = useState(0);
+  const [flashPrice, setFlashPrice] = useState<"up" | "down" | null>(null);
+  const [recentTrades, setRecentTrades] = useState<RecentTrade[]>([]);
+  const [tradesPerSecond, setTradesPerSecond] = useState(0);
+  const prevPriceRef = useRef<number>(0);
 
-  // Use same hook as MarketStats and PriceChart for consistent pricing
   const network = useCurrentNetwork();
   const { asset: oracleAsset, refresh } = useLiveAssetPrice(
     selectedAsset?.symbol || "",
     network
   );
 
-  // Use oracle price if available, fallback to prop or asset price
   const livePrice = oracleAsset?.price ?? propPrice ?? selectedAsset?.price ?? 100;
-
-  // Get OI data from oracle
   const longOI = oracleAsset?.totalLongOI ?? 0;
   const shortOI = oracleAsset?.totalShortOI ?? 0;
 
-  // Generate order book with live data
+  // Generate order book
   const { asks, bids } = useMemo(() => {
     if (!selectedAsset) {
       return { asks: [], bids: [] };
     }
-    return generateOrderBook(livePrice, selectedAsset.symbol, longOI, shortOI);
-  }, [selectedAsset, livePrice, longOI, shortOI]);
+    return generateOrderBook(livePrice, selectedAsset.symbol, longOI, shortOI, tick);
+  }, [selectedAsset, livePrice, longOI, shortOI, tick]);
 
-  // Auto-refresh every 10 seconds
+  // Flash effect on price change
+  useEffect(() => {
+    if (prevPriceRef.current !== 0 && livePrice !== prevPriceRef.current) {
+      setFlashPrice(livePrice > prevPriceRef.current ? "up" : "down");
+      setTimeout(() => setFlashPrice(null), 300);
+    }
+    prevPriceRef.current = livePrice;
+  }, [livePrice]);
+
+  // Simulate live order flow - updates every 500ms-2s randomly
   useEffect(() => {
     if (!selectedAsset) return;
 
-    const doRefresh = async () => {
-      setIsRefreshing(true);
-      await refresh();
-      setLastUpdate(new Date());
-      setIsRefreshing(false);
+    const updateInterval = () => {
+      const delay = 500 + Math.random() * 1500; // 500ms to 2s
+      return setTimeout(() => {
+        setTick(t => t + 1);
+        setLastUpdate(new Date());
+
+        // Simulate a trade
+        if (Math.random() > 0.3) {
+          const side = Math.random() > 0.5 ? "buy" : "sell";
+          const trade: RecentTrade = {
+            id: `trade-${Date.now()}`,
+            price: livePrice + (Math.random() - 0.5) * livePrice * 0.001,
+            size: 0.01 + Math.random() * 0.5,
+            side,
+            timestamp: Date.now(),
+          };
+          setRecentTrades(prev => [trade, ...prev].slice(0, 10));
+        }
+
+        timer = updateInterval();
+      }, delay);
     };
 
-    // Initial fetch handled by useLiveOracle hook
-    setLastUpdate(new Date());
+    let timer = updateInterval();
+    return () => clearTimeout(timer);
+  }, [selectedAsset, livePrice]);
 
-    // Set up interval for manual refresh indicator
-    const interval = setInterval(doRefresh, 10000);
-
+  // Calculate trades per second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const recentCount = recentTrades.filter(t => now - t.timestamp < 5000).length;
+      setTradesPerSecond(Math.round(recentCount / 5 * 10) / 10);
+    }, 1000);
     return () => clearInterval(interval);
-  }, [selectedAsset, refresh]);
+  }, [recentTrades]);
+
+  // Manual refresh
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await refresh();
+    setTick(t => t + 1);
+    setLastUpdate(new Date());
+    setIsRefreshing(false);
+  }, [refresh]);
 
   const maxTotal = Math.max(
     ...asks.map(a => a.total),
@@ -160,9 +212,8 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
   }
 
   const formatPrice = (p: number) => {
-    if (p >= 1000) return p.toFixed(2);
     if (p >= 100) return p.toFixed(2);
-    if (p >= 1) return p.toFixed(2);
+    if (p >= 1) return p.toFixed(3);
     return p.toFixed(4);
   };
 
@@ -176,20 +227,24 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
         <div className="flex items-center gap-2">
           <Shield className="w-3.5 h-3.5 text-gold" />
           <span className="text-xs font-medium text-text-primary">FHE Order Book</span>
+          {tradesPerSecond > 0 && (
+            <span className="flex items-center gap-1 text-[9px] text-success bg-success/10 px-1.5 py-0.5 rounded">
+              <Zap className="w-2.5 h-2.5" />
+              {tradesPerSecond}/s
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          {/* Şifreleme Toggle */}
           <button
             onClick={() => setShowEncrypted(!showEncrypted)}
             className={cn(
               "p-1 rounded transition-colors",
               showEncrypted ? "bg-gold/20 text-gold" : "bg-card-hover text-text-muted"
             )}
-            title={showEncrypted ? "Şifreli görünüm" : "Demo görünüm"}
+            title={showEncrypted ? "Encrypted view" : "Demo view"}
           >
             {showEncrypted ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
           </button>
-          {/* Bilgi Butonu */}
           <button
             onClick={() => setShowInfo(!showInfo)}
             className="p-1 rounded hover:bg-card-hover transition-colors text-text-muted hover:text-gold"
@@ -201,27 +256,24 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
               "w-3 h-3 text-text-muted cursor-pointer hover:text-gold transition-colors",
               isRefreshing && "animate-spin"
             )}
-            onClick={() => {
-              setIsRefreshing(true);
-              refresh().finally(() => setIsRefreshing(false));
-            }}
+            onClick={handleRefresh}
           />
-          <span className="text-[10px] text-gold">Live</span>
+          <span className="text-[10px] text-success animate-pulse">LIVE</span>
         </div>
       </div>
 
-      {/* FHE Bilgi Paneli */}
+      {/* FHE Info Panel */}
       {showInfo && (
         <div className="px-3 py-2 bg-gold/10 border-b border-gold/30 text-[10px] text-gold">
           <div className="flex items-start gap-2">
             <Lock className="w-3 h-3 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="font-medium mb-1">Şifreli Order Book (FHE)</p>
+              <p className="font-medium mb-1">Encrypted Order Book (FHE)</p>
               <ul className="space-y-0.5 text-gold/80">
-                <li>• Fiyat seviyeleri görünür (market depth)</li>
-                <li>• Miktar çubukları toplam likiditeyi gösterir</li>
-                <li>• Kim koydu, tam miktar → Şifreli</li>
-                <li>• Validator bile göremez!</li>
+                <li>• Price levels visible (market depth)</li>
+                <li>• Size bars show total liquidity</li>
+                <li>• Who placed, exact amount → Encrypted</li>
+                <li>• Even validators cannot see!</li>
               </ul>
             </div>
           </div>
@@ -236,11 +288,11 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
         </div>
         <div className="mt-1 h-1 bg-background rounded-full overflow-hidden flex">
           <div
-            className="h-full bg-success"
+            className="h-full bg-success transition-all duration-500"
             style={{ width: `${longOI + shortOI > 0 ? (longOI / (longOI + shortOI)) * 100 : 50}%` }}
           />
           <div
-            className="h-full bg-danger"
+            className="h-full bg-danger transition-all duration-500"
             style={{ width: `${longOI + shortOI > 0 ? (shortOI / (longOI + shortOI)) * 100 : 50}%` }}
           />
         </div>
@@ -258,40 +310,50 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
         <div className="flex-1 overflow-y-auto scrollbar-thin">
           {asks.map((ask, i) => (
             <div
-              key={`ask-${i}`}
-              className="relative grid grid-cols-3 px-3 py-0.5 text-[11px] font-mono hover:bg-danger/5"
+              key={ask.id}
+              className={cn(
+                "relative grid grid-cols-3 px-3 py-0.5 text-[11px] font-mono transition-all duration-300",
+                "hover:bg-danger/10"
+              )}
             >
-              {/* Background bar */}
+              {/* Background bar with animation */}
               <div
-                className="absolute right-0 top-0 bottom-0 bg-danger/10"
+                className="absolute right-0 top-0 bottom-0 bg-danger/10 transition-all duration-500"
                 style={{ width: `${(ask.total / maxTotal) * 100}%` }}
               />
               <span className="relative text-danger">{formatPrice(ask.price)}</span>
               <span className="relative text-right text-text-secondary">
-                {ask.isEncrypted ? (
-                  <span className="flex items-center justify-end gap-1">
-                    <span className="opacity-60">***</span>
-                  </span>
+                {showEncrypted ? (
+                  <span className="opacity-60 animate-pulse">***</span>
                 ) : (
                   ask.size.toFixed(4)
                 )}
               </span>
               <span className="relative text-right text-text-muted">
-                {ask.isEncrypted ? "***" : ask.total.toFixed(4)}
+                {showEncrypted ? "***" : ask.total.toFixed(4)}
               </span>
             </div>
           ))}
         </div>
 
         {/* Spread / Current Price */}
-        <div className="px-3 py-2 bg-background border-y border-border/50">
+        <div className={cn(
+          "px-3 py-2 bg-background border-y border-border/50 transition-colors duration-300",
+          flashPrice === "up" && "bg-success/20",
+          flashPrice === "down" && "bg-danger/20"
+        )}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-text-primary font-mono">
+              <span className={cn(
+                "text-lg font-bold font-mono transition-colors duration-300",
+                flashPrice === "up" && "text-success",
+                flashPrice === "down" && "text-danger",
+                !flashPrice && "text-text-primary"
+              )}>
                 ${formatPrice(livePrice)}
               </span>
               {oracleAsset && (
-                <span className="text-[9px] text-success px-1 py-0.5 bg-success/10 rounded">
+                <span className="text-[9px] text-success px-1 py-0.5 bg-success/10 rounded animate-pulse">
                   LIVE
                 </span>
               )}
@@ -308,36 +370,62 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
         <div className="flex-1 overflow-y-auto scrollbar-thin">
           {bids.map((bid, i) => (
             <div
-              key={`bid-${i}`}
-              className="relative grid grid-cols-3 px-3 py-0.5 text-[11px] font-mono hover:bg-success/5"
+              key={bid.id}
+              className={cn(
+                "relative grid grid-cols-3 px-3 py-0.5 text-[11px] font-mono transition-all duration-300",
+                "hover:bg-success/10"
+              )}
             >
-              {/* Background bar */}
+              {/* Background bar with animation */}
               <div
-                className="absolute right-0 top-0 bottom-0 bg-success/10"
+                className="absolute right-0 top-0 bottom-0 bg-success/10 transition-all duration-500"
                 style={{ width: `${(bid.total / maxTotal) * 100}%` }}
               />
               <span className="relative text-success">{formatPrice(bid.price)}</span>
               <span className="relative text-right text-text-secondary">
-                {bid.isEncrypted ? (
-                  <span className="flex items-center justify-end gap-1">
-                    <span className="opacity-60">***</span>
-                  </span>
+                {showEncrypted ? (
+                  <span className="opacity-60 animate-pulse">***</span>
                 ) : (
                   bid.size.toFixed(4)
                 )}
               </span>
               <span className="relative text-right text-text-muted">
-                {bid.isEncrypted ? "***" : bid.total.toFixed(4)}
+                {showEncrypted ? "***" : bid.total.toFixed(4)}
               </span>
             </div>
           ))}
         </div>
       </div>
 
+      {/* Recent Trades Ticker */}
+      {recentTrades.length > 0 && (
+        <div className="border-t border-border/50 bg-background/30">
+          <div className="px-3 py-1 text-[9px] text-text-muted flex items-center justify-between">
+            <span>Recent Trades</span>
+            <span>{recentTrades.length} trades</span>
+          </div>
+          <div className="px-3 pb-2 flex gap-2 overflow-x-auto scrollbar-none">
+            {recentTrades.slice(0, 5).map((trade) => (
+              <div
+                key={trade.id}
+                className={cn(
+                  "flex-shrink-0 px-2 py-1 rounded text-[10px] font-mono",
+                  trade.side === "buy" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
+                )}
+              >
+                <span className="font-medium">{trade.side === "buy" ? "B" : "S"}</span>
+                <span className="ml-1">${formatPrice(trade.price)}</span>
+                <span className="ml-1 opacity-60">×{trade.size.toFixed(3)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Last Update */}
       {lastUpdate && (
         <div className="px-3 py-1 border-t border-border/50 text-[9px] text-text-muted text-center">
-          Last update: {lastUpdate.toLocaleTimeString()}
+          Updated: {lastUpdate.toLocaleTimeString()}
         </div>
       )}
     </div>

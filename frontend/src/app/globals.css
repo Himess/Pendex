@@ -291,3 +291,58 @@ body {
 .table-row-hover:hover {
   background-color: var(--card-hover);
 }
+
+/* Loading bar animation */
+@keyframes loading {
+  0% {
+    width: 0%;
+  }
+  50% {
+    width: 100%;
+  }
+  100% {
+    width: 0%;
+  }
+}
+
+/* Scale in animation for success checkmark */
+@keyframes scale-in {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Fly out animation for confetti */
+@keyframes fly-out {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--rotate, 0deg)) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--rotate, 0deg)) translateY(-60px);
+  }
+}
+
+/* Scrollbar for thin variant */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
