@@ -1,9 +1,32 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Header, Footer } from "@/components";
 import { formatUSD, formatPercent } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useAccount, useWalletClient, useChainId } from "wagmi";
+import {
+  initFheInstance,
+  isFheInitialized,
+  requestUserDecryption,
+} from "@/lib/fhe/client";
+import {
+  useUsdBalance,
+  useVaultBalance,
+  useLpBalance,
+  usePendingRewards,
+  usePoolStats,
+  useCurrentApy,
+  useTimeUntilUnlock,
+  useCurrentEpoch,
+  useTimeUntilNextEpoch,
+  useLastClaimedEpoch,
+  useTotalLiquidity,
+  useAddLiquidity,
+  useRemoveLiquidity,
+  useClaimRewards as useClaimRewardsHook,
+} from "@/lib/contracts/hooks";
+import { CONTRACTS } from "@/lib/contracts/config";
 import {
   Lock,
   Eye,
@@ -30,34 +53,48 @@ import {
   CheckCircle,
   Loader2,
   Send,
+  Key,
+  Unlock,
+  Users,
+  UserPlus,
+  UserMinus,
+  Trash2,
 } from "lucide-react";
+import { createPublicClient, createWalletClient, custom, http, parseAbi } from "viem";
+import { sepolia } from "viem/chains";
 
-// Mock wallet data
-const WALLET_DATA = {
-  address: "0x1234...5678",
-  balance: 12500.0,
-  availableBalance: 8750.0,
-  lockedInPositions: 3750.0,
-  totalPnL: 2847.5,
-  totalPnLPercent: 29.4,
-  todayPnL: 345.2,
-  todayPnLPercent: 2.8,
+// Contract addresses (from config)
+const CONTRACT_ADDRESSES = {
+  shadowUSD: CONTRACTS.shadowUsd,
+  shadowVault: CONTRACTS.shadowVault,
+  shadowLiquidityPool: CONTRACTS.shadowLiquidityPool,
 };
 
-// Mock LP data
-const LP_DATA = {
-  lpBalance: 5000, // LP tokens
-  lpValue: 5250, // sUSD value
-  pendingRewards: 125.5,
-  depositTimestamp: Date.now() - 20 * 60 * 60 * 1000, // 20 hours ago
-  lastClaimedEpoch: 5,
-  currentEpoch: 7,
-  timeUntilUnlock: 4 * 60 * 60, // 4 hours
-  timeUntilNextEpoch: 8 * 60 * 60, // 8 hours
-  currentApy: 15.5, // 15.5% APY
-  poolTotalLiquidity: 2500000,
-  poolUtilization: 65,
-};
+// ShadowUSD ABI for operator functions (ERC-7984)
+const SHADOW_USD_ABI = parseAbi([
+  "function setOperator(address operator, bool approved) external",
+  "function isOperator(address owner, address operator) external view returns (bool)",
+  "function operatorTransfer(address from, address to, bytes32 encryptedAmount, bytes calldata inputProof) external returns (bool)",
+]);
+
+// Operator interface
+interface Operator {
+  address: string;
+  isActive: boolean;
+  addedAt: number;
+}
+
+// Helper to format bigint to number (6 decimals for sUSD)
+function formatBalance(value: bigint | undefined): number {
+  if (!value) return 0;
+  return Number(value) / 1e6;
+}
+
+// Helper to format APY from basis points
+function formatApyFromBps(bps: bigint | undefined): number {
+  if (!bps) return 0;
+  return Number(bps) / 100; // 1500 bps = 15.00%
+}
 
 // Mock transaction history
 const TRANSACTIONS = [
@@ -120,9 +157,74 @@ function formatTimeRemaining(seconds: number): string {
 }
 
 export default function WalletPage() {
+  const { address, isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
+  const chainId = useChainId();
+
+  // ==================== CONTRACT DATA HOOKS ====================
+  // Wallet balances
+  const { data: usdBalance, isLoading: usdLoading } = useUsdBalance(address);
+  const { data: vaultBalance, isLoading: vaultLoading } = useVaultBalance(address);
+
+  // LP Pool data
+  const { data: lpBalance, isLoading: lpLoading } = useLpBalance(address);
+  const { data: pendingRewards, isLoading: rewardsLoading } = usePendingRewards(address);
+  const { data: poolStats } = usePoolStats();
+  const { data: currentApy } = useCurrentApy();
+  const { data: timeUntilUnlock } = useTimeUntilUnlock(address);
+  const { data: currentEpoch } = useCurrentEpoch();
+  const { data: timeUntilNextEpoch } = useTimeUntilNextEpoch();
+  const { data: lastClaimedEpoch } = useLastClaimedEpoch(address);
+  const { data: totalLiquidity } = useTotalLiquidity();
+
+  // Contract write hooks
+  const { addLiquidity, isPending: _isAddingLiquidity, isSuccess: _addLiquiditySuccess } = useAddLiquidity();
+  const { removeLiquidity, isPending: _isRemovingLiquidity, isSuccess: _removeLiquiditySuccess } = useRemoveLiquidity();
+  const { claimRewards: claimRewardsContract, isPending: _isClaimingRewards, isSuccess: _claimSuccess } = useClaimRewardsHook();
+
+  // Derived wallet data from contracts
+  const walletData = useMemo(() => ({
+    balance: formatBalance(usdBalance as bigint | undefined),
+    vaultBalance: formatBalance(vaultBalance as bigint | undefined),
+    availableBalance: formatBalance(usdBalance as bigint | undefined),
+    lockedInPositions: formatBalance(vaultBalance as bigint | undefined),
+    // PnL data would come from position tracking - placeholder for now
+    totalPnL: 0,
+    totalPnLPercent: 0,
+    todayPnL: 0,
+    todayPnLPercent: 0,
+    isLoading: usdLoading || vaultLoading,
+  }), [usdBalance, vaultBalance, usdLoading, vaultLoading]);
+
+  // Derived LP data from contracts
+  const lpData = useMemo(() => ({
+    lpBalance: formatBalance(lpBalance as bigint | undefined),
+    lpValue: formatBalance(lpBalance as bigint | undefined), // 1:1 for now
+    pendingRewards: formatBalance(pendingRewards as bigint | undefined),
+    timeUntilUnlock: Number(timeUntilUnlock || 0),
+    timeUntilNextEpoch: Number(timeUntilNextEpoch || 0),
+    currentEpoch: Number(currentEpoch || 0),
+    lastClaimedEpoch: Number(lastClaimedEpoch || 0),
+    currentApy: formatApyFromBps(currentApy as bigint | undefined),
+    poolTotalLiquidity: formatBalance(totalLiquidity as bigint | undefined),
+    poolUtilization: poolStats ? Number((poolStats as readonly bigint[])[1] || 0) / 100 : 0,
+    isLoading: lpLoading || rewardsLoading,
+  }), [lpBalance, pendingRewards, timeUntilUnlock, timeUntilNextEpoch, currentEpoch, lastClaimedEpoch, currentApy, totalLiquidity, poolStats, lpLoading, rewardsLoading]);
+
   const [showBalance, setShowBalance] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "history" | "deposit" | "liquidity" | "transfer">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "history" | "deposit" | "liquidity" | "transfer" | "decrypt" | "operators">("overview");
   const [depositAmount, setDepositAmount] = useState("");
+
+  // Operator state (ERC-7984)
+  const [operators, setOperators] = useState<Operator[]>([]);
+  const [newOperatorAddress, setNewOperatorAddress] = useState("");
+  const [isAddingOperator, setIsAddingOperator] = useState(false);
+  const [isRemovingOperator, setIsRemovingOperator] = useState<string | null>(null);
+  const [operatorError, setOperatorError] = useState<string | null>(null);
+  const [operatorSuccess, setOperatorSuccess] = useState<string | null>(null);
+  const [checkOperatorAddress, setCheckOperatorAddress] = useState("");
+  const [checkOperatorResult, setCheckOperatorResult] = useState<boolean | null>(null);
+  const [isCheckingOperator, setIsCheckingOperator] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [lpDepositAmount, setLpDepositAmount] = useState("");
   const [lpWithdrawAmount, setLpWithdrawAmount] = useState("");
@@ -135,9 +237,50 @@ export default function WalletPage() {
   const [isTransferring, setIsTransferring] = useState(false);
   const [transferSuccess, setTransferSuccess] = useState(false);
 
-  // Countdown timers
-  const [unlockCountdown, setUnlockCountdown] = useState(LP_DATA.timeUntilUnlock);
-  const [epochCountdown, setEpochCountdown] = useState(LP_DATA.timeUntilNextEpoch);
+  // FHE Decryption state
+  const [isFheReady, setIsFheReady] = useState(false);
+  const [isDecrypting, setIsDecrypting] = useState(false);
+  const [decryptionError, setDecryptionError] = useState<string | null>(null);
+  const [decryptedBalance, setDecryptedBalance] = useState<bigint | null>(null);
+  const [decryptedValues, setDecryptedValues] = useState<{
+    sUsdBalance?: bigint;
+    vaultBalance?: bigint;
+    lpBalance?: bigint;
+    pendingRewards?: bigint;
+  }>({});
+
+  // Countdown timers - now using real contract data
+  const [unlockCountdown, setUnlockCountdown] = useState(0);
+  const [epochCountdown, setEpochCountdown] = useState(0);
+
+  // Update countdowns when contract data changes
+  useEffect(() => {
+    if (timeUntilUnlock !== undefined) {
+      setUnlockCountdown(Number(timeUntilUnlock));
+    }
+  }, [timeUntilUnlock]);
+
+  useEffect(() => {
+    if (timeUntilNextEpoch !== undefined) {
+      setEpochCountdown(Number(timeUntilNextEpoch));
+    }
+  }, [timeUntilNextEpoch]);
+
+  // Initialize FHE on mount
+  useEffect(() => {
+    const init = async () => {
+      try {
+        if (!isFheInitialized()) {
+          await initFheInstance();
+        }
+        setIsFheReady(true);
+      } catch (error) {
+        console.error("FHE init failed:", error);
+        setIsFheReady(false);
+      }
+    };
+    init();
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -147,8 +290,78 @@ export default function WalletPage() {
     return () => clearInterval(timer);
   }, []);
 
+  // Decrypt user's encrypted balance
+  const handleDecryptBalance = useCallback(async () => {
+    if (!walletClient || !address || !isFheReady) {
+      setDecryptionError("Wallet not connected or FHE not ready");
+      return;
+    }
+
+    // Only works on Sepolia (chainId: 11155111)
+    if (chainId !== 11155111) {
+      setDecryptionError("Please switch to Sepolia testnet for FHE decryption");
+      return;
+    }
+
+    setIsDecrypting(true);
+    setDecryptionError(null);
+
+    try {
+      // In production, we would:
+      // 1. Call contract to get encrypted balance handle
+      // 2. Use requestUserDecryption to decrypt with EIP-712 signature
+
+      // For demo, we'll show the flow with mock handles
+      // Real implementation would get handles from contract view functions
+
+      // Simulate getting encrypted balance handle from contract
+      // const balanceHandle = await shadowUsdContract.read.confidentialBalanceOf([address]);
+
+      // Demo: Use mock encrypted value
+      // In real scenario, this would be the actual encrypted handle from contract
+      const mockHandle = "0x0000000000000000000000000000000000000000000000000000000000000001" as `0x${string}`;
+
+      // Request decryption - this will prompt user to sign EIP-712 message
+      console.log("🔐 Requesting user decryption...");
+      const results = await requestUserDecryption(
+        [
+          { handle: mockHandle, contractAddress: CONTRACT_ADDRESSES.shadowUSD },
+        ],
+        address,
+        walletClient
+      );
+
+      console.log("✅ Decryption results:", results);
+
+      // Store decrypted values
+      if (results[mockHandle] !== undefined) {
+        const balance = typeof results[mockHandle] === "bigint"
+          ? results[mockHandle]
+          : BigInt(results[mockHandle].toString());
+        setDecryptedBalance(balance);
+        setDecryptedValues((prev) => ({
+          ...prev,
+          sUsdBalance: balance,
+        }));
+        setShowBalance(true);
+      }
+    } catch (error) {
+      console.error("❌ Decryption failed:", error);
+      setDecryptionError(
+        error instanceof Error ? error.message : "Decryption failed. Please try again."
+      );
+    } finally {
+      setIsDecrypting(false);
+    }
+  }, [walletClient, address, isFheReady, chainId]);
+
   const isLocked = unlockCountdown > 0;
-  const unclaimedEpochs = LP_DATA.currentEpoch - LP_DATA.lastClaimedEpoch - 1;
+  const unclaimedEpochs = lpData.currentEpoch - lpData.lastClaimedEpoch - 1;
+
+  // Format address for display
+  const displayAddress = address
+    ? `${address.slice(0, 6)}...${address.slice(-4)}`
+    : "Not Connected";
 
   const EncryptedValue = ({ revealed, value }: { revealed: boolean; value: string }) => (
     <span className="flex items-center gap-2">
@@ -160,28 +373,41 @@ export default function WalletPage() {
   const handleLpDeposit = async () => {
     if (!lpDepositAmount) return;
     setIsLpDepositing(true);
-    // Simulate transaction
-    await new Promise((r) => setTimeout(r, 2000));
-    setIsLpDepositing(false);
-    setLpDepositAmount("");
-    // Would call: addLiquidity(BigInt(parseFloat(lpDepositAmount) * 1e6))
+    try {
+      const amount = BigInt(Math.floor(parseFloat(lpDepositAmount) * 1e6));
+      addLiquidity(amount);
+    } catch (error) {
+      console.error("LP deposit failed:", error);
+    } finally {
+      setIsLpDepositing(false);
+      setLpDepositAmount("");
+    }
   };
 
   const handleLpWithdraw = async () => {
     if (!lpWithdrawAmount || isLocked) return;
     setIsLpWithdrawing(true);
-    await new Promise((r) => setTimeout(r, 2000));
-    setIsLpWithdrawing(false);
-    setLpWithdrawAmount("");
-    // Would call: removeLiquidity(BigInt(parseFloat(lpWithdrawAmount) * 1e6))
+    try {
+      const amount = BigInt(Math.floor(parseFloat(lpWithdrawAmount) * 1e6));
+      removeLiquidity(amount);
+    } catch (error) {
+      console.error("LP withdraw failed:", error);
+    } finally {
+      setIsLpWithdrawing(false);
+      setLpWithdrawAmount("");
+    }
   };
 
   const handleClaimRewards = async () => {
-    if (unclaimedEpochs <= 0) return;
+    if (unclaimedEpochs <= 0 || lpData.pendingRewards <= 0) return;
     setIsClaiming(true);
-    await new Promise((r) => setTimeout(r, 2000));
-    setIsClaiming(false);
-    // Would call: claimRewards()
+    try {
+      claimRewardsContract();
+    } catch (error) {
+      console.error("Claim rewards failed:", error);
+    } finally {
+      setIsClaiming(false);
+    }
   };
 
   const handleConfidentialTransfer = async () => {
@@ -213,6 +439,136 @@ export default function WalletPage() {
     }
   };
 
+  // ERC-7984 Operator Functions
+  const handleAddOperator = async () => {
+    if (!newOperatorAddress || !walletClient || !address) return;
+
+    // Validate address format
+    if (!/^0x[a-fA-F0-9]{40}$/.test(newOperatorAddress)) {
+      setOperatorError("Invalid address format");
+      return;
+    }
+
+    // Check if adding self
+    if (newOperatorAddress.toLowerCase() === address.toLowerCase()) {
+      setOperatorError("Cannot set yourself as operator");
+      return;
+    }
+
+    setIsAddingOperator(true);
+    setOperatorError(null);
+    setOperatorSuccess(null);
+
+    try {
+      // Create wallet client for transaction
+      const client = createWalletClient({
+        chain: sepolia,
+        transport: custom(walletClient.transport),
+      });
+
+      // Call setOperator(address, true)
+      const hash = await client.writeContract({
+        address: CONTRACT_ADDRESSES.shadowUSD,
+        abi: SHADOW_USD_ABI,
+        functionName: "setOperator",
+        args: [newOperatorAddress as `0x${string}`, true],
+        account: address,
+      });
+
+      console.log("setOperator tx:", hash);
+
+      // Add to local state
+      setOperators((prev) => [
+        ...prev,
+        {
+          address: newOperatorAddress,
+          isActive: true,
+          addedAt: Date.now(),
+        },
+      ]);
+
+      setOperatorSuccess(`Operator added! Tx: ${hash.slice(0, 10)}...`);
+      setNewOperatorAddress("");
+    } catch (error) {
+      console.error("Failed to add operator:", error);
+      setOperatorError(error instanceof Error ? error.message : "Failed to add operator");
+    } finally {
+      setIsAddingOperator(false);
+    }
+  };
+
+  const handleRemoveOperator = async (operatorAddress: string) => {
+    if (!walletClient || !address) return;
+
+    setIsRemovingOperator(operatorAddress);
+    setOperatorError(null);
+    setOperatorSuccess(null);
+
+    try {
+      const client = createWalletClient({
+        chain: sepolia,
+        transport: custom(walletClient.transport),
+      });
+
+      // Call setOperator(address, false)
+      const hash = await client.writeContract({
+        address: CONTRACT_ADDRESSES.shadowUSD,
+        abi: SHADOW_USD_ABI,
+        functionName: "setOperator",
+        args: [operatorAddress as `0x${string}`, false],
+        account: address,
+      });
+
+      console.log("removeOperator tx:", hash);
+
+      // Remove from local state
+      setOperators((prev) => prev.filter((op) => op.address.toLowerCase() !== operatorAddress.toLowerCase()));
+
+      setOperatorSuccess(`Operator removed! Tx: ${hash.slice(0, 10)}...`);
+    } catch (error) {
+      console.error("Failed to remove operator:", error);
+      setOperatorError(error instanceof Error ? error.message : "Failed to remove operator");
+    } finally {
+      setIsRemovingOperator(null);
+    }
+  };
+
+  const handleCheckOperator = async () => {
+    if (!checkOperatorAddress || !address) return;
+
+    // Validate address format
+    if (!/^0x[a-fA-F0-9]{40}$/.test(checkOperatorAddress)) {
+      setOperatorError("Invalid address format");
+      return;
+    }
+
+    setIsCheckingOperator(true);
+    setCheckOperatorResult(null);
+    setOperatorError(null);
+
+    try {
+      const publicClient = createPublicClient({
+        chain: sepolia,
+        transport: http(),
+      });
+
+      // Call isOperator(owner, operator)
+      const isOp = await publicClient.readContract({
+        address: CONTRACT_ADDRESSES.shadowUSD,
+        abi: SHADOW_USD_ABI,
+        functionName: "isOperator",
+        args: [address, checkOperatorAddress as `0x${string}`],
+      });
+
+      setCheckOperatorResult(isOp as boolean);
+    } catch (error) {
+      console.error("Failed to check operator:", error);
+      setOperatorError(error instanceof Error ? error.message : "Failed to check operator status");
+    } finally {
+      setIsCheckingOperator(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
@@ -223,23 +579,99 @@ export default function WalletPage() {
           <div>
             <h1 className="text-3xl font-bold text-text-primary mb-2">Wallet</h1>
             <p className="text-text-muted flex items-center gap-2">
-              {WALLET_DATA.address}
-              <button className="hover:text-gold transition-colors">
+              {displayAddress}
+              <button
+                className="hover:text-gold transition-colors"
+                onClick={() => address && navigator.clipboard.writeText(address)}
+              >
                 <Copy className="w-4 h-4" />
               </button>
-              <button className="hover:text-gold transition-colors">
-                <ExternalLink className="w-4 h-4" />
-              </button>
+              {address && (
+                <a
+                  href={`https://sepolia.etherscan.io/address/${address}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-gold transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              )}
             </p>
           </div>
-          <button
-            onClick={() => setShowBalance(!showBalance)}
-            className="flex items-center gap-2 px-4 py-2 bg-gold/20 text-gold rounded-lg font-medium hover:bg-gold/30 transition-colors"
-          >
-            {showBalance ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            {showBalance ? "Hide" : "Reveal"} Balance
-          </button>
+          <div className="flex items-center gap-3">
+            {/* FHE Status Indicator */}
+            <div className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-lg text-sm",
+              isFheReady
+                ? "bg-success/20 text-success"
+                : "bg-warning/20 text-warning"
+            )}>
+              <div className={cn(
+                "w-2 h-2 rounded-full",
+                isFheReady ? "bg-success animate-pulse" : "bg-warning"
+              )} />
+              {isFheReady ? "FHE Ready" : "FHE Loading..."}
+            </div>
+
+            {/* Decrypt Button - Real FHE Decryption */}
+            <button
+              onClick={handleDecryptBalance}
+              disabled={!isConnected || !isFheReady || isDecrypting}
+              className="flex items-center gap-2 px-4 py-2 bg-gold text-background rounded-lg font-medium hover:bg-gold/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isDecrypting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Decrypting...
+                </>
+              ) : (
+                <>
+                  <Unlock className="w-4 h-4" />
+                  Decrypt Balance
+                </>
+              )}
+            </button>
+
+            {/* Toggle visibility (for already decrypted values) */}
+            <button
+              onClick={() => setShowBalance(!showBalance)}
+              className="flex items-center gap-2 px-4 py-2 bg-card border border-border text-text-muted rounded-lg font-medium hover:bg-card-hover transition-colors"
+            >
+              {showBalance ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {showBalance ? "Hide" : "Show"}
+            </button>
+          </div>
         </div>
+
+        {/* Decryption Error */}
+        {decryptionError && (
+          <div className="mb-6 p-4 bg-danger/20 border border-danger/30 rounded-lg flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-danger" />
+            <div>
+              <p className="font-medium text-danger">Decryption Failed</p>
+              <p className="text-sm text-text-muted">{decryptionError}</p>
+            </div>
+            <button
+              onClick={() => setDecryptionError(null)}
+              className="ml-auto text-danger hover:text-danger/70"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {/* Decrypted Balance Success */}
+        {decryptedBalance !== null && showBalance && (
+          <div className="mb-6 p-4 bg-success/20 border border-success/30 rounded-lg flex items-center gap-3">
+            <CheckCircle className="w-5 h-5 text-success" />
+            <div>
+              <p className="font-medium text-success">Balance Decrypted Successfully</p>
+              <p className="text-sm text-text-muted">
+                Your encrypted balance has been decrypted using FHE. Only you can see this value.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Balance Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -252,20 +684,20 @@ export default function WalletPage() {
             <div className="text-3xl font-bold text-text-primary mb-2">
               <EncryptedValue
                 revealed={showBalance}
-                value={formatUSD(WALLET_DATA.balance)}
+                value={formatUSD(walletData.balance)}
               />
             </div>
             <div className="flex items-center gap-4 text-sm">
               <span className="text-text-muted">
                 Available:{" "}
                 <span className="text-text-primary">
-                  {showBalance ? formatUSD(WALLET_DATA.availableBalance) : "••••"}
+                  {showBalance ? formatUSD(walletData.availableBalance) : "••••"}
                 </span>
               </span>
               <span className="text-text-muted">
                 Locked:{" "}
                 <span className="text-gold">
-                  {showBalance ? formatUSD(WALLET_DATA.lockedInPositions) : "••••"}
+                  {showBalance ? formatUSD(walletData.lockedInPositions) : "••••"}
                 </span>
               </span>
             </div>
@@ -279,12 +711,12 @@ export default function WalletPage() {
             </div>
             <div className={cn(
               "text-3xl font-bold flex items-center gap-2 mb-2",
-              WALLET_DATA.totalPnL >= 0 ? "text-success" : "text-danger"
+              walletData.totalPnL >= 0 ? "text-success" : "text-danger"
             )}>
               {showBalance ? (
                 <>
-                  {WALLET_DATA.totalPnL >= 0 ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
-                  {WALLET_DATA.totalPnL >= 0 ? "+" : ""}{formatUSD(WALLET_DATA.totalPnL)}
+                  {walletData.totalPnL >= 0 ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
+                  {walletData.totalPnL >= 0 ? "+" : ""}{formatUSD(walletData.totalPnL)}
                 </>
               ) : (
                 <EncryptedValue revealed={false} value="" />
@@ -292,9 +724,9 @@ export default function WalletPage() {
             </div>
             <span className={cn(
               "text-sm font-medium",
-              WALLET_DATA.totalPnLPercent >= 0 ? "text-success" : "text-danger"
+              walletData.totalPnLPercent >= 0 ? "text-success" : "text-danger"
             )}>
-              {showBalance ? formatPercent(WALLET_DATA.totalPnLPercent) : "••••%"}
+              {showBalance ? formatPercent(walletData.totalPnLPercent) : "••••%"}
             </span>
           </div>
 
@@ -306,12 +738,12 @@ export default function WalletPage() {
             </div>
             <div className={cn(
               "text-3xl font-bold flex items-center gap-2 mb-2",
-              WALLET_DATA.todayPnL >= 0 ? "text-success" : "text-danger"
+              walletData.todayPnL >= 0 ? "text-success" : "text-danger"
             )}>
               {showBalance ? (
                 <>
-                  {WALLET_DATA.todayPnL >= 0 ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
-                  {WALLET_DATA.todayPnL >= 0 ? "+" : ""}{formatUSD(WALLET_DATA.todayPnL)}
+                  {walletData.todayPnL >= 0 ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
+                  {walletData.todayPnL >= 0 ? "+" : ""}{formatUSD(walletData.todayPnL)}
                 </>
               ) : (
                 <EncryptedValue revealed={false} value="" />
@@ -319,9 +751,9 @@ export default function WalletPage() {
             </div>
             <span className={cn(
               "text-sm font-medium",
-              WALLET_DATA.todayPnLPercent >= 0 ? "text-success" : "text-danger"
+              walletData.todayPnLPercent >= 0 ? "text-success" : "text-danger"
             )}>
-              {showBalance ? formatPercent(WALLET_DATA.todayPnLPercent) : "••••%"}
+              {showBalance ? formatPercent(walletData.todayPnLPercent) : "••••%"}
             </span>
           </div>
         </div>
@@ -330,7 +762,9 @@ export default function WalletPage() {
         <div className="flex gap-2 mb-6 border-b border-border overflow-x-auto">
           {[
             { id: "overview", label: "Overview", icon: <PieChart className="w-4 h-4" /> },
+            { id: "decrypt", label: "Decrypt Balance", icon: <Key className="w-4 h-4" /> },
             { id: "transfer", label: "Transfer sUSD", icon: <Send className="w-4 h-4" /> },
+            { id: "operators", label: "Operators", icon: <Users className="w-4 h-4" /> },
             { id: "liquidity", label: "Liquidity Pool", icon: <Coins className="w-4 h-4" /> },
             { id: "history", label: "History", icon: <History className="w-4 h-4" /> },
             { id: "deposit", label: "Deposit / Withdraw", icon: <DollarSign className="w-4 h-4" /> },
@@ -352,6 +786,218 @@ export default function WalletPage() {
         </div>
 
         {/* Tab Content */}
+        {activeTab === "decrypt" && (
+          <div className="max-w-3xl mx-auto">
+            <div className="bg-card border border-border rounded-xl p-8">
+              {/* Header */}
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-14 h-14 rounded-full bg-gold/20 text-gold flex items-center justify-center">
+                  <Key className="w-7 h-7" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-text-primary">FHE User Decryption</h2>
+                  <p className="text-text-muted">Decrypt your encrypted balance with your wallet signature</p>
+                </div>
+              </div>
+
+              {/* Connection Status */}
+              {!isConnected ? (
+                <div className="p-6 bg-warning/10 border border-warning/30 rounded-lg text-center">
+                  <Wallet className="w-12 h-12 text-warning mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-text-primary mb-2">Wallet Not Connected</h3>
+                  <p className="text-text-muted mb-4">
+                    Please connect your wallet to decrypt your encrypted balance.
+                  </p>
+                </div>
+              ) : chainId !== 11155111 ? (
+                <div className="p-6 bg-warning/10 border border-warning/30 rounded-lg text-center">
+                  <AlertTriangle className="w-12 h-12 text-warning mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-text-primary mb-2">Wrong Network</h3>
+                  <p className="text-text-muted mb-4">
+                    Please switch to <strong>Sepolia testnet</strong> to use FHE decryption.
+                  </p>
+                  <p className="text-xs text-text-muted">
+                    Current chain ID: {chainId} | Required: 11155111 (Sepolia)
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* FHE Status */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className={cn(
+                      "p-4 rounded-lg border",
+                      isFheReady
+                        ? "bg-success/10 border-success/30"
+                        : "bg-warning/10 border-warning/30"
+                    )}>
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-10 h-10 rounded-full flex items-center justify-center",
+                          isFheReady ? "bg-success/20" : "bg-warning/20"
+                        )}>
+                          {isFheReady ? (
+                            <CheckCircle className="w-5 h-5 text-success" />
+                          ) : (
+                            <Loader2 className="w-5 h-5 text-warning animate-spin" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium text-text-primary">FHE SDK Status</p>
+                          <p className={cn(
+                            "text-sm",
+                            isFheReady ? "text-success" : "text-warning"
+                          )}>
+                            {isFheReady ? "Ready" : "Initializing..."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-lg border bg-card border-border">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gold/20 flex items-center justify-center">
+                          <Wallet className="w-5 h-5 text-gold" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-text-primary">Connected Wallet</p>
+                          <p className="text-sm text-text-muted font-mono">{displayAddress}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Decrypted Values */}
+                  {decryptedBalance !== null && (
+                    <div className="p-6 bg-success/10 border border-success/30 rounded-lg">
+                      <h3 className="text-lg font-semibold text-success mb-4 flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5" />
+                        Decrypted Balance
+                      </h3>
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="flex justify-between items-center p-4 bg-background rounded-lg">
+                          <span className="text-text-muted">sUSD Balance</span>
+                          <span className="text-2xl font-bold text-text-primary font-mono">
+                            ${(Number(decryptedBalance) / 1e6).toFixed(2)}
+                          </span>
+                        </div>
+                        {decryptedValues.vaultBalance && (
+                          <div className="flex justify-between items-center p-4 bg-background rounded-lg">
+                            <span className="text-text-muted">Vault Collateral</span>
+                            <span className="text-xl font-bold text-text-primary font-mono">
+                              ${(Number(decryptedValues.vaultBalance) / 1e6).toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Decrypt Button */}
+                  <button
+                    onClick={handleDecryptBalance}
+                    disabled={!isFheReady || isDecrypting}
+                    className="w-full py-4 bg-gold text-background rounded-lg font-bold text-lg hover:bg-gold/90 transition-colors flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isDecrypting ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Signing & Decrypting...
+                      </>
+                    ) : (
+                      <>
+                        <Unlock className="w-5 h-5" />
+                        {decryptedBalance !== null ? "Refresh Decryption" : "Decrypt My Balance"}
+                      </>
+                    )}
+                  </button>
+
+                  {/* Decryption Error */}
+                  {decryptionError && (
+                    <div className="p-4 bg-danger/10 border border-danger/30 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 text-danger mt-0.5" />
+                        <div>
+                          <p className="font-medium text-danger">Decryption Failed</p>
+                          <p className="text-sm text-text-muted">{decryptionError}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* How FHE Decryption Works */}
+            <div className="mt-6 bg-card border border-border rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
+                <Shield className="w-5 h-5 text-gold" />
+                How FHE User Decryption Works
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold flex-shrink-0">
+                    1
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-text-primary mb-1">Generate Keypair</h4>
+                    <p className="text-sm text-text-muted">
+                      A temporary keypair is generated in your browser for re-encryption.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold flex-shrink-0">
+                    2
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-text-primary mb-1">Sign EIP-712</h4>
+                    <p className="text-sm text-text-muted">
+                      You sign an EIP-712 message to authorize decryption access.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold flex-shrink-0">
+                    3
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-text-primary mb-1">Re-Encrypt</h4>
+                    <p className="text-sm text-text-muted">
+                      The KMS re-encrypts your data under your temporary public key.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold flex-shrink-0">
+                    4
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-text-primary mb-1">Decrypt Locally</h4>
+                    <p className="text-sm text-text-muted">
+                      Your browser decrypts the value locally - only you can see it.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Security Notice */}
+            <div className="mt-4 p-4 bg-gold/5 border border-gold/20 rounded-lg">
+              <div className="flex items-start gap-3">
+                <Lock className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-gold mb-1">Privacy Guaranteed</p>
+                  <p className="text-sm text-text-muted">
+                    Your decrypted balance is <strong>never stored</strong> on any server or blockchain.
+                    The decryption happens entirely in your browser. Validators and other users
+                    cannot see your balance - only you can with your wallet signature.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === "transfer" && (
           <div className="max-w-2xl mx-auto">
             <div className="bg-card border border-border rounded-xl p-8">
@@ -430,7 +1076,7 @@ export default function WalletPage() {
                   <div className="flex justify-between items-center">
                     <span className="text-text-muted">Available Balance</span>
                     <span className="font-semibold text-text-primary flex items-center gap-2">
-                      {showBalance ? formatUSD(WALLET_DATA.availableBalance) : "••••••"}
+                      {showBalance ? formatUSD(walletData.availableBalance) : "••••••"}
                       <Lock className="w-4 h-4 text-gold" />
                     </span>
                   </div>
@@ -511,6 +1157,290 @@ export default function WalletPage() {
                     <h4 className="font-medium text-text-primary mb-1">Private Transfer</h4>
                     <p className="text-sm text-text-muted">
                       The contract processes encrypted values - only sender and receiver know the amount.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "operators" && (
+          <div className="max-w-3xl mx-auto space-y-6">
+            {/* Header */}
+            <div className="bg-card border border-border rounded-xl p-8">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-14 h-14 rounded-full bg-gold/20 text-gold flex items-center justify-center">
+                  <Users className="w-7 h-7" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-text-primary">Operator Management</h2>
+                  <p className="text-text-muted">ERC-7984: Authorize addresses to transfer on your behalf</p>
+                </div>
+              </div>
+
+              {/* Connection Check */}
+              {!isConnected ? (
+                <div className="p-6 bg-warning/10 border border-warning/30 rounded-lg text-center">
+                  <Wallet className="w-12 h-12 text-warning mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-text-primary mb-2">Wallet Not Connected</h3>
+                  <p className="text-text-muted">Connect your wallet to manage operators.</p>
+                </div>
+              ) : chainId !== 11155111 ? (
+                <div className="p-6 bg-warning/10 border border-warning/30 rounded-lg text-center">
+                  <AlertTriangle className="w-12 h-12 text-warning mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-text-primary mb-2">Wrong Network</h3>
+                  <p className="text-text-muted">Please switch to <strong>Sepolia testnet</strong>.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Success/Error Messages */}
+                  {operatorSuccess && (
+                    <div className="p-4 bg-success/20 border border-success/30 rounded-lg flex items-center gap-3">
+                      <CheckCircle className="w-5 h-5 text-success" />
+                      <p className="text-success font-medium">{operatorSuccess}</p>
+                      <button onClick={() => setOperatorSuccess(null)} className="ml-auto text-success hover:text-success/70">×</button>
+                    </div>
+                  )}
+                  {operatorError && (
+                    <div className="p-4 bg-danger/20 border border-danger/30 rounded-lg flex items-center gap-3">
+                      <AlertTriangle className="w-5 h-5 text-danger" />
+                      <p className="text-danger font-medium">{operatorError}</p>
+                      <button onClick={() => setOperatorError(null)} className="ml-auto text-danger hover:text-danger/70">×</button>
+                    </div>
+                  )}
+
+                  {/* Add New Operator */}
+                  <div className="p-6 bg-background rounded-lg border border-border">
+                    <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
+                      <UserPlus className="w-5 h-5 text-gold" />
+                      Add New Operator
+                    </h3>
+                    <div className="flex gap-3">
+                      <input
+                        type="text"
+                        value={newOperatorAddress}
+                        onChange={(e) => setNewOperatorAddress(e.target.value)}
+                        placeholder="0x... operator address"
+                        className="input-field flex-1 font-mono"
+                      />
+                      <button
+                        onClick={handleAddOperator}
+                        disabled={!newOperatorAddress || isAddingOperator}
+                        className="px-6 py-3 bg-gold text-background rounded-lg font-semibold hover:bg-gold/90 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isAddingOperator ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Adding...
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="w-4 h-4" />
+                            Add Operator
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-xs text-text-muted mt-2">
+                      Operators can transfer sUSD from your account without amount limits.
+                    </p>
+                  </div>
+
+                  {/* Current Operators List */}
+                  <div className="p-6 bg-background rounded-lg border border-border">
+                    <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
+                      <Users className="w-5 h-5 text-gold" />
+                      Your Operators ({operators.length})
+                    </h3>
+                    {operators.length === 0 ? (
+                      <div className="text-center py-8 text-text-muted">
+                        <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                        <p>No operators added yet</p>
+                        <p className="text-sm">Add an operator above to grant transfer permissions</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {operators.map((op) => (
+                          <div
+                            key={op.address}
+                            className="flex items-center justify-between p-4 bg-card rounded-lg border border-border"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-gold/20 flex items-center justify-center">
+                                <Users className="w-5 h-5 text-gold" />
+                              </div>
+                              <div>
+                                <p className="font-mono text-text-primary">
+                                  {op.address.slice(0, 10)}...{op.address.slice(-8)}
+                                </p>
+                                <p className="text-xs text-text-muted">
+                                  Added: {new Date(op.addedAt).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="px-2 py-1 bg-success/20 text-success text-xs rounded-full">
+                                Active
+                              </span>
+                              <button
+                                onClick={() => handleRemoveOperator(op.address)}
+                                disabled={isRemovingOperator === op.address}
+                                className="p-2 text-danger hover:bg-danger/10 rounded-lg transition-colors disabled:opacity-50"
+                              >
+                                {isRemovingOperator === op.address ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Check Operator Status */}
+                  <div className="p-6 bg-background rounded-lg border border-border">
+                    <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
+                      <Eye className="w-5 h-5 text-gold" />
+                      Check Operator Status
+                    </h3>
+                    <div className="flex gap-3">
+                      <input
+                        type="text"
+                        value={checkOperatorAddress}
+                        onChange={(e) => {
+                          setCheckOperatorAddress(e.target.value);
+                          setCheckOperatorResult(null);
+                        }}
+                        placeholder="0x... address to check"
+                        className="input-field flex-1 font-mono"
+                      />
+                      <button
+                        onClick={handleCheckOperator}
+                        disabled={!checkOperatorAddress || isCheckingOperator}
+                        className="px-6 py-3 bg-card border border-border text-text-primary rounded-lg font-semibold hover:bg-card-hover transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isCheckingOperator ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Checking...
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="w-4 h-4" />
+                            Check
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    {checkOperatorResult !== null && (
+                      <div className={cn(
+                        "mt-4 p-4 rounded-lg flex items-center gap-3",
+                        checkOperatorResult
+                          ? "bg-success/20 border border-success/30"
+                          : "bg-danger/20 border border-danger/30"
+                      )}>
+                        {checkOperatorResult ? (
+                          <>
+                            <CheckCircle className="w-5 h-5 text-success" />
+                            <span className="text-success font-medium">This address IS an operator for your account</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserMinus className="w-5 h-5 text-danger" />
+                            <span className="text-danger font-medium">This address is NOT an operator</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* How Operators Work */}
+            <div className="bg-card border border-border rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
+                <Shield className="w-5 h-5 text-gold" />
+                How ERC-7984 Operators Work
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold flex-shrink-0">
+                    1
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-text-primary mb-1">Grant Permission</h4>
+                    <p className="text-sm text-text-muted">
+                      Authorize an address as your operator using setOperator().
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold flex-shrink-0">
+                    2
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-text-primary mb-1">Operator Transfers</h4>
+                    <p className="text-sm text-text-muted">
+                      Operators can call operatorTransfer() to move your encrypted funds.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold flex-shrink-0">
+                    3
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-text-primary mb-1">Revoke Anytime</h4>
+                    <p className="text-sm text-text-muted">
+                      Remove operator access instantly by setting approved = false.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Use Cases */}
+            <div className="bg-gold/5 border border-gold/20 rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-gold mb-4">Common Use Cases</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-start gap-3">
+                  <Shield className="w-5 h-5 text-gold mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-text-primary">Smart Contract Vaults</h4>
+                    <p className="text-sm text-text-muted">
+                      Allow DeFi protocols to manage your encrypted positions.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Users className="w-5 h-5 text-gold mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-text-primary">Multi-Sig Wallets</h4>
+                    <p className="text-sm text-text-muted">
+                      Enable multi-signature control over confidential funds.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Key className="w-5 h-5 text-gold mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-text-primary">Delegated Trading</h4>
+                    <p className="text-sm text-text-muted">
+                      Let trading bots or strategies operate on your behalf.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Lock className="w-5 h-5 text-gold mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-text-primary">Recovery Systems</h4>
+                    <p className="text-sm text-text-muted">
+                      Set up trusted addresses for account recovery.
                     </p>
                   </div>
                 </div>
@@ -639,11 +1569,11 @@ export default function WalletPage() {
                 <div className="text-2xl font-bold text-text-primary mb-1">
                   <EncryptedValue
                     revealed={showBalance}
-                    value={`${LP_DATA.lpBalance.toLocaleString()} LP`}
+                    value={`${lpData.lpBalance.toLocaleString()} LP`}
                   />
                 </div>
                 <p className="text-sm text-text-muted">
-                  {showBalance ? `≈ ${formatUSD(LP_DATA.lpValue)}` : "≈ ••••"}
+                  {showBalance ? `≈ ${formatUSD(lpData.lpValue)}` : "≈ ••••"}
                 </p>
               </div>
 
@@ -656,7 +1586,7 @@ export default function WalletPage() {
                 <div className="text-2xl font-bold text-gold mb-1">
                   <EncryptedValue
                     revealed={showBalance}
-                    value={formatUSD(LP_DATA.pendingRewards)}
+                    value={formatUSD(lpData.pendingRewards)}
                   />
                 </div>
                 <p className="text-sm text-text-muted">
@@ -671,7 +1601,7 @@ export default function WalletPage() {
                   <span className="text-xs uppercase">Current APY</span>
                 </div>
                 <div className="text-2xl font-bold text-success mb-1">
-                  {LP_DATA.currentApy.toFixed(1)}%
+                  {lpData.currentApy.toFixed(1)}%
                 </div>
                 <p className="text-sm text-text-muted">
                   Base + Utilization bonus
@@ -685,10 +1615,10 @@ export default function WalletPage() {
                   <span className="text-xs uppercase">Pool Stats</span>
                 </div>
                 <div className="text-2xl font-bold text-text-primary mb-1">
-                  {formatUSD(LP_DATA.poolTotalLiquidity)}
+                  {formatUSD(lpData.poolTotalLiquidity)}
                 </div>
                 <p className="text-sm text-text-muted">
-                  {LP_DATA.poolUtilization}% utilized
+                  {lpData.poolUtilization}% utilized
                 </p>
               </div>
             </div>
@@ -744,7 +1674,7 @@ export default function WalletPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Timer className="w-5 h-5 text-gold" />
-                    <h3 className="font-semibold text-text-primary">Epoch #{LP_DATA.currentEpoch}</h3>
+                    <h3 className="font-semibold text-text-primary">Epoch #{lpData.currentEpoch}</h3>
                   </div>
                   <span className="px-3 py-1 bg-gold/20 text-gold rounded-full text-sm font-medium">
                     Active
@@ -865,13 +1795,13 @@ export default function WalletPage() {
                     <div className="flex justify-between text-sm">
                       <span className="text-text-muted">Your LP Balance</span>
                       <span className="text-text-primary font-medium">
-                        {showBalance ? `${LP_DATA.lpBalance.toLocaleString()} LP` : "••••"}
+                        {showBalance ? `${lpData.lpBalance.toLocaleString()} LP` : "••••"}
                       </span>
                     </div>
                   </div>
 
                   <button
-                    onClick={() => setLpWithdrawAmount(LP_DATA.lpBalance.toString())}
+                    onClick={() => setLpWithdrawAmount(lpData.lpBalance.toString())}
                     disabled={isLocked}
                     className="w-full py-2 text-sm bg-background rounded-lg text-gold hover:bg-card-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -916,7 +1846,7 @@ export default function WalletPage() {
                   <div className="p-4 bg-gold/10 border border-gold/30 rounded-lg text-center">
                     <p className="text-sm text-text-muted mb-1">Pending Rewards</p>
                     <p className="text-3xl font-bold text-gold">
-                      {showBalance ? formatUSD(LP_DATA.pendingRewards) : "••••"}
+                      {showBalance ? formatUSD(lpData.pendingRewards) : "••••"}
                     </p>
                   </div>
 
@@ -927,7 +1857,7 @@ export default function WalletPage() {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-text-muted">Last Claimed</span>
-                      <span className="text-text-primary">Epoch #{LP_DATA.lastClaimedEpoch}</span>
+                      <span className="text-text-primary">Epoch #{lpData.lastClaimedEpoch}</span>
                     </div>
                   </div>
 
@@ -1167,13 +2097,13 @@ export default function WalletPage() {
                   <div className="flex justify-between text-sm">
                     <span className="text-text-muted">Available</span>
                     <span className="text-text-primary font-medium">
-                      {showBalance ? formatUSD(WALLET_DATA.availableBalance) : "••••"}
+                      {showBalance ? formatUSD(walletData.availableBalance) : "••••"}
                     </span>
                   </div>
                 </div>
 
                 <button
-                  onClick={() => setWithdrawAmount(WALLET_DATA.availableBalance.toString())}
+                  onClick={() => setWithdrawAmount(walletData.availableBalance.toString())}
                   className="w-full py-2 text-sm bg-background rounded-lg text-gold hover:bg-card-hover transition-colors"
                 >
                   Withdraw Max

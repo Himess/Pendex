@@ -1,33 +1,47 @@
 "use client";
 
 // ============================================
-// FHEVM Client SDK Integration
+// FHEVM Relayer SDK Integration
 // ============================================
 // Uses @zama-fhe/relayer-sdk for real FHE operations on Sepolia
+// Documentation: https://docs.zama.org/protocol/relayer-sdk-guides/fhevm-relayer
 
-import { createInstance, FhevmInstance } from "fhevmjs";
+import {
+  createInstance,
+  SepoliaConfig,
+  type FhevmInstance,
+  type FhevmInstanceConfig,
+  type HandleContractPair,
+} from "@zama-fhe/relayer-sdk/web";
 
-// Re-export FhevmInstance type
-export type { FhevmInstance };
+// Re-export types
+export type { FhevmInstance, FhevmInstanceConfig, HandleContractPair };
 
 // Singleton instance
 let fhevmInstance: FhevmInstance | null = null;
 let initializationPromise: Promise<FhevmInstance> | null = null;
 
-// Sepolia FHE configuration (Zama's deployed contracts on Sepolia)
-// These addresses are from Zama's official Sepolia deployment
-const SEPOLIA_CONFIG = {
-  networkUrl: "https://sepolia.infura.io/v3/84842078b09946638c03157f83405213",
-  gatewayUrl: "https://gateway.sepolia.zama.ai",
-  // Zama contract addresses on Sepolia
-  kmsContractAddress: "0x9D6891A6240D6130c54ae243d8005063D05fE14b",
-  aclContractAddress: "0xFee8407e2f5e3Ee68ad77cAE98c434e637f516e5",
+// Manual Sepolia configuration (fallback if SepoliaConfig doesn't work)
+// From: https://docs.zama.org/protocol/relayer-sdk-guides/fhevm-relayer/initialization
+const SEPOLIA_MANUAL_CONFIG = {
+  aclContractAddress: "0xf0Ffdc93b7E186bC2f8CB3dAA75D86d1930A433D" as const,
+  kmsContractAddress: "0xbE0E383937d564D7FF0BC3b46c51f0bF8d5C311A" as const,
+  inputVerifierContractAddress: "0xBBC1fFCdc7C316aAAd72E807D9b0272BE8F84DA0" as const,
+  verifyingContractAddressDecryption: "0x5D8BD78e2ea6bbE41f26dFe9fdaEAa349e077478" as const,
+  verifyingContractAddressInputVerification: "0x483b9dE06E4E4C7D35CCf5837A1668487406D955" as const,
   chainId: 11155111,
+  gatewayChainId: 10901,
+  network: "https://eth-sepolia.public.blastapi.io",
+  relayerUrl: "https://relayer.testnet.zama.org",
 };
 
 /**
- * Initialize the FHEVM instance
+ * Initialize the FHEVM instance using Relayer SDK
  * Must be called before any encryption operations
+ *
+ * Two options:
+ * 1. SepoliaConfig - Uses predefined Sepolia configuration
+ * 2. Manual config - Uses explicit contract addresses
  */
 export async function initFheInstance(): Promise<FhevmInstance> {
   // Return existing instance if available
@@ -43,22 +57,25 @@ export async function initFheInstance(): Promise<FhevmInstance> {
   // Start initialization
   initializationPromise = (async () => {
     try {
-      console.log("Initializing FHEVM instance...");
+      console.log("🔐 Initializing FHEVM Relayer SDK instance...");
 
-      // Create fhevmjs instance
-      const instance = await createInstance({
-        kmsContractAddress: SEPOLIA_CONFIG.kmsContractAddress,
-        aclContractAddress: SEPOLIA_CONFIG.aclContractAddress,
-        networkUrl: SEPOLIA_CONFIG.networkUrl,
-        gatewayUrl: SEPOLIA_CONFIG.gatewayUrl,
-        chainId: SEPOLIA_CONFIG.chainId,
-      });
+      // Try using SepoliaConfig first (simpler approach)
+      let instance: FhevmInstance;
+      try {
+        instance = await createInstance(SepoliaConfig);
+        console.log("✅ FHEVM instance initialized with SepoliaConfig");
+      } catch (sepoliaError) {
+        console.warn("⚠️ SepoliaConfig failed, trying manual config:", sepoliaError);
+        // Fallback to manual configuration
+        instance = await createInstance(SEPOLIA_MANUAL_CONFIG);
+        console.log("✅ FHEVM instance initialized with manual config");
+      }
 
       fhevmInstance = instance;
-      console.log("FHEVM instance initialized successfully");
+      console.log("🔐 FHEVM Relayer SDK ready for encryption operations");
       return instance;
     } catch (error) {
-      console.error("Failed to initialize FHEVM instance:", error);
+      console.error("❌ Failed to initialize FHEVM instance:", error);
       initializationPromise = null;
       throw error;
     }
@@ -194,28 +211,36 @@ export async function encryptMultipleUint64(
 /**
  * Request user decryption of encrypted values
  * Uses EIP-712 signature for authorization
+ *
+ * NEW SDK API (v0.3+):
+ * - generateKeypair() → { publicKey, privateKey }
+ * - createEIP712(publicKey, contractAddresses, startTimeStamp, durationDays)
+ * - userDecrypt(handleContractPairs, privateKey, publicKey, signature, contractAddresses, signerAddress, startTimeStamp, durationDays)
  */
 export async function requestUserDecryption(
   handles: { handle: `0x${string}`; contractAddress: string }[],
   userAddress: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   signer: any
-): Promise<Record<string, bigint | boolean>> {
+): Promise<Record<string, bigint | boolean | `0x${string}`>> {
   const instance = getFheInstance();
 
   // Generate keypair for decryption
-  const { publicKey, privateKey } = instance.generateKeypair();
+  const keypair = instance.generateKeypair();
 
   // Get contract addresses from handles
   const contractAddresses = Array.from(new Set(handles.map((h) => h.contractAddress)));
 
-  // Create EIP-712 message for reencryption authorization
-  // Note: createEIP712 takes (publicKey, contractAddress, delegatedAccount?)
-  const firstContractAddress = contractAddresses[0];
+  // Time parameters for EIP-712 signature
+  const startTimeStamp = Math.floor(Date.now() / 1000).toString();
+  const durationDays = "1"; // 1 day validity
+
+  // Create EIP-712 message for reencryption authorization (NEW API)
   const eip712 = instance.createEIP712(
-    publicKey,
-    firstContractAddress,
-    userAddress // delegatedAccount (user address for self-decryption)
+    keypair.publicKey,
+    contractAddresses,
+    startTimeStamp,
+    durationDays
   );
 
   // Sign the EIP-712 message
@@ -225,32 +250,46 @@ export async function requestUserDecryption(
     eip712.message
   );
 
-  // Request decryption for each handle
-  const results: Record<string, bigint | boolean> = {};
+  // Prepare handle-contract pairs for userDecrypt
+  // HandleContractPair expects handle as string or Uint8Array
+  const handleContractPairs: HandleContractPair[] = handles.map(({ handle, contractAddress }) => ({
+    handle: handle, // hex string is accepted
+    contractAddress,
+  }));
 
-  for (const { handle, contractAddress } of handles) {
-    try {
-      // Convert hex handle to bigint for reencrypt
-      const handleBigInt = BigInt(handle);
-      const decrypted = await instance.reencrypt(
-        handleBigInt,
-        privateKey,
-        publicKey,
-        signature,
-        contractAddress,
-        userAddress
-      );
-      results[handle] = decrypted;
-    } catch (error) {
-      console.error(`Failed to decrypt handle ${handle}:`, error);
+  try {
+    // Use new userDecrypt API
+    const results = await instance.userDecrypt(
+      handleContractPairs,
+      keypair.privateKey,
+      keypair.publicKey,
+      signature.replace("0x", ""),
+      contractAddresses,
+      userAddress,
+      startTimeStamp,
+      durationDays
+    );
+
+    // Convert results to expected format
+    // Results keys are `0x${string}` format
+    const formattedResults: Record<string, bigint | boolean | `0x${string}`> = {};
+    for (const { handle } of handles) {
+      // Try both original handle and lowercase version
+      const result = results[handle as `0x${string}`] ?? results[handle.toLowerCase() as `0x${string}`];
+      if (result !== undefined) {
+        formattedResults[handle] = result;
+      }
     }
+    return formattedResults;
+  } catch (error) {
+    console.error("❌ userDecrypt failed:", error);
+    throw error;
   }
-
-  return results;
 }
 
 /**
  * Decrypt a single encrypted value
+ * Uses new Relayer SDK userDecrypt API
  */
 export async function decryptValue(
   handle: `0x${string}`,
@@ -259,35 +298,18 @@ export async function decryptValue(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   signer: any
 ): Promise<bigint> {
-  const instance = getFheInstance();
-
-  const { publicKey, privateKey } = instance.generateKeypair();
-
-  // createEIP712 takes (publicKey, contractAddress, delegatedAccount?)
-  const eip712 = instance.createEIP712(
-    publicKey,
-    contractAddress,
-    userAddress // delegatedAccount
+  const results = await requestUserDecryption(
+    [{ handle, contractAddress }],
+    userAddress,
+    signer
   );
 
-  const signature = await signer.signTypedData(
-    eip712.domain,
-    eip712.types,
-    eip712.message
-  );
+  const result = results[handle];
+  if (result === undefined) {
+    throw new Error(`Failed to decrypt handle: ${handle}`);
+  }
 
-  // Convert hex handle to bigint for reencrypt
-  const handleBigInt = BigInt(handle);
-  const decrypted = await instance.reencrypt(
-    handleBigInt,
-    privateKey,
-    publicKey,
-    signature,
-    contractAddress,
-    userAddress
-  );
-
-  return BigInt(decrypted.toString());
+  return BigInt(result.toString());
 }
 
 /**

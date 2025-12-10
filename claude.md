@@ -53,15 +53,18 @@ ShadowUSD:               0x9093B02c4Ea2402EC72C2ca9dAAb994F7578fAFb
 
 ## TODO List (Guncel)
 
-### Hackathon icin KRITIK
-- [ ] Chart SSR sorununu duzelt
-- [ ] Order Book'u live fiyatlarla guncelle
-- [ ] Sepolia'da gercek FHE deploy (Zama ayri chain DEGIL!)
-- [ ] Frontend'den gercek trade acma/kapama
-- [ ] %100 zararda otomatik likidasyon
-- [ ] Gelir havuzu: %50 staker/LP, %50 protocol
-- [ ] Unit testler yaz
-- [ ] Profesyonel README hazirla
+### AKTIF CALISMA - Bu Gece Yapilacaklar
+1. [ ] UI BUG: Trade sayfasi asset selector - diger projeleri secemiyor
+2. [ ] UI BUG: Ust menude fiyat farkliliklari oluyor
+3. [ ] Sifreli Order Book sistemi tasarla ve implement et
+4. [ ] Admin Dashboard gelistirmeleri:
+   - [ ] Fee rate degistirme
+   - [ ] Yeni asset ekleme formu
+   - [ ] Bot baslat/durdur butonu
+   - [ ] Protocol revenue gosterimi
+5. [ ] Operator UX ekle (ERC-7984 setOperator, izin yonetimi)
+6. [ ] User Decryption ekrani (kullanici kendi balance'ini gorsun)
+7. [ ] Profesyonel README hazirla
 
 ### TAMAMLANAN Isler
 - [x] Smart Contracts tasarimi (ShadowVault, ShadowUSD, ShadowOracle, ShadowMarketMakerSimple)
@@ -81,16 +84,17 @@ ShadowUSD:               0x9093B02c4Ea2402EC72C2ca9dAAb994F7578fAFb
 - [x] Chart SSR sorunu icin mounted state eklendi
 - [x] Sepolia testnet deploy config
 - [x] Trading Bot (simule trade)
+- [x] Admin Dashboard (temel)
+- [x] Take Profit / Stop Loss UI
 
-### Nice to Have (Zaman kalirsa)
+### Nice to Have (Sonra)
 - [ ] Transaction history sayfasi
-- [ ] Mobile responsive UI
 - [ ] Keyboard shortcuts
 - [ ] Advanced Chart (TradingView tarzi indicators)
-- [ ] Trade Card / Share Card (kapatilan pozisyonlar icin)
-- [ ] Limit Order sistemi
-- [ ] Stop Loss / Take Profit
+- [ ] Trade Card / Share Card
 - [ ] Partial Close
+- [ ] Relayer SDK entegrasyonu
+- [ ] RPC/contract config'i .env'ye tasi
 
 ---
 

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { Lock, BarChart3, LineChart, Wallet, Menu, X, HelpCircle, Building2, Settings } from "lucide-react";
+import { Lock, BarChart3, LineChart, Wallet, Menu, X, HelpCircle, Building2, Settings, History, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NetworkSelectorCompact } from "./NetworkSelector";
 
@@ -13,7 +13,9 @@ const NAV_ITEMS = [
   { href: "/companies", label: "Companies", icon: <Building2 className="w-4 h-4" /> },
   { href: "/trade", label: "Trade", icon: <LineChart className="w-4 h-4" /> },
   { href: "/wallet", label: "Wallet", icon: <Wallet className="w-4 h-4" /> },
+  { href: "/history", label: "History", icon: <History className="w-4 h-4" /> },
   { href: "/docs", label: "Docs", icon: <HelpCircle className="w-4 h-4" /> },
+  { href: "/fhe-test", label: "FHE Test", icon: <Shield className="w-4 h-4" /> },
   { href: "/admin", label: "Admin", icon: <Settings className="w-4 h-4" /> },
 ];
 

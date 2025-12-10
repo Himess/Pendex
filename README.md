@@ -357,6 +357,120 @@ npx hardhat run scripts/runBotSimple.ts --network sepolia
 
 ---
 
+## Anti-Manipulation Protection
+
+### The Problem with Traditional Platforms
+
+On platforms like Binance, Bybit, and other CEX/DEX:
+
+```
+TRADITIONAL ORDER BOOK (Everyone sees everything):
+┌─────────────────────────────────────────────────┐
+│  $158.50  [████████]        $2.5M LONG          │ ← Whales see this
+│  $157.00  [██████████████]  $8M LONG            │ ← "Let's pump to liquidate $8M!"
+│  $155.00  [████]            $1.2M SHORT         │ ← Easy target
+└─────────────────────────────────────────────────┘
+Result: Coordinated pump/dump attacks, liquidation cascades
+```
+
+**How manipulation works:**
+1. Whales see where large positions are (liquidation levels)
+2. They coordinate to move price to trigger liquidations
+3. Retail traders lose, whales profit from the cascade
+4. This is why "stop loss hunting" and "liquidation wicks" are so common
+
+### Shadow Protocol's Solution
+
+```
+SHADOW PROTOCOL ORDER BOOK (Privacy-preserving):
+┌─────────────────────────────────────────────────┐
+│  $158.50  [████████]        ????????            │ ← Amount encrypted
+│  $157.00  [██████████████]  ????????            │ ← Who placed it? Unknown
+│  $155.00  [████]            ????????            │ ← Can't target anyone
+└─────────────────────────────────────────────────┘
+Result: Manipulation is economically infeasible
+```
+
+**What's visible:**
+- Price levels (required for market function)
+- Relative liquidity bars (shows "there's liquidity here")
+
+**What's encrypted (FHE):**
+- Exact order amounts
+- Order owner addresses
+- Position sizes and directions
+- Leverage used
+- Liquidation prices
+
+**Even the platform operators can't see this data** - that's the power of FHE!
+
+### Why This Matters
+
+| Attack Vector | Traditional | Shadow Protocol |
+|---------------|-------------|-----------------|
+| Liquidation hunting | ✅ Easy - all positions visible | ❌ Impossible - positions encrypted |
+| Stop loss raids | ✅ Common - stops are public | ❌ Can't see stop levels |
+| Whale tracking | ✅ Anyone can track | ❌ Addresses encrypted |
+| Front-running | ✅ MEV bots profit | ❌ Order details hidden |
+| Copy trading | ✅ Can copy any address | ❌ Can't identify traders |
+
+**Note:** Shadow Protocol uses Fully Homomorphic Encryption (FHE), not Zero Knowledge proofs. FHE allows computation on encrypted data without ever decrypting it.
+
+---
+
+## New Features (Latest)
+
+### ERC-7984 Operator Pattern
+
+Grant trusted addresses permission to transfer your encrypted funds:
+
+```solidity
+// Grant operator access
+shadowUSD.setOperator(vaultAddress, true);
+
+// Operator can transfer on user's behalf
+shadowUSD.operatorTransfer(from, to, encryptedAmount, proof);
+```
+
+**Use Cases:**
+- Smart contract vaults
+- Multi-sig wallets
+- Delegated trading bots
+- Account recovery systems
+
+### User Decryption (EIP-712)
+
+Only you can decrypt your own balance:
+
+```typescript
+// 1. Generate keypair
+const keypair = fhevm.generateKeypair();
+
+// 2. Create & sign EIP-712 authorization
+const eip712 = fhevm.createEIP712(keypair.publicKey, [contractAddress], timestamp, days);
+const signature = await signer.signTypedData(eip712.domain, eip712.types, eip712.message);
+
+// 3. Decrypt - only user can see the value
+const balance = await fhevm.userDecrypt(handles, keypair.privateKey, keypair.publicKey, signature, ...);
+```
+
+### Admin Dashboard
+
+- Protocol fee management (bps)
+- Revenue statistics (total fees, LP distribution, treasury)
+- Asset listing with categories (AI, Aerospace, FinTech, Data, Social)
+- Trading bot control (start/stop, activity monitoring)
+
+### Encrypted Order Book
+
+Privacy-preserving order book where:
+- Price levels are visible (for market depth)
+- Order amounts are shown as bars (relative size)
+- Individual order sizes remain encrypted
+- Order ownership is completely hidden
+
+---
+
 ## Roadmap
 
 - [x] Core FHE contracts
@@ -364,6 +478,11 @@ npx hardhat run scripts/runBotSimple.ts --network sepolia
 - [x] Trading frontend
 - [x] Market maker bot
 - [x] fhevmjs SDK integration
+- [x] ERC-7984 Operator pattern
+- [x] User Decryption (EIP-712)
+- [x] Admin Dashboard
+- [x] Encrypted Order Book
+- [x] @zama-fhe/relayer-sdk integration
 - [ ] Automatic liquidation at -100%
 - [ ] Revenue sharing (50% LP, 50% protocol)
 - [ ] Mobile responsive UI

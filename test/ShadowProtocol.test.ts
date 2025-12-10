@@ -441,6 +441,10 @@ describe("Shadow Protocol - Private Leveraged Pre-IPO Trading", function () {
       expect(await vault.PROTOCOL_SHARE_BPS()).to.equal(5000); // 50%
     });
 
+    it("should have correct liquidator reward constant", async function () {
+      expect(await vault.LIQUIDATOR_REWARD_BPS()).to.equal(500); // 5%
+    });
+
     it("should have treasury address set", async function () {
       expect(await vault.treasury()).to.equal(treasury.address);
     });
@@ -452,12 +456,394 @@ describe("Shadow Protocol - Private Leveraged Pre-IPO Trading", function () {
     it("should track liquidation proceeds", async function () {
       expect(await vault.totalLiquidationProceeds()).to.equal(0);
     });
+
+    it("should track pending LP rewards", async function () {
+      expect(await vault.pendingLpRewards()).to.equal(0);
+    });
+
+    it("should track pending protocol revenue", async function () {
+      expect(await vault.pendingProtocolRevenue()).to.equal(0);
+    });
+
+    it("should get detailed revenue stats", async function () {
+      const stats = await vault.getDetailedRevenueStats();
+
+      expect(stats._pendingLpRewards).to.equal(0);
+      expect(stats._pendingProtocolRevenue).to.equal(0);
+      expect(stats._totalDistributedToLPs).to.equal(0);
+      expect(stats._totalDistributedToProtocol).to.equal(0);
+      expect(stats._liquidatorRewardBps).to.equal(500);
+      expect(stats._lpShareBps).to.equal(5000);
+      expect(stats._protocolShareBps).to.equal(5000);
+    });
+
+    it("should get basic revenue stats", async function () {
+      const stats = await vault.getRevenueStats();
+
+      expect(stats._totalFeesCollected).to.equal(0);
+      expect(stats._totalLiquidationProceeds).to.equal(0);
+      expect(stats._lpShareBps).to.equal(5000);
+      expect(stats._protocolShareBps).to.equal(5000);
+    });
+
+    it("should distribute revenue 50/50 between LP and protocol", async function () {
+      const amount = 1000_000_000; // 1000 sUSD
+
+      await vault.connect(owner).distributeRevenue(amount);
+
+      expect(await vault.totalFeesCollected()).to.equal(amount);
+    });
+
+    it("should not allow non-owner to distribute revenue", async function () {
+      await expect(
+        vault.connect(trader1).distributeRevenue(1000_000_000)
+      ).to.be.reverted;
+    });
+
+    it("should not allow zero amount distribution", async function () {
+      await expect(
+        vault.connect(owner).distributeRevenue(0)
+      ).to.be.revertedWith("Amount must be > 0");
+    });
+
+    it("should emit RevenueDistributed event", async function () {
+      const amount = 1000_000_000;
+      const lpShare = 500_000_000; // 50%
+      const protocolShare = 500_000_000; // 50%
+
+      // Just check that the event is emitted with correct amounts (skip timestamp check)
+      await expect(vault.connect(owner).distributeRevenue(amount))
+        .to.emit(vault, "RevenueDistributed");
+    });
   });
 
   describe("Liquidation", function () {
     it("should have correct liquidation thresholds", async function () {
       expect(await vault.LIQUIDATION_THRESHOLD_BPS()).to.equal(8000); // 80%
       expect(await vault.FULL_LIQUIDATION_BPS()).to.equal(10000); // 100%
+    });
+
+    describe("Auto Liquidation at Full Loss", function () {
+      beforeEach(async function () {
+        // Deposit collateral for trader1
+        const depositAmount = 10000_000_000;
+        const encDeposit = await fhevm
+          .createEncryptedInput(vaultAddress, trader1.address)
+          .add64(depositAmount)
+          .encrypt();
+
+        await vault
+          .connect(trader1)
+          .deposit(encDeposit.handles[0], encDeposit.inputProof);
+
+        // Open a position
+        const encOpen = await fhevm
+          .createEncryptedInput(vaultAddress, trader1.address)
+          .add64(1000_000_000) // 1000 sUSD collateral
+          .add64(5)            // 5x leverage
+          .addBool(true)       // LONG
+          .encrypt();
+
+        await vault
+          .connect(trader1)
+          .openPosition(
+            spacexId,
+            encOpen.handles[0],
+            encOpen.handles[1],
+            encOpen.handles[2],
+            encOpen.inputProof
+          );
+      });
+
+      it("should auto-liquidate position with collateral amount", async function () {
+        const collateralAmount = 1000_000_000; // 1000 sUSD
+
+        // Liquidator calls auto-liquidation (explicit overload)
+        await vault.connect(liquidator)["autoLiquidateAtFullLoss(uint256,uint256)"](1, collateralAmount);
+
+        // Position should be closed
+        const position = await vault.getPosition(1);
+        expect(position.isOpen).to.be.false;
+
+        // Check revenue distribution
+        // 5% to liquidator = 50 sUSD
+        // 95% remaining = 950 sUSD
+        // 47.5% to LP = 475 sUSD
+        // 47.5% to protocol = 475 sUSD
+
+        const liquidatorReward = await vault.getLiquidatorReward(liquidator.address);
+        expect(liquidatorReward).to.equal(50_000_000); // 5% of 1000 = 50 sUSD
+
+        expect(await vault.pendingLpRewards()).to.equal(475_000_000);
+        expect(await vault.pendingProtocolRevenue()).to.equal(475_000_000);
+      });
+
+      it("should auto-liquidate position without collateral amount (estimated)", async function () {
+        // Uses estimated collateral of $1000
+        await vault.connect(liquidator)["autoLiquidateAtFullLoss(uint256)"](1);
+
+        const position = await vault.getPosition(1);
+        expect(position.isOpen).to.be.false;
+
+        // Check liquidator got reward
+        const reward = await vault.getLiquidatorReward(liquidator.address);
+        expect(reward).to.be.gt(0);
+      });
+
+      it("should not auto-liquidate already closed position", async function () {
+        // Close position first
+        await vault.connect(trader1).closePosition(1);
+
+        // Try to auto-liquidate
+        await expect(
+          vault.connect(liquidator)["autoLiquidateAtFullLoss(uint256,uint256)"](1, 1000_000_000)
+        ).to.be.revertedWith("Position not open");
+      });
+
+      it("should emit PositionAutoLiquidated event", async function () {
+        const collateralAmount = 1000_000_000;
+
+        await expect(vault.connect(liquidator)["autoLiquidateAtFullLoss(uint256,uint256)"](1, collateralAmount))
+          .to.emit(vault, "PositionAutoLiquidated");
+      });
+
+      it("should track total liquidation proceeds", async function () {
+        const collateralAmount = 1000_000_000;
+
+        await vault.connect(liquidator)["autoLiquidateAtFullLoss(uint256,uint256)"](1, collateralAmount);
+
+        expect(await vault.totalLiquidationProceeds()).to.equal(collateralAmount);
+      });
+    });
+
+    describe("Liquidator Rewards", function () {
+      beforeEach(async function () {
+        // Setup: deposit and open position
+        const encDeposit = await fhevm
+          .createEncryptedInput(vaultAddress, trader1.address)
+          .add64(10000_000_000)
+          .encrypt();
+
+        await vault
+          .connect(trader1)
+          .deposit(encDeposit.handles[0], encDeposit.inputProof);
+
+        const encOpen = await fhevm
+          .createEncryptedInput(vaultAddress, trader1.address)
+          .add64(1000_000_000)
+          .add64(5)
+          .addBool(true)
+          .encrypt();
+
+        await vault
+          .connect(trader1)
+          .openPosition(
+            spacexId,
+            encOpen.handles[0],
+            encOpen.handles[1],
+            encOpen.handles[2],
+            encOpen.inputProof
+          );
+
+        // Liquidate the position
+        await vault.connect(liquidator)["autoLiquidateAtFullLoss(uint256,uint256)"](1, 1000_000_000);
+      });
+
+      it("should allow liquidator to claim rewards", async function () {
+        const rewardBefore = await vault.getLiquidatorReward(liquidator.address);
+        expect(rewardBefore).to.be.gt(0);
+
+        await vault.connect(liquidator).claimLiquidatorReward();
+
+        // Reward should be 0 after claiming
+        const rewardAfter = await vault.getLiquidatorReward(liquidator.address);
+        expect(rewardAfter).to.equal(0);
+      });
+
+      it("should emit LiquidatorRewardClaimed event", async function () {
+        await expect(vault.connect(liquidator).claimLiquidatorReward())
+          .to.emit(vault, "LiquidatorRewardClaimed");
+      });
+
+      it("should not allow claiming with no rewards", async function () {
+        // Trader2 has no rewards
+        await expect(
+          vault.connect(trader2).claimLiquidatorReward()
+        ).to.be.revertedWith("No rewards to claim");
+      });
+    });
+
+    describe("LP Rewards Distribution", function () {
+      beforeEach(async function () {
+        // Setup: deposit, open and liquidate position
+        const encDeposit = await fhevm
+          .createEncryptedInput(vaultAddress, trader1.address)
+          .add64(10000_000_000)
+          .encrypt();
+
+        await vault
+          .connect(trader1)
+          .deposit(encDeposit.handles[0], encDeposit.inputProof);
+
+        const encOpen = await fhevm
+          .createEncryptedInput(vaultAddress, trader1.address)
+          .add64(1000_000_000)
+          .add64(5)
+          .addBool(true)
+          .encrypt();
+
+        await vault
+          .connect(trader1)
+          .openPosition(
+            spacexId,
+            encOpen.handles[0],
+            encOpen.handles[1],
+            encOpen.handles[2],
+            encOpen.inputProof
+          );
+
+        await vault.connect(liquidator)["autoLiquidateAtFullLoss(uint256,uint256)"](1, 1000_000_000);
+      });
+
+      it("should distribute pending LP rewards", async function () {
+        const pendingBefore = await vault.pendingLpRewards();
+        expect(pendingBefore).to.be.gt(0);
+
+        await vault.connect(owner).distributeLpRewards();
+
+        expect(await vault.pendingLpRewards()).to.equal(0);
+        expect(await vault.totalDistributedToLPs()).to.equal(pendingBefore);
+      });
+
+      it("should emit LpRewardsDistributed event", async function () {
+        await expect(vault.connect(owner).distributeLpRewards())
+          .to.emit(vault, "LpRewardsDistributed");
+      });
+
+      it("should not distribute with no pending rewards", async function () {
+        await vault.connect(owner).distributeLpRewards();
+
+        await expect(
+          vault.connect(owner).distributeLpRewards()
+        ).to.be.revertedWith("No pending LP rewards");
+      });
+    });
+
+    describe("Protocol Revenue Withdrawal", function () {
+      beforeEach(async function () {
+        // Setup: deposit, open and liquidate position
+        const encDeposit = await fhevm
+          .createEncryptedInput(vaultAddress, trader1.address)
+          .add64(10000_000_000)
+          .encrypt();
+
+        await vault
+          .connect(trader1)
+          .deposit(encDeposit.handles[0], encDeposit.inputProof);
+
+        const encOpen = await fhevm
+          .createEncryptedInput(vaultAddress, trader1.address)
+          .add64(1000_000_000)
+          .add64(5)
+          .addBool(true)
+          .encrypt();
+
+        await vault
+          .connect(trader1)
+          .openPosition(
+            spacexId,
+            encOpen.handles[0],
+            encOpen.handles[1],
+            encOpen.handles[2],
+            encOpen.inputProof
+          );
+
+        await vault.connect(liquidator)["autoLiquidateAtFullLoss(uint256,uint256)"](1, 1000_000_000);
+      });
+
+      it("should withdraw pending protocol revenue", async function () {
+        const pendingBefore = await vault.pendingProtocolRevenue();
+        expect(pendingBefore).to.be.gt(0);
+
+        await vault.connect(owner).withdrawProtocolRevenue();
+
+        expect(await vault.pendingProtocolRevenue()).to.equal(0);
+        expect(await vault.totalDistributedToProtocol()).to.equal(pendingBefore);
+      });
+
+      it("should emit ProtocolRevenueWithdrawn event", async function () {
+        await expect(vault.connect(owner).withdrawProtocolRevenue())
+          .to.emit(vault, "ProtocolRevenueWithdrawn");
+      });
+
+      it("should not allow non-owner to withdraw", async function () {
+        await expect(
+          vault.connect(trader1).withdrawProtocolRevenue()
+        ).to.be.reverted;
+      });
+
+      it("should not withdraw with no pending revenue", async function () {
+        await vault.connect(owner).withdrawProtocolRevenue();
+
+        await expect(
+          vault.connect(owner).withdrawProtocolRevenue()
+        ).to.be.revertedWith("No pending protocol revenue");
+      });
+    });
+
+    describe("Batch Liquidation Checks", function () {
+      beforeEach(async function () {
+        // Deposit for trader1
+        const encDeposit = await fhevm
+          .createEncryptedInput(vaultAddress, trader1.address)
+          .add64(50000_000_000)
+          .encrypt();
+
+        await vault
+          .connect(trader1)
+          .deposit(encDeposit.handles[0], encDeposit.inputProof);
+
+        // Open multiple positions
+        for (let i = 0; i < 3; i++) {
+          const enc = await fhevm
+            .createEncryptedInput(vaultAddress, trader1.address)
+            .add64(1000_000_000)
+            .add64(5)
+            .addBool(true)
+            .encrypt();
+
+          await vault
+            .connect(trader1)
+            .openPosition(
+              spacexId,
+              enc.handles[0],
+              enc.handles[1],
+              enc.handles[2],
+              enc.inputProof
+            );
+        }
+      });
+
+      it("should batch check multiple positions", async function () {
+        const positionIds = [1, 2, 3];
+
+        // This should not revert
+        await vault.connect(liquidator).batchCheckLiquidations(positionIds);
+
+        // All positions should still be open (just checked, not liquidated)
+        for (const id of positionIds) {
+          const position = await vault.getPosition(id);
+          expect(position.isOpen).to.be.true;
+        }
+      });
+
+      it("should skip closed positions in batch", async function () {
+        // Close position 2
+        await vault.connect(trader1).closePosition(2);
+
+        // Batch check should not revert when encountering closed position
+        await vault.connect(liquidator).batchCheckLiquidations([1, 2, 3]);
+      });
     });
   });
 

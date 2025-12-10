@@ -86,6 +86,24 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
     /// @notice Protocol share of revenue (5000 = 50%)
     uint256 public constant PROTOCOL_SHARE_BPS = 5000;
 
+    /// @notice Liquidator reward (500 = 5%)
+    uint256 public constant LIQUIDATOR_REWARD_BPS = 500;
+
+    /// @notice Pending LP rewards (accumulated from liquidations)
+    uint256 public pendingLpRewards;
+
+    /// @notice Pending protocol revenue
+    uint256 public pendingProtocolRevenue;
+
+    /// @notice Total distributed to LPs
+    uint256 public totalDistributedToLPs;
+
+    /// @notice Total distributed to protocol
+    uint256 public totalDistributedToProtocol;
+
+    /// @notice Mapping of liquidator rewards
+    mapping(address => uint256) public liquidatorRewards;
+
     // ============================================
     // ENCRYPTED ERROR HANDLING (Advanced FHE!)
     // ============================================
@@ -129,8 +147,11 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
     event LimitOrderExecuted(uint256 indexed orderId, uint256 positionId, uint256 timestamp);
     event LimitOrderCancelled(uint256 indexed orderId, uint256 timestamp);
     event RandomPositionIdGenerated(uint256 indexed positionId, uint256 timestamp);
-    event PositionAutoLiquidated(uint256 indexed positionId, address indexed owner, uint256 timestamp);
+    event PositionAutoLiquidated(uint256 indexed positionId, address indexed owner, address indexed liquidator, uint256 collateralAmount, uint256 timestamp);
     event RevenueDistributed(uint256 totalAmount, uint256 lpShare, uint256 protocolShare, uint256 timestamp);
+    event LiquidatorRewardClaimed(address indexed liquidator, uint256 amount, uint256 timestamp);
+    event LpRewardsDistributed(uint256 amount, uint256 timestamp);
+    event ProtocolRevenueWithdrawn(address indexed to, uint256 amount, uint256 timestamp);
 
     constructor(
         address _owner,
@@ -580,10 +601,14 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
     /**
      * @notice Auto-liquidate position at 100% loss
      * @dev Anyone can call this - if loss >= collateral, position is closed with zero return
-     *      Collateral is distributed: 50% to LP pool, 50% to protocol treasury
+     *      Collateral is distributed:
+     *      - 5% to liquidator as reward
+     *      - 47.5% to LP pool
+     *      - 47.5% to protocol treasury
      * @param positionId Position to check and liquidate if fully lost
+     * @param collateralAmount The decrypted collateral amount (must be verified off-chain)
      */
-    function autoLiquidateAtFullLoss(uint256 positionId) external nonReentrant {
+    function autoLiquidateAtFullLoss(uint256 positionId, uint256 collateralAmount) external nonReentrant {
         Position storage position = _positions[positionId];
         require(position.isOpen, "Position not open");
 
@@ -597,13 +622,69 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         // No funds returned to user
         position.isOpen = false;
 
-        // Track liquidation proceeds (for accounting purposes)
-        // Note: Actual collateral amount is encrypted, so we track the event
-        // In production, this would decrypt collateral and distribute
-        totalLiquidationProceeds++;
+        // Calculate revenue distribution
+        // 5% to liquidator
+        uint256 liquidatorReward = (collateralAmount * LIQUIDATOR_REWARD_BPS) / 10000;
+
+        // Remaining 95% split 50/50 between LP and protocol
+        uint256 remaining = collateralAmount - liquidatorReward;
+        uint256 lpShare = (remaining * LP_SHARE_BPS) / 10000;
+        uint256 protocolShare = remaining - lpShare;
+
+        // Credit liquidator reward
+        liquidatorRewards[msg.sender] += liquidatorReward;
+
+        // Add to pending rewards
+        pendingLpRewards += lpShare;
+        pendingProtocolRevenue += protocolShare;
+
+        // Track totals
+        totalLiquidationProceeds += collateralAmount;
+        totalFeesCollected += collateralAmount;
 
         // Emit events
-        emit PositionAutoLiquidated(positionId, position.owner, block.timestamp);
+        emit PositionAutoLiquidated(positionId, position.owner, msg.sender, collateralAmount, block.timestamp);
+        emit RevenueDistributed(collateralAmount, lpShare, protocolShare, block.timestamp);
+    }
+
+    /**
+     * @notice Auto-liquidate position (simplified version without amount)
+     * @dev For backwards compatibility - uses estimated amount
+     */
+    function autoLiquidateAtFullLoss(uint256 positionId) external nonReentrant {
+        Position storage position = _positions[positionId];
+        require(position.isOpen, "Position not open");
+
+        // Check if full loss
+        ebool isFullLoss = checkFullLiquidation(positionId);
+
+        // Make publicly decryptable for verification
+        FHE.makePubliclyDecryptable(isFullLoss);
+
+        // Mark position as closed
+        position.isOpen = false;
+
+        // Use estimated collateral (for demo purposes)
+        uint256 estimatedCollateral = 1000 * 1e6; // $1000
+
+        // Calculate revenue distribution
+        uint256 liquidatorReward = (estimatedCollateral * LIQUIDATOR_REWARD_BPS) / 10000;
+        uint256 remaining = estimatedCollateral - liquidatorReward;
+        uint256 lpShare = (remaining * LP_SHARE_BPS) / 10000;
+        uint256 protocolShare = remaining - lpShare;
+
+        // Credit liquidator reward
+        liquidatorRewards[msg.sender] += liquidatorReward;
+
+        // Add to pending rewards
+        pendingLpRewards += lpShare;
+        pendingProtocolRevenue += protocolShare;
+
+        // Track totals
+        totalLiquidationProceeds += estimatedCollateral;
+
+        // Emit events
+        emit PositionAutoLiquidated(positionId, position.owner, msg.sender, estimatedCollateral, block.timestamp);
     }
 
     /**
@@ -646,6 +727,94 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
             LP_SHARE_BPS,
             PROTOCOL_SHARE_BPS
         );
+    }
+
+    /**
+     * @notice Get detailed revenue stats including pending amounts
+     */
+    function getDetailedRevenueStats() external view returns (
+        uint256 _pendingLpRewards,
+        uint256 _pendingProtocolRevenue,
+        uint256 _totalDistributedToLPs,
+        uint256 _totalDistributedToProtocol,
+        uint256 _totalLiquidationProceeds,
+        uint256 _liquidatorRewardBps,
+        uint256 _lpShareBps,
+        uint256 _protocolShareBps
+    ) {
+        return (
+            pendingLpRewards,
+            pendingProtocolRevenue,
+            totalDistributedToLPs,
+            totalDistributedToProtocol,
+            totalLiquidationProceeds,
+            LIQUIDATOR_REWARD_BPS,
+            LP_SHARE_BPS,
+            PROTOCOL_SHARE_BPS
+        );
+    }
+
+    /**
+     * @notice Claim accumulated liquidator rewards
+     * @dev Called by liquidators to withdraw their earned rewards
+     */
+    function claimLiquidatorReward() external nonReentrant {
+        uint256 reward = liquidatorRewards[msg.sender];
+        require(reward > 0, "No rewards to claim");
+
+        // Reset reward before transfer (reentrancy protection)
+        liquidatorRewards[msg.sender] = 0;
+
+        // Transfer sUSD to liquidator
+        // Note: In production, this would be actual token transfer
+        // For demo, we track it internally
+
+        emit LiquidatorRewardClaimed(msg.sender, reward, block.timestamp);
+    }
+
+    /**
+     * @notice Distribute accumulated LP rewards to liquidity pool
+     * @dev Called periodically to send rewards to LP stakers
+     */
+    function distributeLpRewards() external nonReentrant {
+        uint256 amount = pendingLpRewards;
+        require(amount > 0, "No pending LP rewards");
+
+        // Reset pending before distribution
+        pendingLpRewards = 0;
+        totalDistributedToLPs += amount;
+
+        // Send to liquidity pool
+        // Note: In production, would call liquidityPool.receiveRewards(amount)
+
+        emit LpRewardsDistributed(amount, block.timestamp);
+    }
+
+    /**
+     * @notice Withdraw accumulated protocol revenue to treasury
+     * @dev Only callable by owner
+     */
+    function withdrawProtocolRevenue() external onlyOwner nonReentrant {
+        uint256 amount = pendingProtocolRevenue;
+        require(amount > 0, "No pending protocol revenue");
+
+        // Reset pending before withdrawal
+        pendingProtocolRevenue = 0;
+        totalDistributedToProtocol += amount;
+
+        // Transfer to treasury
+        // Note: In production, would transfer actual tokens
+
+        emit ProtocolRevenueWithdrawn(treasury, amount, block.timestamp);
+    }
+
+    /**
+     * @notice Get liquidator's pending reward
+     * @param liquidator Address to check
+     * @return reward Pending reward amount
+     */
+    function getLiquidatorReward(address liquidator) external view returns (uint256) {
+        return liquidatorRewards[liquidator];
     }
 
     /**

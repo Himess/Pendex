@@ -475,3 +475,170 @@ export const SHADOW_LIQUIDITY_POOL_ABI = [
     type: "event",
   },
 ] as const;
+
+// ============ SHADOW ORDER BOOK ABI ============
+export const SHADOW_ORDER_BOOK_ABI = [
+  // Read functions
+  {
+    inputs: [{ name: "assetId", type: "bytes32" }],
+    name: "getMarketStats",
+    outputs: [
+      { name: "lastTradeTime", type: "uint256" },
+      { name: "totalTrades24h", type: "uint32" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "orderId", type: "uint256" }],
+    name: "getOrder",
+    outputs: [
+      { name: "assetId", type: "bytes32" },
+      { name: "priceLevel", type: "uint64" },
+      { name: "owner", type: "address" },
+      { name: "isActive", type: "bool" },
+      { name: "createdAt", type: "uint256" },
+      { name: "orderType", type: "uint8" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "assetId", type: "bytes32" },
+      { name: "priceLevel", type: "uint64" },
+    ],
+    name: "getEncryptedDepth",
+    outputs: [
+      { name: "encryptedBidTotal", type: "bytes32" },
+      { name: "encryptedAskTotal", type: "bytes32" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "assetId", type: "bytes32" },
+      { name: "priceLevel", type: "uint64" },
+    ],
+    name: "getPriceLevelInfo",
+    outputs: [
+      { name: "bidOrderCount", type: "uint32" },
+      { name: "askOrderCount", type: "uint32" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "user", type: "address" }],
+    name: "getUserOrders",
+    outputs: [{ name: "", type: "uint256[]" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "nextOrderId",
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "TICK_SIZE",
+    outputs: [{ name: "", type: "uint64" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "PRECISION",
+    outputs: [{ name: "", type: "uint64" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  // Write functions
+  {
+    inputs: [
+      { name: "assetId", type: "bytes32" },
+      { name: "priceLevel", type: "uint64" },
+      { name: "encryptedSize", type: "bytes32" },
+      { name: "orderType", type: "uint8" },
+      { name: "inputProof", type: "bytes" },
+    ],
+    name: "placeLimitOrder",
+    outputs: [{ name: "orderId", type: "uint256" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "orderId", type: "uint256" }],
+    name: "cancelOrder",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "bidOrderId", type: "uint256" },
+      { name: "askOrderId", type: "uint256" },
+    ],
+    name: "executeMatch",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  // Events
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: "orderId", type: "uint256" },
+      { indexed: true, name: "assetId", type: "bytes32" },
+      { indexed: false, name: "priceLevel", type: "uint64" },
+      { indexed: false, name: "orderType", type: "uint8" },
+      { indexed: false, name: "timestamp", type: "uint256" },
+    ],
+    name: "OrderCreated",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: "orderId", type: "uint256" },
+      { indexed: false, name: "timestamp", type: "uint256" },
+    ],
+    name: "OrderCancelled",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: "orderId", type: "uint256" },
+      { indexed: true, name: "matchedOrderId", type: "uint256" },
+      { indexed: false, name: "timestamp", type: "uint256" },
+    ],
+    name: "OrderFilled",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: "assetId", type: "bytes32" },
+      { indexed: false, name: "price", type: "uint64" },
+      { indexed: false, name: "timestamp", type: "uint256" },
+    ],
+    name: "TradeExecuted",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: "assetId", type: "bytes32" },
+      { indexed: false, name: "priceLevel", type: "uint64" },
+      { indexed: false, name: "isBid", type: "bool" },
+      { indexed: false, name: "orderCount", type: "uint32" },
+    ],
+    name: "PriceLevelUpdated",
+    type: "event",
+  },
+] as const;

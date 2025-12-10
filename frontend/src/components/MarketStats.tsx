@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Asset, ASSETS, formatUSD, formatPercent } from "@/lib/constants";
 import { useLiveAssetPrice } from "@/hooks/useLiveOracle";
 import { useCurrentNetwork } from "@/lib/contracts/hooks";
@@ -10,6 +10,17 @@ import { cn } from "@/lib/utils";
 interface MarketStatsProps {
   selectedAsset: Asset | null;
   onSelectAsset?: (asset: Asset) => void;
+}
+
+// Deterministic pseudo-random based on asset id (stable across renders)
+function seededRandom(seed: string): number {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    const char = seed.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash % 1000) / 1000;
 }
 
 export function MarketStats({ selectedAsset, onSelectAsset }: MarketStatsProps) {
@@ -25,12 +36,26 @@ export function MarketStats({ selectedAsset, onSelectAsset }: MarketStatsProps) 
   const totalLongOI = oracleAsset?.totalLongOI ?? 0;
   const totalShortOI = oracleAsset?.totalShortOI ?? 0;
 
-  // Simulated values (would come from contract in production)
-  const indexPrice = price * (1 + (Math.random() - 0.5) * 0.001);
-  const volume24h = selectedAsset ? selectedAsset.price * 1000000 * (0.5 + Math.random()) : 0;
+  // Stable simulated values based on asset (no random jumps)
+  const stableValues = useMemo(() => {
+    if (!selectedAsset) return { indexPrice: 0, volume24h: 0, fundingRate: 0, nextFunding: 0 };
+
+    const seed = selectedAsset.id;
+    const r1 = seededRandom(seed + "index");
+    const r2 = seededRandom(seed + "volume");
+    const r3 = seededRandom(seed + "funding");
+    const r4 = seededRandom(seed + "next");
+
+    return {
+      indexPrice: price * (1 + (r1 - 0.5) * 0.001),
+      volume24h: selectedAsset.price * 1000000 * (0.5 + r2),
+      fundingRate: 0.001 + (r3 - 0.5) * 0.002,
+      nextFunding: Math.floor(r4 * 60),
+    };
+  }, [selectedAsset?.id, price]);
+
+  const { indexPrice, volume24h, fundingRate, nextFunding } = stableValues;
   const openInterest = totalLongOI + totalShortOI || price * 500000;
-  const fundingRate = 0.001 + (Math.random() - 0.5) * 0.002;
-  const nextFunding = Math.floor(Math.random() * 60);
 
   if (!selectedAsset) {
     return null;
@@ -80,10 +105,10 @@ export function MarketStats({ selectedAsset, onSelectAsset }: MarketStatsProps) 
           {isDropdownOpen && onSelectAsset && (
             <>
               <div
-                className="fixed inset-0 z-40"
+                className="fixed inset-0 z-[60]"
                 onClick={() => setIsDropdownOpen(false)}
               />
-              <div className="absolute top-full left-0 mt-2 w-72 max-h-96 overflow-y-auto bg-card border border-border rounded-lg shadow-xl z-50">
+              <div className="absolute top-full left-0 mt-2 w-72 max-h-96 overflow-y-auto bg-card border border-border rounded-lg shadow-xl z-[70]">
                 {ASSETS.map((asset) => (
                   <button
                     key={asset.id}
@@ -198,7 +223,7 @@ export function MarketStats({ selectedAsset, onSelectAsset }: MarketStatsProps) 
         <div className="flex flex-col min-w-[80px]">
           <span className="text-[10px] text-text-muted">Next Funding</span>
           <span className="text-sm font-mono text-text-secondary">
-            {nextFunding}:{String(Math.floor(Math.random() * 60)).padStart(2, '0')}
+            {nextFunding}:{String(Math.floor(seededRandom((selectedAsset?.id || "") + "seconds") * 60)).padStart(2, '0')}
           </span>
         </div>
       </div>

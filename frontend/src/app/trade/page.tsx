@@ -90,8 +90,8 @@ function AssetSelector({
 
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 w-64 max-h-96 overflow-y-auto bg-card border border-border rounded-lg shadow-xl z-50">
+          <div className="fixed inset-0 z-[60]" onClick={() => setIsOpen(false)} />
+          <div className="absolute top-full left-0 mt-1 w-64 max-h-96 overflow-y-auto bg-card border border-border rounded-lg shadow-xl z-[70]">
             {ASSETS.map((asset) => (
               <button
                 key={asset.id}

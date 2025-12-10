@@ -28,6 +28,9 @@ contract ShadowUSD is ZamaEthereumConfig, Ownable2Step {
     /// @notice Encrypted allowances
     mapping(address => mapping(address => euint64)) private _allowances;
 
+    /// @notice Operators (ERC-7984 style) - can transfer on behalf of owner
+    mapping(address => mapping(address => bool)) private _operators;
+
     /// @notice Total supply (public for transparency)
     uint256 public totalSupply;
 
@@ -37,6 +40,7 @@ contract ShadowUSD is ZamaEthereumConfig, Ownable2Step {
     /// @notice Events
     event ConfidentialTransfer(address indexed from, address indexed to);
     event ConfidentialApproval(address indexed owner, address indexed spender);
+    event OperatorSet(address indexed owner, address indexed operator, bool approved);
     event Mint(address indexed to, uint256 publicAmount);
     event Burn(address indexed from, uint256 publicAmount);
 
@@ -70,6 +74,75 @@ contract ShadowUSD is ZamaEthereumConfig, Ownable2Step {
     function faucet(uint64 amount) external {
         require(amount <= 10000 * 1e6, "Max 10,000 sUSD per faucet");
         _mint(msg.sender, amount);
+    }
+
+    // ============================================
+    // ERC-7984 OPERATOR FUNCTIONS
+    // ============================================
+
+    /**
+     * @notice Set or revoke an operator (ERC-7984)
+     * @dev Operators can transfer on behalf of the owner without allowance limits
+     * @param operator Address to set as operator
+     * @param approved True to approve, false to revoke
+     */
+    function setOperator(address operator, bool approved) external {
+        require(operator != address(0), "Zero address");
+        require(operator != msg.sender, "Cannot set self as operator");
+
+        _operators[msg.sender][operator] = approved;
+        emit OperatorSet(msg.sender, operator, approved);
+    }
+
+    /**
+     * @notice Check if an address is an operator for owner
+     * @param owner The token owner
+     * @param operator The potential operator
+     * @return bool True if operator is approved
+     */
+    function isOperator(address owner, address operator) external view returns (bool) {
+        return _operators[owner][operator];
+    }
+
+    /**
+     * @notice Transfer as operator (full balance access)
+     * @param from Owner address
+     * @param to Recipient address
+     * @param encryptedAmount Encrypted transfer amount
+     * @param inputProof ZK proof
+     */
+    function operatorTransfer(
+        address from,
+        address to,
+        externalEuint64 encryptedAmount,
+        bytes calldata inputProof
+    ) external returns (bool) {
+        require(_operators[from][msg.sender], "Not an operator");
+        require(to != address(0), "Transfer to zero address");
+
+        euint64 amount = FHE.fromExternal(encryptedAmount, inputProof);
+        _transfer(from, to, amount);
+
+        return true;
+    }
+
+    /**
+     * @notice Operator transfer with internal euint64
+     * @param from Owner address
+     * @param to Recipient address
+     * @param amount Encrypted amount (internal)
+     */
+    function operatorTransferInternal(
+        address from,
+        address to,
+        euint64 amount
+    ) external returns (bool) {
+        require(_operators[from][msg.sender], "Not an operator");
+        require(to != address(0), "Transfer to zero address");
+
+        _transfer(from, to, amount);
+
+        return true;
     }
 
     // ============================================

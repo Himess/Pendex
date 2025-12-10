@@ -2,7 +2,7 @@
 
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
 import { CONTRACTS, NETWORK_CONTRACTS, type SupportedNetwork } from "./config";
-import { SHADOW_VAULT_ABI, SHADOW_ORACLE_ABI, SHADOW_USD_ABI, SHADOW_LIQUIDITY_POOL_ABI } from "./abis";
+import { SHADOW_VAULT_ABI, SHADOW_ORACLE_ABI, SHADOW_USD_ABI, SHADOW_LIQUIDITY_POOL_ABI, SHADOW_ORDER_BOOK_ABI } from "./abis";
 
 // ============ NETWORK-AWARE CONTRACT ADDRESSES ============
 
@@ -532,6 +532,106 @@ export function useAdvanceEpoch() {
 
   return {
     advanceEpoch,
+    hash,
+    isPending,
+    isConfirming,
+    isSuccess,
+    error,
+  };
+}
+
+// ============ SHADOW ORDER BOOK HOOKS ============
+
+// Note: OrderBook contract address should be added to config when deployed
+const ORDER_BOOK_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
+
+export function useOrderBookMarketStats(assetId: `0x${string}` | undefined) {
+  return useReadContract({
+    address: ORDER_BOOK_ADDRESS,
+    abi: SHADOW_ORDER_BOOK_ABI,
+    functionName: "getMarketStats",
+    args: assetId ? [assetId] : undefined,
+    query: {
+      enabled: !!assetId && ORDER_BOOK_ADDRESS !== "0x0000000000000000000000000000000000000000",
+    },
+  });
+}
+
+export function useOrderBookEncryptedDepth(
+  assetId: `0x${string}` | undefined,
+  priceLevel: bigint | undefined
+) {
+  return useReadContract({
+    address: ORDER_BOOK_ADDRESS,
+    abi: SHADOW_ORDER_BOOK_ABI,
+    functionName: "getEncryptedDepth",
+    args: assetId && priceLevel !== undefined ? [assetId, priceLevel] : undefined,
+    query: {
+      enabled: !!assetId && priceLevel !== undefined && ORDER_BOOK_ADDRESS !== "0x0000000000000000000000000000000000000000",
+    },
+  });
+}
+
+export function useUserOrders(address: `0x${string}` | undefined) {
+  return useReadContract({
+    address: ORDER_BOOK_ADDRESS,
+    abi: SHADOW_ORDER_BOOK_ABI,
+    functionName: "getUserOrders",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address && ORDER_BOOK_ADDRESS !== "0x0000000000000000000000000000000000000000",
+    },
+  });
+}
+
+export function usePlaceLimitOrder() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  const placeLimitOrder = (
+    assetId: `0x${string}`,
+    priceLevel: bigint,
+    encryptedSize: `0x${string}`,
+    orderType: number,
+    inputProof: `0x${string}`
+  ) => {
+    writeContract({
+      address: ORDER_BOOK_ADDRESS,
+      abi: SHADOW_ORDER_BOOK_ABI,
+      functionName: "placeLimitOrder",
+      args: [assetId, priceLevel, encryptedSize, orderType, inputProof],
+    });
+  };
+
+  return {
+    placeLimitOrder,
+    hash,
+    isPending,
+    isConfirming,
+    isSuccess,
+    error,
+  };
+}
+
+export function useCancelOrder() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  const cancelOrder = (orderId: bigint) => {
+    writeContract({
+      address: ORDER_BOOK_ADDRESS,
+      abi: SHADOW_ORDER_BOOK_ABI,
+      functionName: "cancelOrder",
+      args: [orderId],
+    });
+  };
+
+  return {
+    cancelOrder,
     hash,
     isPending,
     isConfirming,
