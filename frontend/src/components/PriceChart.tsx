@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Lock, Shield, Wifi, WifiOff } from "lucide-react";
+import { Lock, Shield, Wifi, WifiOff, TrendingUp, Minus, Circle } from "lucide-react";
 import { Asset, formatUSD, formatPercent } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useLiveAssetPrice } from "@/hooks/useLiveOracle";
@@ -15,36 +15,60 @@ interface PriceChartProps {
 // Check if we're in browser environment
 const isBrowser = typeof window !== "undefined";
 
-// Generate realistic candlestick data based on current price
-// Uses seeded random for consistent chart per asset
-function generateCandlestickData(basePrice: number, symbol: string, days: number = 90) {
-  const data: { time: number; open: number; high: number; low: number; close: number }[] = [];
+// Timeframe configurations
+const TIMEFRAMES = {
+  "1M": { label: "1M", minutes: 1, bars: 60, description: "1 Minute" },
+  "5M": { label: "5M", minutes: 5, bars: 60, description: "5 Minutes" },
+  "1H": { label: "1H", minutes: 60, bars: 48, description: "1 Hour" },
+  "1D": { label: "1D", minutes: 1440, bars: 60, description: "1 Day" },
+} as const;
 
-  // Simple seeded random based on symbol
-  let seed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+type TimeframeKey = keyof typeof TIMEFRAMES;
+
+// FHE Trading launch date (2 months ago)
+const FHE_LAUNCH_DATE = new Date();
+FHE_LAUNCH_DATE.setMonth(FHE_LAUNCH_DATE.getMonth() - 2);
+
+// Generate realistic candlestick data based on timeframe
+function generateCandlestickData(
+  basePrice: number,
+  symbol: string,
+  timeframe: TimeframeKey
+): { time: number; open: number; high: number; low: number; close: number }[] {
+  const data: { time: number; open: number; high: number; low: number; close: number }[] = [];
+  const config = TIMEFRAMES[timeframe];
+
+  // Simple seeded random based on symbol + timeframe
+  let seed = (symbol + timeframe).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const seededRandom = () => {
     seed = (seed * 9301 + 49297) % 233280;
     return seed / 233280;
   };
 
+  // Start price 15% below current (showing growth over 2 months)
   let currentPrice = basePrice * 0.85;
   const now = new Date();
+  const minutesPerBar = config.minutes;
+  const totalBars = config.bars;
 
-  for (let i = days; i >= 0; i--) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - i);
+  for (let i = totalBars; i >= 0; i--) {
+    const barTime = new Date(now.getTime() - i * minutesPerBar * 60 * 1000);
 
-    const volatility = 0.02 + seededRandom() * 0.03;
-    const trend = (basePrice - currentPrice) / basePrice * 0.1;
+    // Volatility based on timeframe (higher for shorter timeframes)
+    const baseVolatility = timeframe === "1M" ? 0.003 : timeframe === "5M" ? 0.005 : timeframe === "1H" ? 0.01 : 0.025;
+    const volatility = baseVolatility + seededRandom() * baseVolatility;
+
+    // Trend towards current price
+    const trend = (basePrice - currentPrice) / basePrice * 0.05;
     const change = (seededRandom() - 0.45 + trend) * volatility;
 
     const open = currentPrice;
     const close = currentPrice * (1 + change);
-    const high = Math.max(open, close) * (1 + seededRandom() * 0.015);
-    const low = Math.min(open, close) * (1 - seededRandom() * 0.015);
+    const high = Math.max(open, close) * (1 + seededRandom() * volatility * 0.5);
+    const low = Math.min(open, close) * (1 - seededRandom() * volatility * 0.5);
 
     data.push({
-      time: Math.floor(date.getTime() / 1000),
+      time: Math.floor(barTime.getTime() / 1000),
       open,
       high,
       low,
@@ -57,14 +81,19 @@ function generateCandlestickData(basePrice: number, symbol: string, days: number
   return data;
 }
 
+// Drawing tools
+type DrawingTool = "none" | "hline" | "trendline" | "range";
+
 export function PriceChart({ selectedAsset }: PriceChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candlestickSeriesRef = useRef<any>(null);
-  const [timeframe, setTimeframe] = useState("1D");
+  const [timeframe, setTimeframe] = useState<TimeframeKey>("1D");
   const [isChartReady, setIsChartReady] = useState(false);
   const [chartInitialized, setChartInitialized] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [activeTool, setActiveTool] = useState<DrawingTool>("none");
+  const [priceLines, setPriceLines] = useState<any[]>([]);
 
   // On-chain oracle price (primary source)
   const network = useCurrentNetwork();
@@ -86,7 +115,6 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
   // Initialize chart - only runs on client side
   const initChart = useCallback(async () => {
     if (!isBrowser || !mounted || !chartContainerRef.current || !selectedAsset) {
-      console.log("Chart init skipped:", { isBrowser, mounted, hasContainer: !!chartContainerRef.current, hasAsset: !!selectedAsset });
       return;
     }
 
@@ -102,18 +130,14 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
     }
 
     try {
-      const { createChart } = await import("lightweight-charts");
+      const { createChart, CandlestickSeries } = await import("lightweight-charts");
 
       if (!chartContainerRef.current) return;
 
-      // Get container dimensions - use fallback values for SSR/hydration
       const container = chartContainerRef.current;
       const rect = container.getBoundingClientRect();
-      // Ensure minimum dimensions
       const width = Math.max(rect.width || container.clientWidth || 800, 400);
       const height = Math.max(rect.height || container.clientHeight || 400, 300);
-
-      console.log("Chart dimensions:", { width, height });
 
       const chart = createChart(container, {
         width,
@@ -146,7 +170,7 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
         timeScale: {
           borderColor: "rgba(255, 255, 255, 0.1)",
           timeVisible: true,
-          secondsVisible: false,
+          secondsVisible: timeframe === "1M",
         },
         handleScale: {
           axisPressedMouseMove: true,
@@ -161,8 +185,6 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
         },
       });
 
-      // lightweight-charts v5 API: use addSeries with CandlestickSeries
-      const { CandlestickSeries } = await import("lightweight-charts");
       const candlestickSeries = chart.addSeries(CandlestickSeries, {
         upColor: "#10B981",
         downColor: "#EF4444",
@@ -172,10 +194,24 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
         wickDownColor: "#EF4444",
       });
 
-      // Generate and set chart data immediately
-      const chartData = generateCandlestickData(selectedAsset.price, selectedAsset.symbol);
+      // Generate chart data for selected timeframe
+      const chartData = generateCandlestickData(selectedAsset.price, selectedAsset.symbol, timeframe);
       candlestickSeries.setData(chartData as any);
       chart.timeScale().fitContent();
+
+      // Add FHE launch marker (vertical line at launch date)
+      if (timeframe === "1D") {
+        const launchTime = Math.floor(FHE_LAUNCH_DATE.getTime() / 1000);
+        // Add a price line at a notable point
+        const launchPriceLine = candlestickSeries.createPriceLine({
+          price: selectedAsset.price * 0.88,
+          color: "#F7B731",
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: "FHE Launch",
+        });
+      }
 
       chartRef.current = chart;
       candlestickSeriesRef.current = candlestickSeries;
@@ -194,7 +230,24 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
 
       resizeObserver.observe(container);
 
-      // Cleanup function
+      // Click handler for drawing tools
+      chart.subscribeClick((param: any) => {
+        if (activeTool === "hline" && param.point && candlestickSeriesRef.current) {
+          const price = candlestickSeriesRef.current.coordinateToPrice(param.point.y);
+          if (price) {
+            const line = candlestickSeriesRef.current.createPriceLine({
+              price,
+              color: "#3B82F6",
+              lineWidth: 1,
+              lineStyle: 0,
+              axisLabelVisible: true,
+              title: `$${price.toFixed(2)}`,
+            });
+            setPriceLines(prev => [...prev, line]);
+          }
+        }
+      });
+
       return () => {
         resizeObserver.disconnect();
         if (chartRef.current) {
@@ -210,36 +263,31 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
     } catch (error) {
       console.error("Failed to initialize chart:", error);
     }
-  }, [mounted, selectedAsset?.id, selectedAsset?.symbol, selectedAsset?.price]);
+  }, [mounted, selectedAsset?.id, selectedAsset?.symbol, selectedAsset?.price, timeframe, activeTool]);
 
-  // Initialize chart when mounted and asset changes
+  // Initialize chart when mounted, asset, or timeframe changes
   useEffect(() => {
     if (!mounted || !selectedAsset) return;
 
     setIsChartReady(false);
     setChartInitialized(false);
 
-    // Multiple attempts with increasing delays to handle hydration issues
+    // Multiple attempts with increasing delays
     let attempts = 0;
     const maxAttempts = 5;
     let timer: NodeJS.Timeout;
 
     const tryInit = () => {
       attempts++;
-      console.log(`Chart init attempt ${attempts}/${maxAttempts}`);
-
       if (chartContainerRef.current && chartContainerRef.current.clientWidth > 0) {
         initChart();
       } else if (attempts < maxAttempts) {
-        // Retry with exponential backoff
         timer = setTimeout(tryInit, 100 * attempts);
       } else {
-        console.warn("Chart container not ready after max attempts, forcing init");
         initChart();
       }
     };
 
-    // Start first attempt after a short delay
     timer = setTimeout(tryInit, 150);
 
     return () => {
@@ -256,55 +304,40 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
         setChartInitialized(false);
       }
     };
-  }, [mounted, selectedAsset?.id, initChart]);
+  }, [mounted, selectedAsset?.id, timeframe, initChart]);
 
-  // Update last candle with live price from oracle
+  // Update last candle with live price
   useEffect(() => {
     if (!candlestickSeriesRef.current || !isChartReady || !livePrice || !chartInitialized) return;
 
-    // Update the last candle's close price with live data
     const now = Math.floor(Date.now() / 1000);
-    const today = now - (now % 86400); // Start of today
+    const config = TIMEFRAMES[timeframe];
+    const barTime = now - (now % (config.minutes * 60));
 
     try {
       candlestickSeriesRef.current.update({
-        time: today,
+        time: barTime,
         open: livePrice * 0.998,
-        high: livePrice * 1.005,
-        low: livePrice * 0.995,
+        high: livePrice * 1.002,
+        low: livePrice * 0.997,
         close: livePrice,
       } as any);
     } catch {
       // Ignore update errors
     }
-  }, [livePrice, isChartReady, chartInitialized]);
+  }, [livePrice, isChartReady, chartInitialized, timeframe]);
 
-  // Update price line
-  useEffect(() => {
-    if (!candlestickSeriesRef.current || !isChartReady) return;
-
-    // Remove old price lines and add new one
-    try {
-      const priceLine = candlestickSeriesRef.current.createPriceLine({
-        price: livePrice,
-        color: "#F7B731",
-        lineWidth: 1,
-        lineStyle: 2,
-        axisLabelVisible: true,
-        title: "Live",
-      });
-
-      return () => {
-        try {
-          candlestickSeriesRef.current?.removePriceLine(priceLine);
-        } catch (e) {
-          // Ignore
-        }
-      };
-    } catch (e) {
-      // Ignore
-    }
-  }, [livePrice, isChartReady]);
+  // Clear all drawings
+  const clearDrawings = () => {
+    priceLines.forEach(line => {
+      try {
+        candlestickSeriesRef.current?.removePriceLine(line);
+      } catch (e) {
+        // Ignore
+      }
+    });
+    setPriceLines([]);
+  };
 
   if (!selectedAsset) {
     return (
@@ -313,7 +346,7 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
           <Lock className="w-16 h-16 text-text-muted mx-auto mb-4" />
           <p className="text-xl text-text-secondary">Select an asset to trade</p>
           <p className="text-sm text-text-muted mt-2">
-            Choose from 17 Pre-IPO companies
+            Choose from 6 Pre-IPO companies
           </p>
         </div>
       </div>
@@ -345,7 +378,6 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
                 {selectedAsset.name}
               </h2>
               <span className="text-xs text-text-muted">(PRE-IPO)</span>
-              {/* Live indicator */}
               {isConnected ? (
                 <span className="flex items-center gap-1 text-xs text-success">
                   <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
@@ -373,10 +405,45 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
           </div>
         </div>
 
-        <div className="badge-gold flex items-center gap-1.5">
-          <Shield className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Encrypted Data Stream</span>
-          <span className="sm:hidden">FHE</span>
+        <div className="flex items-center gap-2">
+          {/* Drawing Tools */}
+          <div className="flex items-center gap-1 mr-2 border-r border-border pr-2">
+            <button
+              onClick={() => setActiveTool(activeTool === "hline" ? "none" : "hline")}
+              className={cn(
+                "p-1.5 rounded text-xs transition-colors",
+                activeTool === "hline" ? "bg-gold/20 text-gold" : "text-text-muted hover:text-text-primary hover:bg-card-hover"
+              )}
+              title="Horizontal Line"
+            >
+              <Minus className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setActiveTool(activeTool === "trendline" ? "none" : "trendline")}
+              className={cn(
+                "p-1.5 rounded text-xs transition-colors",
+                activeTool === "trendline" ? "bg-gold/20 text-gold" : "text-text-muted hover:text-text-primary hover:bg-card-hover"
+              )}
+              title="Trend Line"
+            >
+              <TrendingUp className="w-4 h-4" />
+            </button>
+            {priceLines.length > 0 && (
+              <button
+                onClick={clearDrawings}
+                className="p-1.5 rounded text-xs text-danger hover:bg-danger/10 transition-colors"
+                title="Clear Drawings"
+              >
+                <Circle className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          <div className="badge-gold flex items-center gap-1.5">
+            <Shield className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Encrypted Data Stream</span>
+            <span className="sm:hidden">FHE</span>
+          </div>
         </div>
       </div>
 
@@ -403,12 +470,20 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
             </div>
           </div>
         )}
+
+        {/* FHE Trading Badge */}
+        {isChartReady && timeframe === "1D" && (
+          <div className="absolute top-2 left-2 bg-gold/10 border border-gold/30 rounded px-2 py-1 text-xs text-gold flex items-center gap-1">
+            <Shield className="w-3 h-3" />
+            FHE Trading since {FHE_LAUNCH_DATE.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </div>
+        )}
       </div>
 
       {/* Time Frame Selector */}
       <div className="p-3 border-t border-border flex items-center justify-between flex-shrink-0">
         <div className="flex gap-2">
-          {["1M", "5M", "1H", "1D"].map((tf) => (
+          {(Object.keys(TIMEFRAMES) as TimeframeKey[]).map((tf) => (
             <button
               key={tf}
               onClick={() => setTimeframe(tf)}
@@ -418,8 +493,9 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
                   ? "bg-gold/20 text-gold"
                   : "text-text-muted hover:text-text-primary hover:bg-card-hover"
               )}
+              title={TIMEFRAMES[tf].description}
             >
-              {tf}
+              {TIMEFRAMES[tf].label}
             </button>
           ))}
         </div>
