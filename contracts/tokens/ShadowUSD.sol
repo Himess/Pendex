@@ -176,12 +176,21 @@ contract ShadowUSD is ZamaEthereumConfig, Ownable2Step {
     // ============================================
 
     /**
-     * @notice Get encrypted balance
+     * @notice Get encrypted balance with ACL permissions
+     * @dev NOT a view function - must grant ACL for decryption
      * @param account Account address
-     * @return Encrypted balance (only account owner can decrypt)
+     * @return balance Encrypted balance (caller gets decrypt permission)
      */
-    function confidentialBalanceOf(address account) external view returns (euint64) {
-        return _balances[account];
+    function confidentialBalanceOf(address account) external returns (euint64 balance) {
+        balance = _balances[account];
+
+        // Grant ACL permissions so caller can decrypt
+        if (FHE.isInitialized(balance)) {
+            FHE.allowThis(balance);
+            FHE.allow(balance, msg.sender);
+        }
+
+        return balance;
     }
 
     /**
@@ -283,15 +292,25 @@ contract ShadowUSD is ZamaEthereumConfig, Ownable2Step {
     }
 
     /**
-     * @notice Get encrypted allowance
+     * @notice Get encrypted allowance with ACL permissions
+     * @dev NOT a view function - must grant ACL for decryption
      * @param owner Owner address
      * @param spender Spender address
+     * @return allowance Encrypted allowance (caller gets decrypt permission)
      */
     function confidentialAllowance(
         address owner,
         address spender
-    ) external view returns (euint64) {
-        return _allowances[owner][spender];
+    ) external returns (euint64 allowance) {
+        allowance = _allowances[owner][spender];
+
+        // Grant ACL permissions so caller can decrypt
+        if (FHE.isInitialized(allowance)) {
+            FHE.allowThis(allowance);
+            FHE.allow(allowance, msg.sender);
+        }
+
+        return allowance;
     }
 
     // ============================================

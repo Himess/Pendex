@@ -70,11 +70,12 @@ const CONTRACT_ADDRESSES = {
   shadowLiquidityPool: CONTRACTS.shadowLiquidityPool,
 };
 
-// ShadowUSD ABI for operator functions (ERC-7984)
+// ShadowUSD ABI for operator functions (ERC-7984) and encrypted balance
 const SHADOW_USD_ABI = parseAbi([
   "function setOperator(address operator, bool approved) external",
   "function isOperator(address owner, address operator) external view returns (bool)",
   "function operatorTransfer(address from, address to, bytes32 encryptedAmount, bytes calldata inputProof) external returns (bool)",
+  "function confidentialBalanceOf(address account) external returns (uint256)",
 ]);
 
 // Operator interface
@@ -307,25 +308,57 @@ export default function WalletPage() {
     setDecryptionError(null);
 
     try {
-      // In production, we would:
-      // 1. Call contract to get encrypted balance handle
-      // 2. Use requestUserDecryption to decrypt with EIP-712 signature
+      // Step 1: Call contract to get encrypted balance handle
+      // This also grants ACL permission for decryption
+      console.log("📝 Calling confidentialBalanceOf to get handle + ACL...");
 
-      // For demo, we'll show the flow with mock handles
-      // Real implementation would get handles from contract view functions
+      const publicClient = createPublicClient({
+        chain: sepolia,
+        transport: http(),
+      });
 
-      // Simulate getting encrypted balance handle from contract
-      // const balanceHandle = await shadowUsdContract.read.confidentialBalanceOf([address]);
+      // Call confidentialBalanceOf - this is a state-changing call that grants ACL
+      // We need to simulate the call first to get the handle
+      const balanceHandle = await publicClient.simulateContract({
+        address: CONTRACT_ADDRESSES.shadowUSD as `0x${string}`,
+        abi: SHADOW_USD_ABI,
+        functionName: "confidentialBalanceOf",
+        args: [address],
+        account: address,
+      });
 
-      // Demo: Use mock encrypted value
-      // In real scenario, this would be the actual encrypted handle from contract
-      const mockHandle = "0x0000000000000000000000000000000000000000000000000000000000000001" as `0x${string}`;
+      // The result is the encrypted handle (euint64 as uint256)
+      const handle = balanceHandle.result as bigint;
+      const handleHex = `0x${handle.toString(16).padStart(64, "0")}` as `0x${string}`;
 
-      // Request decryption - this will prompt user to sign EIP-712 message
+      console.log("🔐 Got encrypted handle:", handleHex);
+
+      // If handle is 0, user has no balance
+      if (handle === BigInt(0)) {
+        setDecryptedBalance(BigInt(0));
+        setDecryptedValues((prev) => ({
+          ...prev,
+          sUsdBalance: BigInt(0),
+        }));
+        setShowBalance(true);
+        return;
+      }
+
+      // Step 2: Actually execute the call to grant ACL (simulate doesn't change state)
+      const hash = await walletClient.writeContract({
+        address: CONTRACT_ADDRESSES.shadowUSD as `0x${string}`,
+        abi: SHADOW_USD_ABI,
+        functionName: "confidentialBalanceOf",
+        args: [address],
+      });
+
+      console.log("✅ ACL granted, tx:", hash);
+
+      // Step 3: Request decryption with EIP-712 signature
       console.log("🔐 Requesting user decryption...");
       const results = await requestUserDecryption(
         [
-          { handle: mockHandle, contractAddress: CONTRACT_ADDRESSES.shadowUSD },
+          { handle: handleHex, contractAddress: CONTRACT_ADDRESSES.shadowUSD },
         ],
         address,
         walletClient
@@ -334,14 +367,15 @@ export default function WalletPage() {
       console.log("✅ Decryption results:", results);
 
       // Store decrypted values
-      if (results[mockHandle] !== undefined) {
-        const balance = typeof results[mockHandle] === "bigint"
-          ? results[mockHandle]
-          : BigInt(results[mockHandle].toString());
-        setDecryptedBalance(balance);
+      const resultKey = Object.keys(results).find(k => k.toLowerCase() === handleHex.toLowerCase()) || handleHex;
+      if (results[resultKey] !== undefined) {
+        const balance = typeof results[resultKey] === "bigint"
+          ? results[resultKey]
+          : BigInt(results[resultKey].toString());
+        setDecryptedBalance(balance as bigint);
         setDecryptedValues((prev) => ({
           ...prev,
-          sUsdBalance: balance,
+          sUsdBalance: balance as bigint,
         }));
         setShowBalance(true);
       }
