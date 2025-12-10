@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "@/lib/polyfills"; // Must be first - browser polyfills
 import "./globals.css";
 import { Providers } from "./providers";
 
