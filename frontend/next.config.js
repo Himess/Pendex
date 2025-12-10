@@ -19,9 +19,11 @@ const nextConfig = {
     "@walletconnect/sign-client",
     "@walletconnect/core",
     "@reown/appkit",
+    "@reown/appkit-controllers",
+    "@metamask/sdk",
   ],
   webpack: (config, { isServer }) => {
-    // Node.js polyfills for browser - use require.resolve for actual polyfills
+    // Node.js polyfills for browser
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
@@ -38,19 +40,25 @@ const nextConfig = {
       path: false,
       util: false,
       querystring: false,
-      // These need actual polyfills for WalletConnect
+      // Actual polyfills for WalletConnect
       events: require.resolve("events/"),
       buffer: require.resolve("buffer/"),
       process: require.resolve("process/browser"),
     };
 
-    // Define global for browser (needed by WalletConnect/crypto libraries)
     if (!isServer) {
+      // Define globals
       config.plugins.push(
         new webpack.ProvidePlugin({
-          global: ["globalThis"],
           Buffer: ["buffer", "Buffer"],
           process: ["process/browser"],
+        })
+      );
+
+      // DefinePlugin for globalThis (not as alias, but as definition)
+      config.plugins.push(
+        new webpack.DefinePlugin({
+          "global": "globalThis",
         })
       );
 
