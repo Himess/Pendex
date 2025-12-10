@@ -4,9 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { Lock, BarChart3, LineChart, Wallet, Menu, X, HelpCircle, Building2, Settings, History, Shield } from "lucide-react";
+import { Lock, BarChart3, LineChart, Wallet, Menu, X, HelpCircle, Building2, Settings, History, Shield, Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NetworkSelectorCompact } from "./NetworkSelector";
+import { useTheme } from "@/app/providers";
 
 const NAV_ITEMS = [
   { href: "/markets", label: "Markets", icon: <BarChart3 className="w-4 h-4" /> },
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
 export function Header() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -59,8 +61,17 @@ export function Header() {
           ))}
         </nav>
 
-        {/* Right - Network Selector + Wallet */}
+        {/* Right - Theme Toggle + Network Selector + Wallet */}
         <div className="flex items-center gap-2 md:gap-4">
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-card-hover transition-colors"
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
+
           {/* Network Selector */}
           <div className="hidden md:block">
             <NetworkSelectorCompact />

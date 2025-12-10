@@ -4,7 +4,9 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-:root {
+/* Dark Theme (Default) */
+:root,
+[data-theme="dark"] {
   --background: #0A0A0A;
   --card: #141414;
   --card-hover: #1a1a1a;
@@ -15,6 +17,20 @@
   --text-primary: #FFFFFF;
   --text-secondary: #A0A0A0;
   --text-muted: #6B7280;
+}
+
+/* Light Theme */
+[data-theme="light"] {
+  --background: #F5F5F5;
+  --card: #FFFFFF;
+  --card-hover: #F0F0F0;
+  --border: #E0E0E0;
+  --gold: #D4A017;
+  --success: #059669;
+  --danger: #DC2626;
+  --text-primary: #1A1A1A;
+  --text-secondary: #4A4A4A;
+  --text-muted: #9CA3AF;
 }
 
 * {
