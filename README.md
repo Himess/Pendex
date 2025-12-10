@@ -454,6 +454,43 @@ const signature = await signer.signTypedData(eip712.domain, eip712.types, eip712
 const balance = await fhevm.userDecrypt(handles, keypair.privateKey, keypair.publicKey, signature, ...);
 ```
 
+### Async Decryption with Gateway Callback
+
+For operations requiring public verification (liquidations, position closes):
+
+```solidity
+// 1. Request decryption
+function requestPositionClose(uint256 positionId) external returns (uint256) {
+    bytes32[] memory cts = new bytes32[](2);
+    cts[0] = FHE.toBytes32(position.collateral);
+    cts[1] = FHE.toBytes32(finalAmount);
+
+    // Request decryption from Zama Gateway
+    uint256 requestId = FHE.requestDecryption(cts, this.callbackPositionClose.selector);
+    return requestId;
+}
+
+// 2. Gateway calls back with decrypted values
+function callbackPositionClose(
+    uint256 requestId,
+    bytes memory cleartexts,
+    bytes memory decryptionProof
+) external {
+    // CRITICAL: Verify KMS signatures!
+    FHE.checkSignatures(requestId, cleartexts, decryptionProof);
+
+    // Safe to use decrypted values now
+    (uint64 finalAmount, uint64 collateral) = abi.decode(cleartexts, (uint64, uint64));
+    // ... process close
+}
+```
+
+**Features:**
+- Two-step async pattern (request → callback)
+- KMS signature verification with `FHE.checkSignatures()`
+- Tamper-proof decryption proofs
+- Used for liquidations and position settlements
+
 ### Admin Dashboard
 
 - Protocol fee management (bps)
@@ -483,10 +520,13 @@ Privacy-preserving order book where:
 - [x] Admin Dashboard
 - [x] Encrypted Order Book
 - [x] @zama-fhe/relayer-sdk integration
-- [ ] Automatic liquidation at -100%
-- [ ] Revenue sharing (50% LP, 50% protocol)
-- [ ] Mobile responsive UI
-- [ ] Advanced order types (Stop Loss, Take Profit)
+- [x] Async Decryption (Gateway Callback)
+- [x] FHE.checkSignatures() verification
+- [x] Automatic liquidation at -100%
+- [x] Revenue sharing (50% LP, 50% protocol)
+- [x] Advanced order types (Stop Loss, Take Profit)
+- [ ] Mobile responsive UI optimization
+- [ ] Mainnet deployment
 
 ---
 

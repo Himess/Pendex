@@ -105,6 +105,41 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
     mapping(address => uint256) public liquidatorRewards;
 
     // ============================================
+    // ASYNC DECRYPTION (Gateway Callback Pattern)
+    // ============================================
+
+    /// @notice Pending close requests (requestId => positionId)
+    mapping(uint256 => uint256) public pendingCloseRequests;
+
+    /// @notice Pending close info
+    struct PendingClose {
+        uint256 positionId;
+        address user;
+        bool processed;
+        uint256 finalAmount;  // Decrypted amount after callback
+    }
+    mapping(uint256 => PendingClose) public pendingCloses;
+
+    /// @notice Pending liquidation requests
+    struct PendingLiquidation {
+        uint256 positionId;
+        address liquidator;
+        bool processed;
+        bool canLiquidate;
+        uint256 collateralAmount;
+    }
+    mapping(uint256 => PendingLiquidation) public pendingLiquidations;
+
+    /// @notice User's pending close request IDs
+    mapping(address => mapping(uint256 => uint256)) public userCloseRequests;
+
+    /// @notice Events for async operations
+    event CloseRequested(uint256 indexed positionId, address indexed user, uint256 indexed requestId);
+    event CloseProcessed(uint256 indexed requestId, uint256 indexed positionId, uint256 finalAmount);
+    event LiquidationRequested(uint256 indexed positionId, address indexed liquidator, uint256 indexed requestId);
+    event LiquidationProcessed(uint256 indexed requestId, uint256 indexed positionId, bool canLiquidate);
+
+    // ============================================
     // ENCRYPTED ERROR HANDLING (Advanced FHE!)
     // ============================================
 
@@ -1529,6 +1564,281 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         FHE.allow(maxValue, msg.sender);
 
         return maxValue;
+    }
+
+    // ============================================
+    // PUBLIC DECRYPTION FUNCTIONS (Zama Pattern)
+    // ============================================
+
+    /**
+     * @notice Prepare position for closing (makes values publicly decryptable)
+     * @dev Step 1: Mark encrypted values for public decryption
+     * @param positionId Position to close
+     */
+    function preparePositionClose(uint256 positionId) external nonReentrant {
+        Position storage position = _positions[positionId];
+
+        require(position.isOpen, "Position not open");
+        require(position.owner == msg.sender, "Not position owner");
+
+        // Get current price for P&L calculation
+        euint64 currentPrice = oracle.getEncryptedPrice(position.assetId);
+
+        // Calculate P&L
+        euint64 pnl = _calculatePnL(position, currentPrice);
+
+        // Calculate final amount: collateral + pnl
+        euint64 finalAmount = FHE.add(position.collateral, pnl);
+
+        // Make values publicly decryptable (off-chain SDK will decrypt)
+        FHE.makePubliclyDecryptable(finalAmount);
+        FHE.makePubliclyDecryptable(position.collateral);
+
+        // Store pending close info
+        uint256 closeId = _nextCloseId++;
+        pendingCloses[closeId] = PendingClose({
+            positionId: positionId,
+            user: msg.sender,
+            processed: false,
+            finalAmount: 0
+        });
+
+        pendingCloseRequests[closeId] = positionId;
+        userCloseRequests[msg.sender][positionId] = closeId;
+
+        // Store encrypted handles for verification
+        _closeHandles[closeId] = CloseHandles({
+            finalAmountHandle: finalAmount,
+            collateralHandle: position.collateral
+        });
+
+        emit CloseRequested(positionId, msg.sender, closeId);
+    }
+
+    /// @notice Storage for encrypted handles during close
+    struct CloseHandles {
+        euint64 finalAmountHandle;
+        euint64 collateralHandle;
+    }
+    mapping(uint256 => CloseHandles) private _closeHandles;
+    uint256 private _nextCloseId = 1;
+
+    /// @notice Storage for liquidation handles
+    struct LiquidationHandles {
+        ebool isFullLossHandle;
+        euint64 collateralHandle;
+    }
+    mapping(uint256 => LiquidationHandles) private _liquidationHandles;
+    uint256 private _nextLiquidationId = 1;
+
+    /**
+     * @notice Finalize position close with decrypted values
+     * @dev Step 2: Verify decryption proof and process close
+     * @param closeId The close request ID
+     * @param abiEncodedClearValues ABI encoded (uint64 finalAmount, uint64 collateral)
+     * @param decryptionProof The KMS decryption proof
+     */
+    function finalizePositionClose(
+        uint256 closeId,
+        bytes memory abiEncodedClearValues,
+        bytes memory decryptionProof
+    ) external nonReentrant {
+        PendingClose storage pending = pendingCloses[closeId];
+        require(!pending.processed, "Already processed");
+        require(pending.user != address(0), "Invalid request");
+
+        CloseHandles storage handles = _closeHandles[closeId];
+
+        // CRITICAL: Verify KMS signatures!
+        bytes32[] memory cts = new bytes32[](2);
+        cts[0] = FHE.toBytes32(handles.finalAmountHandle);
+        cts[1] = FHE.toBytes32(handles.collateralHandle);
+        FHE.checkSignatures(cts, abiEncodedClearValues, decryptionProof);
+
+        // Decode decrypted values (collateral used for event/logging if needed)
+        (uint64 finalAmount, ) = abi.decode(abiEncodedClearValues, (uint64, uint64));
+
+        Position storage position = _positions[pending.positionId];
+        require(position.isOpen, "Position already closed");
+
+        // Mark as processed
+        pending.processed = true;
+        pending.finalAmount = finalAmount;
+
+        // Add final amount to user balance
+        euint64 currentBalance = _balances[pending.user];
+        euint64 amountToAdd = FHE.asEuint64(finalAmount);
+        euint64 newBalance;
+
+        if (euint64.unwrap(currentBalance) == 0) {
+            newBalance = amountToAdd;
+        } else {
+            newBalance = FHE.add(currentBalance, amountToAdd);
+        }
+
+        _balances[pending.user] = newBalance;
+        FHE.allowThis(newBalance);
+        FHE.allow(newBalance, pending.user);
+
+        // Close position
+        position.isOpen = false;
+
+        emit CloseProcessed(closeId, pending.positionId, finalAmount);
+        emit PositionClosed(pending.positionId, pending.user, block.timestamp);
+    }
+
+    /**
+     * @notice Prepare liquidation check (makes values publicly decryptable)
+     * @dev Step 1: Mark encrypted values for public decryption
+     * @param positionId Position to check
+     */
+    function prepareLiquidation(uint256 positionId) external nonReentrant {
+        Position storage position = _positions[positionId];
+
+        require(position.isOpen, "Position not open");
+        require(position.owner != msg.sender, "Cannot liquidate own position");
+
+        // Check if fully liquidatable
+        ebool isFullLoss = checkFullLiquidation(positionId);
+
+        // Make values publicly decryptable
+        FHE.makePubliclyDecryptable(isFullLoss);
+        FHE.makePubliclyDecryptable(position.collateral);
+
+        // Store pending liquidation
+        uint256 liqId = _nextLiquidationId++;
+        pendingLiquidations[liqId] = PendingLiquidation({
+            positionId: positionId,
+            liquidator: msg.sender,
+            processed: false,
+            canLiquidate: false,
+            collateralAmount: 0
+        });
+
+        // Store handles for verification
+        _liquidationHandles[liqId] = LiquidationHandles({
+            isFullLossHandle: isFullLoss,
+            collateralHandle: position.collateral
+        });
+
+        emit LiquidationRequested(positionId, msg.sender, liqId);
+    }
+
+    /**
+     * @notice Finalize liquidation with decrypted values
+     * @dev Step 2: Verify decryption proof and process liquidation
+     * @param liqId The liquidation request ID
+     * @param abiEncodedClearValues ABI encoded (bool canLiquidate, uint64 collateral)
+     * @param decryptionProof The KMS decryption proof
+     */
+    function finalizeLiquidation(
+        uint256 liqId,
+        bytes memory abiEncodedClearValues,
+        bytes memory decryptionProof
+    ) external nonReentrant {
+        PendingLiquidation storage pending = pendingLiquidations[liqId];
+        require(!pending.processed, "Already processed");
+        require(pending.liquidator != address(0), "Invalid request");
+
+        LiquidationHandles storage handles = _liquidationHandles[liqId];
+
+        // CRITICAL: Verify KMS signatures!
+        bytes32[] memory cts = new bytes32[](2);
+        cts[0] = FHE.toBytes32(handles.isFullLossHandle);
+        cts[1] = FHE.toBytes32(handles.collateralHandle);
+        FHE.checkSignatures(cts, abiEncodedClearValues, decryptionProof);
+
+        // Decode decrypted values
+        (bool canLiquidate, uint64 collateralAmount) = abi.decode(abiEncodedClearValues, (bool, uint64));
+
+        pending.processed = true;
+        pending.canLiquidate = canLiquidate;
+        pending.collateralAmount = collateralAmount;
+
+        emit LiquidationProcessed(liqId, pending.positionId, canLiquidate);
+    }
+
+    /**
+     * @notice Execute a verified liquidation
+     * @dev Step 3: Called after finalizeLiquidation confirms liquidation is valid
+     * @param liqId The processed liquidation ID
+     */
+    function executeLiquidation(uint256 liqId) external nonReentrant {
+        PendingLiquidation storage pending = pendingLiquidations[liqId];
+
+        require(pending.processed, "Not processed yet");
+        require(pending.canLiquidate, "Cannot liquidate");
+        require(pending.liquidator != address(0), "Invalid request");
+
+        Position storage position = _positions[pending.positionId];
+        require(position.isOpen, "Position already closed");
+
+        // Close position
+        position.isOpen = false;
+
+        // Distribute collateral
+        uint256 collateral = pending.collateralAmount;
+
+        // 5% to liquidator
+        uint256 liquidatorReward = (collateral * LIQUIDATOR_REWARD_BPS) / 10000;
+
+        // Remaining 95% split 50/50 between LP and protocol
+        uint256 remaining = collateral - liquidatorReward;
+        uint256 lpShare = (remaining * LP_SHARE_BPS) / 10000;
+        uint256 protocolShare = remaining - lpShare;
+
+        // Credit rewards
+        liquidatorRewards[pending.liquidator] += liquidatorReward;
+        pendingLpRewards += lpShare;
+        pendingProtocolRevenue += protocolShare;
+
+        // Track totals
+        totalLiquidationProceeds += collateral;
+        totalFeesCollected += collateral;
+
+        emit PositionAutoLiquidated(
+            pending.positionId,
+            position.owner,
+            pending.liquidator,
+            collateral,
+            block.timestamp
+        );
+        emit RevenueDistributed(collateral, lpShare, protocolShare, block.timestamp);
+    }
+
+    /**
+     * @notice Get pending close request status
+     * @param closeId Close request ID
+     */
+    function getPendingClose(uint256 closeId) external view returns (
+        uint256 positionId,
+        address user,
+        bool processed,
+        uint256 finalAmount
+    ) {
+        PendingClose storage pending = pendingCloses[closeId];
+        return (pending.positionId, pending.user, pending.processed, pending.finalAmount);
+    }
+
+    /**
+     * @notice Get pending liquidation status
+     * @param liqId Liquidation request ID
+     */
+    function getPendingLiquidation(uint256 liqId) external view returns (
+        uint256 positionId,
+        address liquidator,
+        bool processed,
+        bool canLiquidate,
+        uint256 collateralAmount
+    ) {
+        PendingLiquidation storage pending = pendingLiquidations[liqId];
+        return (
+            pending.positionId,
+            pending.liquidator,
+            pending.processed,
+            pending.canLiquidate,
+            pending.collateralAmount
+        );
     }
 
     // ============================================
