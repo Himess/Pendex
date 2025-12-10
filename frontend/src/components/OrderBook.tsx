@@ -4,8 +4,8 @@ import { useMemo, useEffect, useState } from "react";
 import { Lock, RefreshCw, Shield, Eye, EyeOff, Info } from "lucide-react";
 import { Asset } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { useAssetPrice, useAsset } from "@/lib/contracts/hooks";
-import { keccak256, toHex } from "viem";
+import { useLiveAssetPrice } from "@/hooks/useLiveOracle";
+import { useCurrentNetwork } from "@/lib/contracts/hooks";
 
 interface OrderBookProps {
   selectedAsset: Asset | null;
@@ -20,15 +20,6 @@ interface OrderLevel {
   // Simulated encrypted data
   encryptedSize: string;
   encryptedTrader: string;
-}
-
-interface OracleAsset {
-  name: string;
-  symbol: string;
-  basePrice: bigint;
-  isActive: boolean;
-  totalLongOI: bigint;
-  totalShortOI: bigint;
 }
 
 // Simülasyon için şifrelenmiş veri üret
@@ -112,37 +103,19 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
   const [showEncrypted, setShowEncrypted] = useState(true); // FHE modunu göster/gizle
   const [showInfo, setShowInfo] = useState(false); // FHE bilgi paneli
 
-  // Generate asset ID for oracle lookup
-  const assetId = useMemo(() => {
-    if (!selectedAsset) return undefined;
-    return keccak256(toHex(selectedAsset.symbol.toUpperCase())) as `0x${string}`;
-  }, [selectedAsset]);
+  // Use same hook as MarketStats and PriceChart for consistent pricing
+  const network = useCurrentNetwork();
+  const { asset: oracleAsset, refresh } = useLiveAssetPrice(
+    selectedAsset?.symbol || "",
+    network
+  );
 
-  // Fetch live price from oracle
-  const { data: oraclePrice, refetch: refetchPrice } = useAssetPrice(assetId);
+  // Use oracle price if available, fallback to prop or asset price
+  const livePrice = oracleAsset?.price ?? propPrice ?? selectedAsset?.price ?? 100;
 
-  // Fetch asset data including OI
-  const { data: assetData, refetch: refetchAsset } = useAsset(assetId);
-
-  // Convert oracle price (6 decimals) to display price
-  const livePrice = useMemo(() => {
-    if (oraclePrice) {
-      return Number(oraclePrice) / 1e6;
-    }
-    return propPrice || selectedAsset?.price || 100;
-  }, [oraclePrice, propPrice, selectedAsset]);
-
-  // Get OI data
-  const { longOI, shortOI } = useMemo(() => {
-    if (assetData) {
-      const data = assetData as OracleAsset;
-      return {
-        longOI: Number(data.totalLongOI) / 1e6,
-        shortOI: Number(data.totalShortOI) / 1e6,
-      };
-    }
-    return { longOI: 0, shortOI: 0 };
-  }, [assetData]);
+  // Get OI data from oracle
+  const longOI = oracleAsset?.totalLongOI ?? 0;
+  const shortOI = oracleAsset?.totalShortOI ?? 0;
 
   // Generate order book with live data
   const { asks, bids } = useMemo(() => {
@@ -156,21 +129,21 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
   useEffect(() => {
     if (!selectedAsset) return;
 
-    const refresh = async () => {
+    const doRefresh = async () => {
       setIsRefreshing(true);
-      await Promise.all([refetchPrice(), refetchAsset()]);
+      await refresh();
       setLastUpdate(new Date());
       setIsRefreshing(false);
     };
 
-    // Initial fetch
-    refresh();
+    // Initial fetch handled by useLiveOracle hook
+    setLastUpdate(new Date());
 
-    // Set up interval
-    const interval = setInterval(refresh, 10000);
+    // Set up interval for manual refresh indicator
+    const interval = setInterval(doRefresh, 10000);
 
     return () => clearInterval(interval);
-  }, [selectedAsset, refetchPrice, refetchAsset]);
+  }, [selectedAsset, refresh]);
 
   const maxTotal = Math.max(
     ...asks.map(a => a.total),
@@ -229,8 +202,8 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
               isRefreshing && "animate-spin"
             )}
             onClick={() => {
-              refetchPrice();
-              refetchAsset();
+              setIsRefreshing(true);
+              refresh().finally(() => setIsRefreshing(false));
             }}
           />
           <span className="text-[10px] text-gold">Live</span>
@@ -317,7 +290,7 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
               <span className="text-lg font-bold text-text-primary font-mono">
                 ${formatPrice(livePrice)}
               </span>
-              {oraclePrice && (
+              {oracleAsset && (
                 <span className="text-[9px] text-success px-1 py-0.5 bg-success/10 rounded">
                   LIVE
                 </span>

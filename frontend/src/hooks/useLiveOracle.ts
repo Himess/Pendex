@@ -138,7 +138,7 @@ export function useLiveOracle(network: SupportedNetwork = "sepolia"): UseLiveOra
 
 // Hook to get a single asset's live price
 export function useLiveAssetPrice(symbol: string, network: SupportedNetwork = "sepolia") {
-  const { assets, isLoading, error, lastUpdate } = useLiveOracle(network);
+  const { assets, isLoading, error, lastUpdate, refresh } = useLiveOracle(network);
 
   const asset = assets.find(a => a.symbol.toLowerCase() === symbol.toLowerCase());
 
@@ -147,5 +147,6 @@ export function useLiveAssetPrice(symbol: string, network: SupportedNetwork = "s
     isLoading,
     error,
     lastUpdate,
+    refresh,
   };
 }

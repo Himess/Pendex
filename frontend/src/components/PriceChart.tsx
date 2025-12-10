@@ -85,7 +85,10 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
 
   // Initialize chart - only runs on client side
   const initChart = useCallback(async () => {
-    if (!isBrowser || !mounted || !chartContainerRef.current || !selectedAsset) return;
+    if (!isBrowser || !mounted || !chartContainerRef.current || !selectedAsset) {
+      console.log("Chart init skipped:", { isBrowser, mounted, hasContainer: !!chartContainerRef.current, hasAsset: !!selectedAsset });
+      return;
+    }
 
     // Cleanup previous chart
     if (chartRef.current) {
@@ -103,11 +106,14 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
 
       if (!chartContainerRef.current) return;
 
-      // Get container dimensions - use setTimeout to ensure layout is complete
+      // Get container dimensions - use fallback values for SSR/hydration
       const container = chartContainerRef.current;
       const rect = container.getBoundingClientRect();
-      const width = rect.width || container.clientWidth || 800;
-      const height = rect.height || container.clientHeight || 400;
+      // Ensure minimum dimensions
+      const width = Math.max(rect.width || container.clientWidth || 800, 400);
+      const height = Math.max(rect.height || container.clientHeight || 400, 300);
+
+      console.log("Chart dimensions:", { width, height });
 
       const chart = createChart(container, {
         width,
@@ -211,10 +217,28 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
     setIsChartReady(false);
     setChartInitialized(false);
 
-    // Small delay to ensure container has dimensions
-    const timer = setTimeout(() => {
-      initChart();
-    }, 100);
+    // Multiple attempts with increasing delays to handle hydration issues
+    let attempts = 0;
+    const maxAttempts = 5;
+    let timer: NodeJS.Timeout;
+
+    const tryInit = () => {
+      attempts++;
+      console.log(`Chart init attempt ${attempts}/${maxAttempts}`);
+
+      if (chartContainerRef.current && chartContainerRef.current.clientWidth > 0) {
+        initChart();
+      } else if (attempts < maxAttempts) {
+        // Retry with exponential backoff
+        timer = setTimeout(tryInit, 100 * attempts);
+      } else {
+        console.warn("Chart container not ready after max attempts, forcing init");
+        initChart();
+      }
+    };
+
+    // Start first attempt after a short delay
+    timer = setTimeout(tryInit, 150);
 
     return () => {
       clearTimeout(timer);
