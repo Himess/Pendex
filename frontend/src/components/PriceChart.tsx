@@ -161,7 +161,9 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
         },
       });
 
-      const candlestickSeries = (chart as any).addCandlestickSeries({
+      // lightweight-charts v5 API: use addSeries with CandlestickSeries
+      const { CandlestickSeries } = await import("lightweight-charts");
+      const candlestickSeries = chart.addSeries(CandlestickSeries, {
         upColor: "#10B981",
         downColor: "#EF4444",
         borderUpColor: "#10B981",

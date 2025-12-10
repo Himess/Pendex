@@ -11,9 +11,9 @@ const ORACLE_ABI = [
   "function getCurrentPrice(bytes32 assetId) public view returns (uint64)",
 ];
 
-// RPC endpoints
+// RPC endpoints - use public RPC to avoid rate limiting
 const RPC_URLS: Record<SupportedNetwork, string> = {
-  sepolia: "https://sepolia.infura.io/v3/84842078b09946638c03157f83405213",
+  sepolia: "https://rpc.sepolia.org",
   hardhat: "http://127.0.0.1:8545",
 };
 
@@ -39,8 +39,8 @@ interface UseLiveOracleReturn {
   refresh: () => Promise<void>;
 }
 
-// Default polling interval (3 seconds)
-const POLL_INTERVAL = 3000;
+// Default polling interval (10 seconds to avoid rate limiting)
+const POLL_INTERVAL = 10000;
 
 export function useLiveOracle(network: SupportedNetwork = "sepolia"): UseLiveOracleReturn {
   const [assets, setAssets] = useState<LiveAsset[]>([]);
