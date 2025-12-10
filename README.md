@@ -153,30 +153,171 @@ FHE.allowTransient(ciphertext, address);      // Gas-optimized temp access
 
 ## Architecture
 
+### System Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              SHADOW PROTOCOL                                     │
+│                     Private Leveraged Pre-IPO Trading                           │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+                                    ┌─────────────┐
+                                    │    USER     │
+                                    │   Wallet    │
+                                    └──────┬──────┘
+                                           │
+                    ┌──────────────────────┼──────────────────────┐
+                    │                      │                      │
+                    ▼                      ▼                      ▼
+          ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+          │   FRONTEND      │    │  FHE SDK        │    │   EIP-712       │
+          │   (Next.js)     │    │  (Encryption)   │    │   (Signatures)  │
+          └────────┬────────┘    └────────┬────────┘    └────────┬────────┘
+                   │                      │                      │
+                   │         ┌────────────┴────────────┐         │
+                   │         │  Encrypted Inputs       │         │
+                   │         │  (handles + proofs)     │         │
+                   │         └────────────┬────────────┘         │
+                   │                      │                      │
+                   └──────────────────────┼──────────────────────┘
+                                          │
+                                          ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           ETHEREUM SEPOLIA + ZAMA FHE                           │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  ┌───────────────────────────────────────────────────────────────────────────┐  │
+│  │                         SHADOWVAULT (Core)                                │  │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐           │  │
+│  │  │ Encrypted       │  │ Anonymous       │  │ Encrypted       │           │  │
+│  │  │ Positions       │  │ Positions       │  │ Limit Orders    │           │  │
+│  │  │                 │  │                 │  │                 │           │  │
+│  │  │ • euint64 coll  │  │ • eaddress owner│  │ • euint64 price │           │  │
+│  │  │ • euint64 size  │  │ • euint64 coll  │  │ • euint64 size  │           │  │
+│  │  │ • euint64 entry │  │ • euint64 size  │  │ • ebool isLong  │           │  │
+│  │  │ • ebool isLong  │  │ • ebool isLong  │  │                 │           │  │
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘           │  │
+│  │                                                                           │  │
+│  │  FHE Operations: add, sub, mul, div, select, gt, lt, eq, rand            │  │
+│  └───────────────────────────────────────────────────────────────────────────┘  │
+│                                          │                                      │
+│            ┌─────────────────────────────┼─────────────────────────────┐        │
+│            │                             │                             │        │
+│            ▼                             ▼                             ▼        │
+│  ┌─────────────────┐          ┌─────────────────┐          ┌─────────────────┐  │
+│  │   SHADOWUSD     │          │  SHADOWORACLE   │          │ LIQUIDITYPOOL   │  │
+│  │   (ERC-7984)    │          │                 │          │  (GMX-style)    │  │
+│  │                 │          │  • Base prices  │          │                 │  │
+│  │ • Encrypted     │          │  • Demand mod   │          │ • Encrypted LP  │  │
+│  │   balances      │◄────────►│  • OI tracking  │◄────────►│   balances      │  │
+│  │ • Confidential  │          │  • 17 Pre-IPO   │          │ • Epoch rewards │  │
+│  │   transfers     │          │    assets       │          │ • Fee sharing   │  │
+│  │ • Operators     │          │                 │          │                 │  │
+│  └─────────────────┘          └─────────────────┘          └─────────────────┘  │
+│                                          │                                      │
+└──────────────────────────────────────────┼──────────────────────────────────────┘
+                                           │
+                                           ▼
+                              ┌─────────────────────┐
+                              │   MARKET MAKER      │
+                              │   BOT (Off-chain)   │
+                              │                     │
+                              │ • Simulates trades  │
+                              │ • Updates OI        │
+                              │ • Price discovery   │
+                              └─────────────────────┘
+```
+
+### Data Flow
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                            TRADING FLOW                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+1. DEPOSIT                    2. OPEN POSITION                3. CLOSE POSITION
+   ─────────                     ─────────────                   ──────────────
+
+   User                          User                            User
+    │                             │                               │
+    │ encrypt(amount)             │ encrypt(collateral,           │ prepareClose()
+    │                             │         leverage,             │      │
+    ▼                             │         isLong)               ▼      │
+┌────────┐                        ▼                          ┌────────┐  │
+│ FHE.   │                   ┌────────┐                      │ FHE.   │  │
+│ from   │                   │ FHE.   │                      │ make   │  │
+│External│                   │ from   │                      │Publicly│  │
+└───┬────┘                   │External│                      │Decrypt │  │
+    │                        └───┬────┘                      └───┬────┘  │
+    ▼                            │                               │      │
+┌────────┐                       ▼                               ▼      │
+│_balance│                  ┌─────────┐                    ┌─────────┐  │
+│[user]  │                  │Position │                    │ Zama    │  │
+│ += amt │                  │{        │                    │ Gateway │  │
+└────────┘                  │ collat, │                    │ decrypt │  │
+                            │ size,   │                    └────┬────┘  │
+                            │ entry,  │                         │      │
+                            │ isLong  │                         ▼      │
+                            │}        │                    finalizeClose()
+                            └─────────┘                    checkSignatures()
+                                                           transfer funds
+```
+
+### Privacy Guarantees
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         WHAT'S ENCRYPTED (FHE)                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  POSITIONS                    ORDERS                    BALANCES             │
+│  ─────────                    ──────                    ────────             │
+│  ✓ Collateral amount          ✓ Trigger price           ✓ sUSD balance       │
+│  ✓ Position size              ✓ Order size              ✓ Vault balance      │
+│  ✓ Entry price                ✓ Direction               ✓ LP tokens          │
+│  ✓ Leverage                   ✓ Owner (optional)        ✓ Pending rewards    │
+│  ✓ Direction (long/short)                                                    │
+│  ✓ Owner address (optional)                                                  │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                         WHAT'S PUBLIC                                        │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  • Asset being traded (SpaceX, OpenAI, etc.)                                │
+│  • Position open/close status                                                │
+│  • Timestamp of operations                                                   │
+│  • Total Open Interest (aggregated, not individual)                         │
+│  • Mark prices (derived from OI)                                            │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Project Structure
+
 ```
 shadow-protocol/
 ├── contracts/
 │   ├── core/
-│   │   ├── ShadowVault.sol          # Main trading vault (FHE positions)
-│   │   ├── ShadowLiquidityPool.sol  # LP pool with encrypted staking
-│   │   └── ShadowOracle.sol         # Price oracle with demand modifier
+│   │   ├── ShadowVault.sol          # Main trading vault (1800+ lines)
+│   │   ├── ShadowLiquidityPool.sol  # GMX-style LP pool
+│   │   └── ShadowOracle.sol         # Price oracle + demand modifier
 │   ├── tokens/
-│   │   └── ShadowUSD.sol            # Stablecoin (OpenZeppelin ERC7984)
-│   ├── bots/
-│   │   └── ShadowMarketMaker.sol    # Automated market maker bot
-│   └── interfaces/
-│       └── IShadowTypes.sol         # Shared types & structs
+│   │   └── ShadowUSD.sol            # ERC-7984 confidential stablecoin
+│   └── bots/
+│       └── ShadowMarketMaker.sol    # On-chain market maker
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                     # Next.js 14 pages
-│   │   ├── components/              # React components
-│   │   ├── lib/
-│   │   │   ├── fhe/client.ts        # fhevmjs SDK integration
-│   │   │   └── contracts/           # Contract ABIs & hooks
-│   │   └── hooks/                   # Custom React hooks
-│   └── public/
+│   │   ├── app/                     # Next.js 14 App Router
+│   │   │   ├── trade/               # Trading interface
+│   │   │   ├── wallet/              # Wallet + decryption + operators
+│   │   │   ├── markets/             # Asset listings
+│   │   │   └── admin/               # Admin dashboard
+│   │   └── lib/
+│   │       └── fhe/client.ts        # Zama Relayer SDK integration
+├── test/
+│   └── ShadowProtocol.test.ts       # 53 passing tests
 └── scripts/
-    └── runBotSimple.ts              # Market maker bot script
+    └── runBotSimple.ts              # Market maker bot
 ```
 
 ---
