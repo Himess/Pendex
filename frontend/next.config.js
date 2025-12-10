@@ -21,7 +21,7 @@ const nextConfig = {
     "@reown/appkit",
   ],
   webpack: (config, { isServer }) => {
-    // Node.js polyfills for browser
+    // Node.js polyfills for browser - use require.resolve for actual polyfills
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
@@ -36,10 +36,12 @@ const nextConfig = {
       assert: false,
       os: false,
       path: false,
-      events: false,
-      buffer: false,
       util: false,
       querystring: false,
+      // These need actual polyfills for WalletConnect
+      events: require.resolve("events/"),
+      buffer: require.resolve("buffer/"),
+      process: require.resolve("process/browser"),
     };
 
     // Define global for browser (needed by WalletConnect/crypto libraries)
@@ -48,14 +50,9 @@ const nextConfig = {
         new webpack.ProvidePlugin({
           global: ["globalThis"],
           Buffer: ["buffer", "Buffer"],
-          process: "process/browser",
+          process: ["process/browser"],
         })
       );
-
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        global: "globalThis",
-      };
 
       // Handle ESM/CJS issues
       config.module.rules.push({
