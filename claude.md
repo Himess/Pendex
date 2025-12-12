@@ -1,5 +1,5 @@
 # Shadow Protocol - Claude Memory File
-**Son Güncelleme:** 2025-12-11
+**Son Güncelleme:** 2025-12-11 (Session 2)
 
 ## Project Overview
 **Shadow Protocol** - FHE Pre-IPO Leverage Trading Platform for Zama Builder Track Hackathon
@@ -14,48 +14,28 @@
 
 ---
 
-## CRITICAL: Network Configuration
+## PROJE DURUMU: 9.5/10
 
-### ZAMA AYRI BIR CHAIN DEGIL!
-- Zama, **Ethereum Sepolia** uzerinde FHE saglıyor
-- Sadece IKI network:
-  1. **Local Hardhat** - Mock FHE (test)
-  2. **Ethereum Sepolia** - Gercek FHE
+### BU SESSION'DA YAPILANLAR (11 Aralik 2025 - Session 2)
+
+#### UX & Animation Improvements
+10. `8463a1c` - Live order book, FHE encryption animations, UX improvements
+
+### ONCEKI SESSION (10-11 Aralik)
+1. `655c5a3` - ACL permissions fix
+2. `4bc80ab` - global polyfill
+3. `278ad8c` - WalletConnect polyfills
+4. `80c310d` - require.resolve polyfills
+5. `b79c12d` - DefinePlugin for global
+6. `194c6e9` - Chart retry + price unified
+7. `bdda987` - Chart v5 API + public RPC
+8. `a02cdad` - 17 → 6 assets + timeframes
+9. `f0f8a07` - TradingView drawing tools
+10. `36c0d8d` - claude.md update
 
 ---
 
-## Contract Addresses (Sepolia)
-```
-ShadowOracle:            0xe0Fa3bbeF65d8Cda715645AE02a50874C04BCb17
-ShadowMarketMakerSimple: 0x4831ac8D60cF7f1B01DeEeA12B3A0fDB083355fb
-ShadowVault:             0xf6C0B8C7332080790a9425c0B888F74e8e9ff5B5
-ShadowUSD:               0x9093B02c4Ea2402EC72C2ca9dAAb994F7578fAFb
-```
-
-**Deployer:** `0xad850C8eB45E80b99ad76A22fBDd0b04F4A1FD27`
-
----
-
-## PROJE DURUMU (11 Aralik 2025)
-
-### PUAN: 9/10
-
-### BU SESSION'DA YAPILANLAR (10-11 Aralik 2025)
-
-#### Vercel Deployment Fix (7 Commit)
-1. `655c5a3` - ACL permissions fix (view → non-view + FHE.allow)
-2. `4bc80ab` - global polyfill for browser compatibility
-3. `278ad8c` - WalletConnect polyfills (transpilePackages)
-4. `80c310d` - require.resolve for events/buffer/process
-5. `b79c12d` - DefinePlugin for global (NOT ProvidePlugin!)
-6. `194c6e9` - Chart retry logic + unified price source
-7. `bdda987` - Chart v5 API + public RPC for rate limiting
-
-#### Asset & Chart Improvements
-8. `a02cdad` - Asset sayisi 17 → 6 (en degerli sirketler)
-9. `f0f8a07` - Professional TradingView-style drawing tools
-
-### ASSET LISTESI (6 Sirket)
+## ASSET LISTESI (6 Sirket)
 | Sira | Sirket | Valuation | Kategori |
 |------|--------|-----------|----------|
 | 1 | SpaceX | $350B | Aerospace |
@@ -65,9 +45,13 @@ ShadowUSD:               0x9093B02c4Ea2402EC72C2ca9dAAb994F7578fAFb
 | 5 | Databricks | $62B | Data |
 | 6 | Anthropic | $61B | AI |
 
-### CHART OZELLIKLERI
-- **Timeframes:** 1M, 5M, 1H, 1D (hepsi calisiyor!)
-- **2 Aylik History:** FHE Launch badge ile (Oct 11)
+---
+
+## FRONTEND OZELLIKLERI
+
+### PriceChart.tsx (850+ lines)
+- **Timeframes:** 1M, 5M, 1H, 1D (hepsi calisiyor)
+- **2 Aylik History:** FHE Launch badge ile
 - **TradingView Cizim Araclari:**
 
 | Tool | Shortcut | Aciklama |
@@ -82,97 +66,85 @@ ShadowUSD:               0x9093B02c4Ea2402EC72C2ca9dAAb994F7578fAFb
 | Price Range | P | Fiyat araligi + % degisim |
 | Text Note | N | Metin notu |
 
-- **Color Picker:** 8 renk secenegi
-- **Keyboard Shortcuts:** ESC iptal, Delete son cizimi sil
-- **Cursor Info:** Realtime fiyat + tarih gosterimi
+- Color Picker (8 renk), ESC iptal, Delete sil
+
+### OrderBook.tsx (CANLI!)
+- **Live Updates:** Her 500ms-2s'de otomatik guncelleme
+- **Price Flash:** Fiyat degisiminde yesil/kirmizi flash
+- **Recent Trades Ticker:** Son 5 islem altta gorunur
+- **Trades/Second:** ⚡ 0.8/s gibi gosterge
+- **Animated Depth Bars:** Smooth transitions
+
+### TradingPanel.tsx (FHE Animations)
+- **Encryption Modal:** Tam ekran animasyon
+  - Shield + Lock animated icons
+  - Progress bars: Collateral → Leverage → Direction
+  - "Powered by Zama FHE" badge
+- **Success Celebration:**
+  - Yesil checkmark animasyonu
+  - Confetti-style sparkles
+  - "Position Opened!" mesaji
+  - Etherscan link
+- **FHE Ready Badge:** Header'da status gostergesi
+- **Position Preview:** Gercek hesaplamalar (size, liq price, fees)
+
+### CSS Animasyonları (globals.css)
+```css
+@keyframes loading     - Progress bar animasyonu
+@keyframes scale-in    - Success checkmark icin
+@keyframes fly-out     - Confetti efekti
+.scrollbar-thin        - 4px ince scrollbar
+.scrollbar-none        - Gizli scrollbar
+```
 
 ---
 
-## TAMAMLANAN OZELLIKLER
-
-### Smart Contracts (3500+ lines)
-- [x] **ShadowVault.sol** (1800+ lines) - Ana trading vault
-- [x] **ShadowUSD.sol** (527 lines) - ERC-7984 confidential stablecoin
-- [x] **ShadowOracle.sol** (448 lines) - Demand-based pricing
-- [x] **ShadowLiquidityPool.sol** (618 lines) - GMX-style LP
-- [x] **ShadowMarketMaker.sol** - Trading bot
-
-### Frontend (Next.js 14)
-- [x] Professional trading UI
-- [x] **PriceChart.tsx** - TradingView-style with drawing tools
-- [x] Wallet page (Decrypt, Operators, Transfer, LP, History)
-- [x] Markets page (6 assets)
-- [x] Admin dashboard
-- [x] Dark/Light theme
-
-### Documentation
-- [x] README with diagrams
-- [x] **docs/FHEVM_INTEGRATION.md** (500+ lines)
-
-### Tests
-- [x] 53 passing tests
+## CONTRACT ADDRESSES (Sepolia)
+```
+ShadowOracle:            0xe0Fa3bbeF65d8Cda715645AE02a50874C04BCb17
+ShadowMarketMakerSimple: 0x4831ac8D60cF7f1B01DeEeA12B3A0fDB083355fb
+ShadowVault:             0xf6C0B8C7332080790a9425c0B888F74e8e9ff5B5
+ShadowUSD:               0x9093B02c4Ea2402EC72C2ca9dAAb994F7578fAFb
+```
 
 ---
 
 ## KRITIK TEKNIK BILGILER
 
-### Webpack Polyfills (Vercel icin)
+### Webpack Polyfills (Vercel)
 ```javascript
-// next.config.js - DOGRU YAPILANDIRMA
+// DefinePlugin KULLAN, ProvidePlugin DEGIL!
 config.plugins.push(
-  new webpack.DefinePlugin({
-    "global": "globalThis",  // DefinePlugin KULLAN, ProvidePlugin DEGIL!
-  })
+  new webpack.DefinePlugin({ "global": "globalThis" })
 );
 
-// Polyfills - require.resolve KULLAN
-resolve: {
-  fallback: {
-    events: require.resolve("events/"),
-    buffer: require.resolve("buffer/"),
-    process: require.resolve("process/browser"),
-  }
+// require.resolve KULLAN
+fallback: {
+  events: require.resolve("events/"),
+  buffer: require.resolve("buffer/"),
+  process: require.resolve("process/browser"),
 }
-
-// transpilePackages - WalletConnect icin GEREKLI
-transpilePackages: [
-  "@rainbow-me/rainbowkit",
-  "@walletconnect/core",
-  "@walletconnect/sign-client",
-  "@reown/appkit",
-  "@metamask/sdk",
-]
 ```
 
-### lightweight-charts v5 API Degisikligi
+### lightweight-charts v5
 ```javascript
-// ESKI (v4) - CALISMAZ!
-chart.addCandlestickSeries({...})
-
-// YENI (v5) - DOGRU
+// YANLIS: chart.addCandlestickSeries({...})
+// DOGRU:
 const { CandlestickSeries } = await import("lightweight-charts");
 chart.addSeries(CandlestickSeries, {...})
 ```
 
 ### RPC Rate Limiting
 ```javascript
-// YANLIS - Infura free tier hizla dolar
-const RPC = "https://sepolia.infura.io/v3/...";
-const POLL_INTERVAL = 3000; // 3 saniye
-
-// DOGRU - Public RPC + yavas polling
+// Public RPC + yavas polling
 const RPC = "https://rpc.sepolia.org";
 const POLL_INTERVAL = 10000; // 10 saniye
 ```
 
 ### ShadowUSD ACL Pattern
 ```solidity
-// YANLIS - view function ACL veremez!
-function confidentialBalanceOf() public view returns (euint64) {
-    return _balances[msg.sender];  // ACL yok, decrypt edilemez
-}
-
-// DOGRU - non-view + ACL grants
+// view function ACL VEREMEZ!
+// DOGRU: non-view + ACL grants
 function confidentialBalanceOf() public returns (euint64 balance) {
     balance = _balances[msg.sender];
     if (FHE.isInitialized(balance)) {
@@ -192,6 +164,56 @@ function confidentialBalanceOf() public returns (euint64 balance) {
 4. **Leverage Trading (2x-100x)** - Encrypted P&L
 5. **FHE Random** - randEuint64/randEuint8
 6. **Professional Chart** - TradingView-style drawing tools
+7. **Live Order Book** - Real-time updates + trade ticker
+8. **FHE Encryption Animations** - Visual feedback for encryption
+
+---
+
+## SMART CONTRACTS (3500+ lines)
+
+- **ShadowVault.sol** (1800+ lines) - Ana trading vault
+- **ShadowUSD.sol** (527 lines) - ERC-7984 confidential stablecoin
+- **ShadowOracle.sol** (448 lines) - Demand-based pricing
+- **ShadowLiquidityPool.sol** (618 lines) - GMX-style LP
+- **ShadowMarketMaker.sol** (421 lines) - Trading bot
+
+---
+
+## DOSYA YAPISI
+
+```
+shadow-protocol/
+├── contracts/
+│   ├── core/
+│   │   ├── ShadowVault.sol
+│   │   ├── ShadowOracle.sol
+│   │   └── ShadowLiquidityPool.sol
+│   ├── tokens/
+│   │   └── ShadowUSD.sol
+│   └── bots/
+│       └── ShadowMarketMakerSimple.sol
+├── frontend/
+│   ├── next.config.js          - Webpack polyfills
+│   └── src/
+│       ├── app/
+│       │   ├── globals.css     - Animasyonlar
+│       │   ├── trade/          - Trading UI
+│       │   ├── wallet/         - Decrypt + Operators
+│       │   └── markets/        - 6 assets
+│       ├── components/
+│       │   ├── PriceChart.tsx  - Drawing tools (850+ lines)
+│       │   ├── OrderBook.tsx   - Live updates (430+ lines)
+│       │   └── TradingPanel.tsx - FHE animations (590+ lines)
+│       ├── hooks/
+│       │   └── useLiveOracle.ts
+│       └── lib/
+│           ├── constants.ts    - 6 asset definitions
+│           └── fhe/client.ts   - FHE SDK
+├── docs/
+│   └── FHEVM_INTEGRATION.md
+└── test/
+    └── ShadowProtocol.test.ts  (53 tests)
+```
 
 ---
 
@@ -220,41 +242,10 @@ npx hardhat run scripts/runBotSimple.ts --network sepolia
 
 ---
 
-## DOSYA YAPISI
+## KALAN ISLER
 
-```
-shadow-protocol/
-├── contracts/
-│   ├── core/
-│   │   ├── ShadowVault.sol       (1800+ lines)
-│   │   ├── ShadowOracle.sol      (448 lines)
-│   │   └── ShadowLiquidityPool.sol (618 lines)
-│   ├── tokens/
-│   │   └── ShadowUSD.sol         (527 lines)
-│   └── bots/
-│       └── ShadowMarketMakerSimple.sol (421 lines)
-├── frontend/
-│   ├── next.config.js            - Webpack polyfills (KRITIK!)
-│   └── src/
-│       ├── app/
-│       │   ├── trade/            - Trading UI
-│       │   ├── wallet/           - Decrypt + Operators
-│       │   ├── markets/          - 6 assets
-│       │   └── providers.tsx     - RPC config
-│       ├── components/
-│       │   └── PriceChart.tsx    - TradingView drawing tools (850+ lines)
-│       ├── hooks/
-│       │   └── useLiveOracle.ts  - Unified price source
-│       └── lib/
-│           ├── constants.ts      - 6 asset definitions
-│           ├── polyfills.ts      - Browser globals
-│           └── fhe/client.ts     - Relayer SDK
-├── docs/
-│   └── FHEVM_INTEGRATION.md      (500+ lines)
-├── test/
-│   └── ShadowProtocol.test.ts    (53 tests)
-└── README.md
-```
+- [ ] Portfolio Summary Card (nice to have)
+- [ ] Demo Video (kullanici cekecek)
 
 ---
 
@@ -262,9 +253,11 @@ shadow-protocol/
 
 Shadow Protocol hackathon icin tamamen hazir:
 - Vercel CANLI ve calisiyor
-- Chart profesyonel (TradingView-style tools)
+- Chart profesyonel (TradingView tools + 9 cizim araci)
+- Order Book canli (500ms-2s updates + trade ticker)
+- FHE animasyonlari (encryption modal + success celebration)
 - 6 buyuk Pre-IPO asset
 - Tum FHE features calisir durumda
-- 9 commit bu session'da push edildi
+- 11 commit bu session'larda push edildi
 
-**Eksik:** Demo video (kullanici cekecek)
+**Puan: 9.5/10**
