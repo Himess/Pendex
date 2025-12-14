@@ -1,5 +1,5 @@
 # Shadow Protocol - Claude Memory File
-**Son Güncelleme:** 2025-12-11 (Session 2)
+**Son Güncelleme:** 2025-12-11 (Session 2 - Final)
 
 ## Project Overview
 **Shadow Protocol** - FHE Pre-IPO Leverage Trading Platform for Zama Builder Track Hackathon
@@ -12,26 +12,29 @@
 **GitHub:** https://github.com/Himess/shadow-protocol
 **Vercel:** https://shadow-protocol-nine.vercel.app (CANLI!)
 
+**Local Path:** `/Users/himess/Projects/private-preipo` (SILME!)
+
 ---
 
 ## PROJE DURUMU: 9.5/10
 
-### BU SESSION'DA YAPILANLAR (11 Aralik 2025 - Session 2)
+### TUM COMMITLER (12 adet - 2 session)
 
-#### UX & Animation Improvements
-10. `8463a1c` - Live order book, FHE encryption animations, UX improvements
+#### Session 2 (11 Aralik 2025)
+- `d288197` - claude.md update (session 2)
+- `8463a1c` - Live order book, FHE encryption animations, UX improvements
 
-### ONCEKI SESSION (10-11 Aralik)
-1. `655c5a3` - ACL permissions fix
-2. `4bc80ab` - global polyfill
-3. `278ad8c` - WalletConnect polyfills
-4. `80c310d` - require.resolve polyfills
-5. `b79c12d` - DefinePlugin for global
-6. `194c6e9` - Chart retry + price unified
-7. `bdda987` - Chart v5 API + public RPC
-8. `a02cdad` - 17 → 6 assets + timeframes
-9. `f0f8a07` - TradingView drawing tools
-10. `36c0d8d` - claude.md update
+#### Session 1 (10-11 Aralik 2025)
+- `36c0d8d` - claude.md update
+- `f0f8a07` - TradingView drawing tools (9 arac)
+- `a02cdad` - 17 → 6 assets + timeframes
+- `bdda987` - Chart v5 API + public RPC
+- `194c6e9` - Chart retry + price unified
+- `b79c12d` - DefinePlugin for global
+- `80c310d` - require.resolve polyfills
+- `278ad8c` - WalletConnect polyfills
+- `4bc80ab` - global polyfill
+- `655c5a3` - ACL permissions fix
 
 ---
 
@@ -68,14 +71,14 @@
 
 - Color Picker (8 renk), ESC iptal, Delete sil
 
-### OrderBook.tsx (CANLI!)
+### OrderBook.tsx (430+ lines - CANLI!)
 - **Live Updates:** Her 500ms-2s'de otomatik guncelleme
 - **Price Flash:** Fiyat degisiminde yesil/kirmizi flash
 - **Recent Trades Ticker:** Son 5 islem altta gorunur
 - **Trades/Second:** ⚡ 0.8/s gibi gosterge
 - **Animated Depth Bars:** Smooth transitions
 
-### TradingPanel.tsx (FHE Animations)
+### TradingPanel.tsx (590+ lines - FHE Animations)
 - **Encryption Modal:** Tam ekran animasyon
   - Shield + Lock animated icons
   - Progress bars: Collateral → Leverage → Direction
@@ -105,6 +108,7 @@ ShadowOracle:            0xe0Fa3bbeF65d8Cda715645AE02a50874C04BCb17
 ShadowMarketMakerSimple: 0x4831ac8D60cF7f1B01DeEeA12B3A0fDB083355fb
 ShadowVault:             0xf6C0B8C7332080790a9425c0B888F74e8e9ff5B5
 ShadowUSD:               0x9093B02c4Ea2402EC72C2ca9dAAb994F7578fAFb
+Deployer:                0xad850C8eB45E80b99ad76A22fBDd0b04F4A1FD27
 ```
 
 ---
@@ -182,7 +186,7 @@ function confidentialBalanceOf() public returns (euint64 balance) {
 ## DOSYA YAPISI
 
 ```
-shadow-protocol/
+shadow-protocol/  (/Users/himess/Projects/private-preipo)
 ├── contracts/
 │   ├── core/
 │   │   ├── ShadowVault.sol
@@ -220,11 +224,16 @@ shadow-protocol/
 ## QUICK COMMANDS
 
 ```bash
+# Proje dizini
+cd /Users/himess/Projects/private-preipo
+
 # Test
 npx hardhat test  # 53 passing
 
-# Frontend
+# Frontend dev
 cd frontend && npm run dev
+
+# Frontend build
 cd frontend && npm run build
 
 # Trading Bot
@@ -242,6 +251,13 @@ npx hardhat run scripts/runBotSimple.ts --network sepolia
 
 ---
 
+## TEMIZLIK NOTLARI
+
+- `/tmp/Zolymarket` - Rakip proje klonu, silinebilir
+- `/Users/himess/Projects/private-preipo` - ANA PROJE, SILME!
+
+---
+
 ## KALAN ISLER
 
 - [ ] Portfolio Summary Card (nice to have)
@@ -252,12 +268,32 @@ npx hardhat run scripts/runBotSimple.ts --network sepolia
 ## SONUC
 
 Shadow Protocol hackathon icin tamamen hazir:
-- Vercel CANLI ve calisiyor
+- Vercel CANLI: https://shadow-protocol-nine.vercel.app
+- GitHub: https://github.com/Himess/shadow-protocol
 - Chart profesyonel (TradingView tools + 9 cizim araci)
 - Order Book canli (500ms-2s updates + trade ticker)
 - FHE animasyonlari (encryption modal + success celebration)
 - 6 buyuk Pre-IPO asset
 - Tum FHE features calisir durumda
-- 11 commit bu session'larda push edildi
+- 12 commit push edildi
 
 **Puan: 9.5/10**
+
+---
+
+## HIZLI BASLANGIÇ (Yeni Session)
+
+```bash
+# 1. Dizine git
+cd /Users/himess/Projects/private-preipo
+
+# 2. Git durumu kontrol
+git status
+git log --oneline -5
+
+# 3. Frontend calistir
+cd frontend && npm run dev
+
+# 4. Vercel'i kontrol et
+# https://shadow-protocol-nine.vercel.app
+```
