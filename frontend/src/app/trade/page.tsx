@@ -1,14 +1,47 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header, TradingPanel, PositionsTable, PriceChart, OrderBook, MarketStats } from "@/components";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Asset, ASSETS } from "@/lib/constants";
-import { Lock, ChevronDown, X, BookOpen } from "lucide-react";
+import { Lock, ChevronDown, X, BookOpen, GripHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLiveAssetPrice } from "@/hooks/useLiveOracle";
 import { useCurrentNetwork } from "@/lib/contracts/hooks";
+
+// Resizable divider component
+function ResizeDivider({ onDrag }: { onDrag: (deltaY: number) => void }) {
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = startY - moveEvent.clientY;
+      onDrag(deltaY);
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  }, [onDrag]);
+
+  return (
+    <div
+      className="h-2 bg-border hover:bg-gold/50 cursor-row-resize flex items-center justify-center transition-colors group"
+      onMouseDown={handleMouseDown}
+    >
+      <GripHorizontal className="w-4 h-4 text-text-muted group-hover:text-gold" />
+    </div>
+  );
+}
 
 // Mobile Bottom Sheet Component
 function MobileBottomSheet({
@@ -161,6 +194,13 @@ function TradeContent() {
   const [mobileTradeOpen, setMobileTradeOpen] = useState(false);
   const [mobileOrderBookOpen, setMobileOrderBookOpen] = useState(false);
 
+  // Resizable panels
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(280);
+
+  const handleBottomPanelResize = useCallback((deltaY: number) => {
+    setBottomPanelHeight(prev => Math.min(Math.max(prev + deltaY, 150), 500));
+  }, []);
+
   // Get live price
   const { asset: oracleAsset } = useLiveAssetPrice(
     selectedAsset?.symbol || "",
@@ -199,12 +239,18 @@ function TradeContent() {
           </div>
 
           {/* Chart Area */}
-          <div className="flex-1 p-2">
+          <div className="flex-1 p-2 min-h-0">
             <PriceChart selectedAsset={selectedAsset} />
           </div>
 
+          {/* Resizable Divider */}
+          <ResizeDivider onDrag={handleBottomPanelResize} />
+
           {/* Bottom Panel: Positions / Orders / History */}
-          <div className="h-[200px] border-t border-border bg-card flex flex-col">
+          <div
+            className="bg-card flex flex-col"
+            style={{ height: bottomPanelHeight }}
+          >
             {/* Tabs */}
             <div className="flex items-center border-b border-border px-2">
               <TabButton
@@ -245,9 +291,9 @@ function TradeContent() {
         </div>
 
         {/* Right Panel: Order Book + Trading Panel */}
-        <div className="w-[540px] flex border-l border-border bg-card hidden lg:flex">
+        <div className="w-[480px] flex border-l border-border bg-card hidden lg:flex">
           {/* Order Book */}
-          <div className="w-[250px] flex flex-col border-r border-border">
+          <div className="w-[220px] flex flex-col border-r border-border">
             {/* Tabs */}
             <div className="flex items-center border-b border-border">
               <TabButton
@@ -283,9 +329,7 @@ function TradeContent() {
 
           {/* Trading Panel */}
           <div className="flex-1 overflow-y-auto">
-            <ErrorBoundary>
-              <TradingPanel selectedAsset={selectedAsset} />
-            </ErrorBoundary>
+            <TradingPanel selectedAsset={selectedAsset} />
           </div>
         </div>
 
@@ -313,9 +357,7 @@ function TradeContent() {
           onClose={() => setMobileTradeOpen(false)}
           title={`Trade ${selectedAsset?.symbol || ""}`}
         >
-          <ErrorBoundary>
-            <TradingPanel selectedAsset={selectedAsset} />
-          </ErrorBoundary>
+          <TradingPanel selectedAsset={selectedAsset} />
         </MobileBottomSheet>
 
         {/* Mobile Order Book Sheet */}
