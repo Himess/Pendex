@@ -229,18 +229,19 @@ contract ShadowLiquidityPool is ZamaEthereumConfig, Ownable2Step, ReentrancyGuar
     /**
      * @notice Claim accumulated rewards
      * @dev Claims rewards from all epochs since last claim
+     * @param userLpTokens User's LP token balance (must be decrypted off-chain first)
      */
-    function claimRewards() external nonReentrant {
+    function claimRewards(uint64 userLpTokens) external nonReentrant {
         uint256 lastClaimed = lastClaimedEpoch[msg.sender];
         require(lastClaimed < currentEpoch, "No rewards to claim");
+        require(userLpTokens > 0, "No LP tokens");
 
-        // Calculate total rewards
+        // Calculate total rewards: sum of (epochRewardsPerToken * userLpTokens) for each epoch
         uint256 totalRewards = 0;
 
-        // Note: In production, this would use FHE operations with _lpBalances[msg.sender]
-        // For demo, we use public LP balance approximation
         for (uint256 epoch = lastClaimed + 1; epoch < currentEpoch; epoch++) {
-            totalRewards += epochRewardsPerToken[epoch];
+            // Rewards = rewardsPerToken * userLpTokens
+            totalRewards += (epochRewardsPerToken[epoch] * userLpTokens);
         }
 
         // Update last claimed epoch

@@ -11,8 +11,9 @@ import "solidity-coverage";
 import "./tasks/accounts";
 
 // Configuration from environment variables
-const MNEMONIC: string = process.env.MNEMONIC || "middle second long diesel success spirit gown quiz pluck clinic custom burger";
-const INFURA_API_KEY: string = process.env.INFURA_API_KEY || "84842078b09946638c03157f83405213";
+// IMPORTANT: Never commit real credentials! Use .env file
+const MNEMONIC: string = process.env.MNEMONIC || "test test test test test test test test test test test junk";
+const INFURA_API_KEY: string = process.env.INFURA_API_KEY || "";
 const ETHERSCAN_API_KEY: string = process.env.ETHERSCAN_API_KEY || "";
 
 const config: HardhatUserConfig = {

@@ -220,7 +220,7 @@ export default function CompanyDetailPage() {
             <div>
               <h3 className="text-xl font-bold mb-1 text-text-primary flex items-center gap-2">
                 <Lock className="w-5 h-5 text-gold" />
-                Trade {company.name} on Shadow Protocol
+                Trade {company.name} on Pendex
               </h3>
               <p className="text-text-muted">
                 Open encrypted leveraged positions with complete privacy

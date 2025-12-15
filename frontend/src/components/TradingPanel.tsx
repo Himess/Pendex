@@ -156,6 +156,13 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
   const [showEncryptAnimation, setShowEncryptAnimation] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
 
+  // Order type selection
+  const [orderType, setOrderType] = useState<"market" | "limit">("market");
+  const [limitPrice, setLimitPrice] = useState("");
+
+  // Anonymous mode toggle
+  const [isAnonymous, setIsAnonymous] = useState(false);
+
   // Advanced order types
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [stopLoss, setStopLoss] = useState("");
@@ -268,17 +275,22 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
     if (!isConnected) return "CONNECT WALLET";
     if (!selectedAsset) return "SELECT ASSET";
     if (!collateral) return "ENTER COLLATERAL";
+    if (orderType === "limit" && !limitPrice) return "ENTER LIMIT PRICE";
     if (fheInitializing) return "INITIALIZING FHE...";
     if (txStatus === "encrypting") return "ENCRYPTING...";
     if (txStatus === "pending") return "CONFIRM IN WALLET...";
     if (txStatus === "confirming") return "CONFIRMING...";
     if (txStatus === "success") return "ORDER PLACED!";
     if (txStatus === "error") return "TRY AGAIN";
-    return hasFHE ? "PLACE ENCRYPTED ORDER" : "PLACE ORDER";
+
+    const orderTypeLabel = orderType === "limit" ? "LIMIT" : "MARKET";
+    const anonymousLabel = isAnonymous ? "ANONYMOUS " : "";
+    return hasFHE ? `PLACE ${anonymousLabel}${orderTypeLabel} ORDER` : `PLACE ${orderTypeLabel} ORDER`;
   };
 
   const isButtonDisabled = !isConnected || !selectedAsset || !collateral || fheInitializing ||
-    txStatus === "encrypting" || txStatus === "pending" || txStatus === "confirming";
+    txStatus === "encrypting" || txStatus === "pending" || txStatus === "confirming" ||
+    (orderType === "limit" && !limitPrice);
 
   // Calculate estimated values
   const collateralNum = parseFloat(collateral) || 0;
@@ -314,6 +326,32 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
         </div>
 
         <div className="p-4 space-y-6">
+          {/* Order Type Toggle */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setOrderType("market")}
+              className={cn(
+                "py-2 rounded-lg text-sm font-medium transition-all",
+                orderType === "market"
+                  ? "bg-gold text-background"
+                  : "bg-card-hover text-text-muted hover:text-text-primary"
+              )}
+            >
+              Market
+            </button>
+            <button
+              onClick={() => setOrderType("limit")}
+              className={cn(
+                "py-2 rounded-lg text-sm font-medium transition-all",
+                orderType === "limit"
+                  ? "bg-gold text-background"
+                  : "bg-card-hover text-text-muted hover:text-text-primary"
+              )}
+            >
+              Limit
+            </button>
+          </div>
+
           {/* Long/Short Toggle */}
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -386,6 +424,55 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
             </div>
           </div>
 
+          {/* Limit Price Input - Only shown for limit orders */}
+          {orderType === "limit" && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-text-secondary">
+                LIMIT PRICE (USD)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={limitPrice}
+                  onChange={(e) => setLimitPrice(e.target.value)}
+                  placeholder={selectedAsset ? selectedAsset.price.toFixed(2) : "0.00"}
+                  className="input-field pr-16"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted text-sm">
+                  USD
+                </span>
+              </div>
+              <p className="text-xs text-text-muted">
+                Order executes when market price reaches your limit
+              </p>
+            </div>
+          )}
+
+          {/* Anonymous Mode Toggle */}
+          <div className="flex items-center justify-between p-3 bg-background rounded-lg border border-border">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-gold" />
+              <div>
+                <p className="text-sm font-medium text-text-primary">Anonymous Mode</p>
+                <p className="text-xs text-text-muted">Hide your address on-chain</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsAnonymous(!isAnonymous)}
+              className={cn(
+                "w-12 h-6 rounded-full transition-colors relative",
+                isAnonymous ? "bg-gold" : "bg-border"
+              )}
+            >
+              <div
+                className={cn(
+                  "absolute top-1 w-4 h-4 bg-white rounded-full transition-transform",
+                  isAnonymous ? "translate-x-7" : "translate-x-1"
+                )}
+              />
+            </button>
+          </div>
+
           {/* Advanced Orders Toggle */}
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
@@ -454,6 +541,22 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
             <h3 className="text-sm font-medium text-text-secondary">POSITION PREVIEW</h3>
 
             <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-text-muted">ORDER TYPE</span>
+                <span className="text-text-primary font-medium">
+                  {orderType === "limit" ? "Limit" : "Market"}
+                  {isAnonymous && <span className="text-gold ml-1">(Anonymous)</span>}
+                </span>
+              </div>
+              {orderType === "limit" && limitPrice && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-text-muted">LIMIT PRICE</span>
+                  <span className="text-gold font-mono">
+                    ${parseFloat(limitPrice).toFixed(2)}
+                    <Lock className="w-3 h-3 inline ml-1" />
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-text-muted">SIZE</span>
                 {collateralNum > 0 ? (

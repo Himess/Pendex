@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header, TradingPanel, PositionsTable, PriceChart, OrderBook, MarketStats } from "@/components";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Asset, ASSETS } from "@/lib/constants";
 import { Lock, ChevronDown, X, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -282,7 +283,9 @@ function TradeContent() {
 
           {/* Trading Panel */}
           <div className="flex-1 overflow-y-auto">
-            <TradingPanel selectedAsset={selectedAsset} />
+            <ErrorBoundary>
+              <TradingPanel selectedAsset={selectedAsset} />
+            </ErrorBoundary>
           </div>
         </div>
 
@@ -310,7 +313,9 @@ function TradeContent() {
           onClose={() => setMobileTradeOpen(false)}
           title={`Trade ${selectedAsset?.symbol || ""}`}
         >
-          <TradingPanel selectedAsset={selectedAsset} />
+          <ErrorBoundary>
+            <TradingPanel selectedAsset={selectedAsset} />
+          </ErrorBoundary>
         </MobileBottomSheet>
 
         {/* Mobile Order Book Sheet */}

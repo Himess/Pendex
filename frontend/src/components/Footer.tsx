@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Shield } from "lucide-react";
+import Image from "next/image";
 
 export function Footer() {
   return (
@@ -12,10 +12,14 @@ export function Footer() {
           {/* Brand Block */}
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-gold/20 flex items-center justify-center">
-                <Shield className="w-5 h-5 text-gold" />
-              </div>
-              <span className="font-bold text-lg text-text-primary">Shadow Protocol</span>
+              <Image
+                src="/logo.png"
+                alt="Pendex Logo"
+                width={32}
+                height={32}
+                className="w-8 h-8"
+              />
+              <span className="font-bold text-lg text-text-primary">Pendex</span>
             </div>
             <p className="text-sm text-text-muted leading-relaxed">
               Private leveraged trading for Pre-IPO synthetic assets.
@@ -54,7 +58,7 @@ export function Footer() {
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-xs text-text-muted">
-            &copy; 2025 Shadow Protocol. Built for Zama Builder Track.
+            &copy; 2025 Pendex. Built for Zama Builder Track.
           </p>
 
           {/* Social Links */}

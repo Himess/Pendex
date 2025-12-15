@@ -45,8 +45,8 @@ contract ShadowOracle is ZamaEthereumConfig, Ownable2Step, IShadowTypes {
     /// @notice Maximum demand modifier (20%)
     uint64 public constant MAX_DEMAND_MODIFIER = 20;
 
-    /// @notice Modifier per unit of OI imbalance
-    uint64 public constant DEMAND_MODIFIER_PER_UNIT = 1; // 0.1% per 1000 units imbalance
+    /// @notice OI imbalance threshold for 1% price change (e.g., 100000 = $100k imbalance)
+    uint256 public constant OI_IMBALANCE_THRESHOLD = 100000 * 1e6; // $100k in 6 decimals
 
     /// @notice Authorized contracts that can update OI (Vault, MarketMaker)
     mapping(address => bool) public authorizedContracts;
@@ -160,17 +160,25 @@ contract ShadowOracle is ZamaEthereumConfig, Ownable2Step, IShadowTypes {
      * @notice Get current price for an asset (includes demand modifier)
      * @param assetId Asset identifier
      * @return Current price with 6 decimals
+     * @dev Price formula: basePrice * (1 + demandModifier%)
+     *      demandModifier = (longOI - shortOI) / OI_IMBALANCE_THRESHOLD, capped at ±20%
+     *      Example: $200k more longs = +2% price, capped at 20%
      */
     function getCurrentPrice(bytes32 assetId) public view returns (uint64) {
         Asset storage asset = assets[assetId];
         require(asset.basePrice > 0, "Asset does not exist");
 
         // Calculate demand modifier based on OI imbalance
+        // Each OI_IMBALANCE_THRESHOLD of imbalance = 1% price change
         int256 oiDiff = int256(asset.totalLongOI) - int256(asset.totalShortOI);
 
-        // Calculate modifier percentage (capped at ±20%)
-        int256 modifierPercent = (oiDiff * int256(uint256(DEMAND_MODIFIER_PER_UNIT))) / 10000;
+        // modifierPercent = oiDiff / OI_IMBALANCE_THRESHOLD (in whole percent)
+        int256 modifierPercent;
+        if (OI_IMBALANCE_THRESHOLD > 0) {
+            modifierPercent = (oiDiff * 100) / int256(OI_IMBALANCE_THRESHOLD);
+        }
 
+        // Cap at ±MAX_DEMAND_MODIFIER (20%)
         if (modifierPercent > int256(uint256(MAX_DEMAND_MODIFIER))) {
             modifierPercent = int256(uint256(MAX_DEMAND_MODIFIER));
         } else if (modifierPercent < -int256(uint256(MAX_DEMAND_MODIFIER))) {
@@ -178,11 +186,13 @@ contract ShadowOracle is ZamaEthereumConfig, Ownable2Step, IShadowTypes {
         }
 
         // Apply modifier to base price
+        // adjustedPrice = basePrice * (100 + modifierPercent) / 100
         uint64 adjustedPrice;
         if (modifierPercent >= 0) {
-            adjustedPrice = asset.basePrice + uint64(uint256(modifierPercent) * asset.basePrice / 100);
+            adjustedPrice = uint64((uint256(asset.basePrice) * (100 + uint256(modifierPercent))) / 100);
         } else {
-            adjustedPrice = asset.basePrice - uint64(uint256(-modifierPercent) * asset.basePrice / 100);
+            uint256 absModifier = uint256(-modifierPercent);
+            adjustedPrice = uint64((uint256(asset.basePrice) * (100 - absModifier)) / 100);
         }
 
         return adjustedPrice;

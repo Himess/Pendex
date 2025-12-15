@@ -498,11 +498,12 @@ export function useClaimRewards() {
     hash,
   });
 
-  const claimRewards = () => {
+  const claimRewards = (userLpTokens: bigint) => {
     writeContract({
       address: CONTRACTS.shadowLiquidityPool,
       abi: SHADOW_LIQUIDITY_POOL_ABI,
       functionName: "claimRewards",
+      args: [userLpTokens],
     });
   };
 

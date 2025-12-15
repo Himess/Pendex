@@ -7,7 +7,7 @@ import { Providers } from "./providers";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Shadow Protocol | Private Leveraged Pre-IPO Trading",
+  title: "Pendex | Private Leveraged Pre-IPO Trading",
   description: "Trade pre-IPO stocks with leverage. All positions encrypted with FHE - nobody can see your trades.",
   icons: {
     icon: "/favicon.ico",

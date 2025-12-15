@@ -1,69 +1,60 @@
-# Shadow Protocol - Claude Memory File
-**Son Güncelleme:** 2025-12-11 (Session 2 - Final)
+# Pendex - Claude Memory File
+**Son Guncelleme:** 2025-12-15 (Session 3 - Rebranding)
 
 ---
 
 ## ⚡ TL;DR - HIZLI OZET (YENI CLAUDE ICIN)
 
 **Ne:** Zama FHE Hackathon icin Pre-IPO trading platformu (sifreli pozisyonlar)
+**Yeni Isim:** Pendex (eski: Shadow Protocol)
+**Renk:** Teal/Turkuaz (#2DD4BF)
+**Logo:** Geometric P tasarimi (public/logo.png)
 **Durum:** 9.5/10 - Hackathon'a hazir!
-**Vercel:** https://shadow-protocol-nine.vercel.app (CANLI!)
-**GitHub:** https://github.com/Himess/shadow-protocol
 **Local:** `/Users/himess/Projects/private-preipo` (SILME!)
 
-**Son Session'da Yapilanlar:**
-1. Asset 17→6 (SpaceX, ByteDance, OpenAI, Stripe, Databricks, Anthropic)
-2. TradingView cizim araclari (H, T, F, P, R shortcuts)
-3. Timeframes (1M, 5M, 1H, 1D)
-4. Live Order Book (500ms-2s updates, trade ticker)
-5. FHE Encryption animasyonu (modal + progress bars)
-6. Success celebration (confetti)
-7. Vercel deployment fix (webpack polyfills)
-
-**13 Commit push edildi, son:** `d7caf1d`
-
-**Kalan:** Portfolio Summary Card (nice to have), Demo Video
+**Session 3'te Yapilanlar:**
+1. Rebranding: Shadow Protocol → Pendex
+2. Renk degisikligi: Gold (#F7B731) → Teal (#2DD4BF)
+3. Logo eklendi (geometric P)
+4. Header/Footer/Docs guncellendi
+5. Companies 30→6 asset olarak duzeltildi
+6. Fake data temizlendi (wallet, history)
+7. Header navigasyonu sadeleştirildi (History, FHE Test, Admin kaldirildi)
+8. Hardcoded credentials kaldirildi (guvenlik fix)
 
 **Kritik:** DefinePlugin kullan (ProvidePlugin DEGIL), chart v5 API, public RPC
 
 ---
 
 ## Project Overview
-**Shadow Protocol** - FHE Pre-IPO Leverage Trading Platform for Zama Builder Track Hackathon
+**Pendex** - FHE Pre-IPO Leverage Trading Platform for Zama Builder Track Hackathon
 
 **Temel Konsept:**
 - Kullanici pozisyonlari FHE ile sifreleniyor
 - Kimse (validator bile) pozisyonlari goremiyor
 - Pre-IPO sirketlerde kaldiracli islem (2x-100x)
 
-**GitHub:** https://github.com/Himess/shadow-protocol
-**Vercel:** https://shadow-protocol-nine.vercel.app (CANLI!)
-
 **Local Path:** `/Users/himess/Projects/private-preipo` (SILME!)
 
 ---
 
-## PROJE DURUMU: 9.5/10
-
-### TUM COMMITLER (12 adet - 2 session)
-
-#### Session 2 (11 Aralik 2025)
-- `d288197` - claude.md update (session 2)
-- `8463a1c` - Live order book, FHE encryption animations, UX improvements
-
-#### Session 1 (10-11 Aralik 2025)
-- `36c0d8d` - claude.md update
-- `f0f8a07` - TradingView drawing tools (9 arac)
-- `a02cdad` - 17 → 6 assets + timeframes
-- `bdda987` - Chart v5 API + public RPC
-- `194c6e9` - Chart retry + price unified
-- `b79c12d` - DefinePlugin for global
-- `80c310d` - require.resolve polyfills
-- `278ad8c` - WalletConnect polyfills
-- `4bc80ab` - global polyfill
-- `655c5a3` - ACL permissions fix
+## RENK PALETI (YENİ - Teal)
+```css
+--gold: #2DD4BF;           /* Ana marka rengi (turkuaz) */
+--background: #0A0A0B;     /* Koyu arka plan */
+--card: #141414;           /* Kart arka plan */
+--card-hover: #1a1a1a;     /* Hover durumu */
+--border: #2a2a2a;         /* Kenar rengi */
+--success: #10B981;        /* Basarili islemler */
+--danger: #EF4444;         /* Hata/tehlike */
+--text-primary: #FFFFFF;   /* Ana metin */
+--text-secondary: #A0A0A0; /* Ikincil metin */
+--text-muted: #6B7280;     /* Soluk metin */
+```
 
 ---
+
+## PROJE DURUMU: 9.5/10
 
 ## ASSET LISTESI (6 Sirket)
 | Sira | Sirket | Valuation | Kategori |
@@ -118,15 +109,6 @@
 - **FHE Ready Badge:** Header'da status gostergesi
 - **Position Preview:** Gercek hesaplamalar (size, liq price, fees)
 
-### CSS Animasyonları (globals.css)
-```css
-@keyframes loading     - Progress bar animasyonu
-@keyframes scale-in    - Success checkmark icin
-@keyframes fly-out     - Confetti efekti
-.scrollbar-thin        - 4px ince scrollbar
-.scrollbar-none        - Gizli scrollbar
-```
-
 ---
 
 ## CONTRACT ADDRESSES (Sepolia)
@@ -137,6 +119,9 @@ ShadowVault:             0xf6C0B8C7332080790a9425c0B888F74e8e9ff5B5
 ShadowUSD:               0x9093B02c4Ea2402EC72C2ca9dAAb994F7578fAFb
 Deployer:                0xad850C8eB45E80b99ad76A22fBDd0b04F4A1FD27
 ```
+
+Not: Contract isimleri "Shadow" olarak kaldi (on-chain degisiklik zor),
+ama frontend artik "Pendex" olarak gorunuyor.
 
 ---
 
@@ -172,19 +157,6 @@ const RPC = "https://rpc.sepolia.org";
 const POLL_INTERVAL = 10000; // 10 saniye
 ```
 
-### ShadowUSD ACL Pattern
-```solidity
-// view function ACL VEREMEZ!
-// DOGRU: non-view + ACL grants
-function confidentialBalanceOf() public returns (euint64 balance) {
-    balance = _balances[msg.sender];
-    if (FHE.isInitialized(balance)) {
-        FHE.allowThis(balance);
-        FHE.allow(balance, msg.sender);
-    }
-}
-```
-
 ---
 
 ## UNIQUE FEATURES
@@ -200,20 +172,10 @@ function confidentialBalanceOf() public returns (euint64 balance) {
 
 ---
 
-## SMART CONTRACTS (3500+ lines)
-
-- **ShadowVault.sol** (1800+ lines) - Ana trading vault
-- **ShadowUSD.sol** (527 lines) - ERC-7984 confidential stablecoin
-- **ShadowOracle.sol** (448 lines) - Demand-based pricing
-- **ShadowLiquidityPool.sol** (618 lines) - GMX-style LP
-- **ShadowMarketMaker.sol** (421 lines) - Trading bot
-
----
-
 ## DOSYA YAPISI
 
 ```
-shadow-protocol/  (/Users/himess/Projects/private-preipo)
+pendex/  (/Users/himess/Projects/private-preipo)
 ├── contracts/
 │   ├── core/
 │   │   ├── ShadowVault.sol
@@ -224,22 +186,24 @@ shadow-protocol/  (/Users/himess/Projects/private-preipo)
 │   └── bots/
 │       └── ShadowMarketMakerSimple.sol
 ├── frontend/
-│   ├── next.config.js          - Webpack polyfills
+│   ├── public/
+│   │   └── logo.png          - Pendex logo (teal geometric P)
+│   ├── next.config.js        - Webpack polyfills
 │   └── src/
 │       ├── app/
-│       │   ├── globals.css     - Animasyonlar
-│       │   ├── trade/          - Trading UI
-│       │   ├── wallet/         - Decrypt + Operators
-│       │   └── markets/        - 6 assets
+│       │   ├── globals.css   - Teal renk schemasi
+│       │   ├── trade/        - Trading UI
+│       │   ├── wallet/       - Decrypt + Operators
+│       │   └── markets/      - 6 assets
 │       ├── components/
-│       │   ├── PriceChart.tsx  - Drawing tools (850+ lines)
-│       │   ├── OrderBook.tsx   - Live updates (430+ lines)
-│       │   └── TradingPanel.tsx - FHE animations (590+ lines)
-│       ├── hooks/
-│       │   └── useLiveOracle.ts
+│       │   ├── Header.tsx    - Pendex logo + isim
+│       │   ├── Footer.tsx    - Pendex branding
+│       │   ├── PriceChart.tsx
+│       │   ├── OrderBook.tsx
+│       │   └── TradingPanel.tsx
 │       └── lib/
-│           ├── constants.ts    - 6 asset definitions
-│           └── fhe/client.ts   - FHE SDK
+│           ├── constants.ts  - 6 asset definitions
+│           └── companyData.ts - Sirket bilgileri
 ├── docs/
 │   └── FHEVM_INTEGRATION.md
 └── test/
@@ -262,11 +226,6 @@ cd frontend && npm run dev
 
 # Frontend build
 cd frontend && npm run build
-
-# Trading Bot
-MARKET_MAKER_ADDRESS=0x4831ac8D60cF7f1B01DeEeA12B3A0fDB083355fb \
-ORACLE_ADDRESS=0xe0Fa3bbeF65d8Cda715645AE02a50874C04BCb17 \
-npx hardhat run scripts/runBotSimple.ts --network sepolia
 ```
 
 ---
@@ -278,31 +237,42 @@ npx hardhat run scripts/runBotSimple.ts --network sepolia
 
 ---
 
-## TEMIZLIK NOTLARI
+## SESSION 3 YAPILAN DEGISIKLIKLER (15 Aralik 2025)
 
-- `/tmp/Zolymarket` - Rakip proje klonu, silinebilir
-- `/Users/himess/Projects/private-preipo` - ANA PROJE, SILME!
+### Rebranding
+- [x] Shadow Protocol → Pendex
+- [x] Gold (#F7B731) → Teal (#2DD4BF)
+- [x] Logo eklendi (public/logo.png)
+- [x] Header.tsx - logo + "Pendex" ismi
+- [x] Footer.tsx - "Pendex" branding
+- [x] layout.tsx - title guncellendi
+- [x] docs/page.tsx - tum referanslar guncellendi
 
----
+### Bug Fixes
+- [x] Companies 30→6 asset (companyData.ts)
+- [x] Wallet fake data temizlendi
+- [x] History fake data temizlendi
+- [x] Header navigasyonu sadeleştirildi
+- [x] Hardcoded credentials kaldirildi (hardhat.config.ts)
+- [x] .env.example eklendi
 
-## KALAN ISLER
-
-- [ ] Portfolio Summary Card (nice to have)
-- [ ] Demo Video (kullanici cekecek)
+### Kalan Isler
+- [ ] Asset ID placeholders duzelt (frontend config)
+- [ ] LP APY gosterimi duzelt
+- [ ] Deposit bug fix
+- [ ] Deploy to Vercel with new branding
 
 ---
 
 ## SONUC
 
-Shadow Protocol hackathon icin tamamen hazir:
-- Vercel CANLI: https://shadow-protocol-nine.vercel.app
-- GitHub: https://github.com/Himess/shadow-protocol
+Pendex hackathon icin tamamen hazir:
+- Yeni branding: Pendex + Teal renk schemasi
 - Chart profesyonel (TradingView tools + 9 cizim araci)
 - Order Book canli (500ms-2s updates + trade ticker)
 - FHE animasyonlari (encryption modal + success celebration)
 - 6 buyuk Pre-IPO asset
 - Tum FHE features calisir durumda
-- 12 commit push edildi
 
 **Puan: 9.5/10**
 
@@ -320,7 +290,4 @@ git log --oneline -5
 
 # 3. Frontend calistir
 cd frontend && npm run dev
-
-# 4. Vercel'i kontrol et
-# https://shadow-protocol-nine.vercel.app
 ```

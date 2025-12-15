@@ -97,59 +97,21 @@ function formatApyFromBps(bps: bigint | undefined): number {
   return Number(bps) / 100; // 1500 bps = 15.00%
 }
 
-// Mock transaction history
-const TRANSACTIONS = [
-  {
-    id: "1",
-    type: "deposit",
-    amount: 5000,
-    timestamp: "2024-12-07 14:30",
-    status: "completed",
-    txHash: "0xabc...123",
-  },
-  {
-    id: "2",
-    type: "trade_pnl",
-    amount: 285,
-    asset: "OpenAI",
-    timestamp: "2024-12-07 12:15",
-    status: "completed",
-  },
-  {
-    id: "3",
-    type: "lp_deposit",
-    amount: 5000,
-    timestamp: "2024-12-07 10:00",
-    status: "completed",
-    txHash: "0xlp1...789",
-  },
-  {
-    id: "4",
-    type: "lp_reward",
-    amount: 75.5,
-    timestamp: "2024-12-06 00:00",
-    status: "completed",
-  },
-  {
-    id: "5",
-    type: "trade_pnl",
-    amount: -120,
-    asset: "SpaceX",
-    timestamp: "2024-12-06 18:45",
-    status: "completed",
-  },
-];
+// Transaction history - will be populated from on-chain events
+// For now, empty array until we implement event indexing
+const TRANSACTIONS: {
+  id: string;
+  type: string;
+  amount: number;
+  asset?: string;
+  timestamp: string;
+  status: string;
+  txHash?: string;
+}[] = [];
 
-// Mock P&L history
-const PNL_HISTORY = [
-  { date: "Dec 7", pnl: 345.2 },
-  { date: "Dec 6", pnl: -120.5 },
-  { date: "Dec 5", pnl: 520.8 },
-  { date: "Dec 4", pnl: 180.3 },
-  { date: "Dec 3", pnl: -85.2 },
-  { date: "Dec 2", pnl: 410.6 },
-  { date: "Dec 1", pnl: 296.4 },
-];
+// P&L history - will be populated from position data
+// For now, empty array until we implement position tracking
+const PNL_HISTORY: { date: string; pnl: number }[] = [];
 
 function formatTimeRemaining(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -436,7 +398,9 @@ export default function WalletPage() {
     if (unclaimedEpochs <= 0 || lpData.pendingRewards <= 0) return;
     setIsClaiming(true);
     try {
-      claimRewardsContract();
+      // Pass LP balance as parameter (converted to bigint with 6 decimals)
+      const lpTokens = BigInt(Math.floor(lpData.lpBalance * 1e6));
+      claimRewardsContract(lpTokens);
     } catch (error) {
       console.error("Claim rewards failed:", error);
     } finally {
@@ -1488,104 +1452,120 @@ export default function WalletPage() {
             {/* P&L Chart */}
             <div className="bg-card border border-border rounded-xl p-6">
               <h3 className="text-lg font-semibold text-text-primary mb-4">7-Day P&L History</h3>
-              <div className="space-y-3">
-                {PNL_HISTORY.map((day, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <span className="text-sm text-text-muted">{day.date}</span>
-                    <div className="flex-1 mx-4 h-2 bg-background rounded-full overflow-hidden">
-                      <div
+              {PNL_HISTORY.length > 0 ? (
+                <div className="space-y-3">
+                  {PNL_HISTORY.map((day, index) => (
+                    <div key={index} className="flex items-center justify-between">
+                      <span className="text-sm text-text-muted">{day.date}</span>
+                      <div className="flex-1 mx-4 h-2 bg-background rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            day.pnl >= 0 ? "bg-success" : "bg-danger"
+                          )}
+                          style={{
+                            width: `${Math.min(Math.abs(day.pnl) / 6, 100)}%`,
+                            marginLeft: day.pnl < 0 ? "auto" : 0,
+                          }}
+                        />
+                      </div>
+                      <span
                         className={cn(
-                          "h-full rounded-full transition-all",
-                          day.pnl >= 0 ? "bg-success" : "bg-danger"
+                          "text-sm font-medium w-24 text-right",
+                          day.pnl >= 0 ? "text-success" : "text-danger"
                         )}
-                        style={{
-                          width: `${Math.min(Math.abs(day.pnl) / 6, 100)}%`,
-                          marginLeft: day.pnl < 0 ? "auto" : 0,
-                        }}
-                      />
+                      >
+                        {showBalance
+                          ? `${day.pnl >= 0 ? "+" : ""}${formatUSD(day.pnl)}`
+                          : "••••"}
+                      </span>
                     </div>
-                    <span
-                      className={cn(
-                        "text-sm font-medium w-24 text-right",
-                        day.pnl >= 0 ? "text-success" : "text-danger"
-                      )}
-                    >
-                      {showBalance
-                        ? `${day.pnl >= 0 ? "+" : ""}${formatUSD(day.pnl)}`
-                        : "••••"}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <PieChart className="w-12 h-12 text-text-muted mb-3" />
+                  <p className="text-text-muted">No P&L history yet</p>
+                  <p className="text-sm text-text-muted/70">Start trading to see your performance</p>
+                </div>
+              )}
             </div>
 
             {/* Recent Activity */}
             <div className="bg-card border border-border rounded-xl p-6">
               <h3 className="text-lg font-semibold text-text-primary mb-4">Recent Activity</h3>
-              <div className="space-y-4">
-                {TRANSACTIONS.slice(0, 5).map((tx) => (
-                  <div key={tx.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div
+              {TRANSACTIONS.length > 0 ? (
+                <div className="space-y-4">
+                  {TRANSACTIONS.slice(0, 5).map((tx) => (
+                    <div key={tx.id} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={cn(
+                            "w-10 h-10 rounded-full flex items-center justify-center",
+                            tx.type === "deposit" || tx.type === "lp_deposit"
+                              ? "bg-success/20 text-success"
+                              : tx.type === "withdraw" || tx.type === "lp_withdraw"
+                              ? "bg-danger/20 text-danger"
+                              : tx.type === "lp_reward"
+                              ? "bg-gold/20 text-gold"
+                              : tx.amount >= 0
+                              ? "bg-success/20 text-success"
+                              : "bg-danger/20 text-danger"
+                          )}
+                        >
+                          {tx.type === "deposit" ? (
+                            <ArrowDownLeft className="w-5 h-5" />
+                          ) : tx.type === "withdraw" ? (
+                            <ArrowUpRight className="w-5 h-5" />
+                          ) : tx.type === "lp_deposit" ? (
+                            <Coins className="w-5 h-5" />
+                          ) : tx.type === "lp_withdraw" ? (
+                            <Coins className="w-5 h-5" />
+                          ) : tx.type === "lp_reward" ? (
+                            <Gift className="w-5 h-5" />
+                          ) : tx.amount >= 0 ? (
+                            <TrendingUp className="w-5 h-5" />
+                          ) : (
+                            <TrendingDown className="w-5 h-5" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-text-primary">
+                            {tx.type === "deposit"
+                              ? "Deposit"
+                              : tx.type === "withdraw"
+                              ? "Withdraw"
+                              : tx.type === "lp_deposit"
+                              ? "LP Deposit"
+                              : tx.type === "lp_withdraw"
+                              ? "LP Withdraw"
+                              : tx.type === "lp_reward"
+                              ? "LP Reward"
+                              : `Trade P&L - ${tx.asset}`}
+                          </p>
+                          <p className="text-xs text-text-muted">{tx.timestamp}</p>
+                        </div>
+                      </div>
+                      <span
                         className={cn(
-                          "w-10 h-10 rounded-full flex items-center justify-center",
-                          tx.type === "deposit" || tx.type === "lp_deposit"
-                            ? "bg-success/20 text-success"
-                            : tx.type === "withdraw" || tx.type === "lp_withdraw"
-                            ? "bg-danger/20 text-danger"
-                            : tx.type === "lp_reward"
-                            ? "bg-gold/20 text-gold"
-                            : tx.amount >= 0
-                            ? "bg-success/20 text-success"
-                            : "bg-danger/20 text-danger"
+                          "font-semibold",
+                          tx.amount >= 0 ? "text-success" : "text-danger"
                         )}
                       >
-                        {tx.type === "deposit" ? (
-                          <ArrowDownLeft className="w-5 h-5" />
-                        ) : tx.type === "withdraw" ? (
-                          <ArrowUpRight className="w-5 h-5" />
-                        ) : tx.type === "lp_deposit" ? (
-                          <Coins className="w-5 h-5" />
-                        ) : tx.type === "lp_withdraw" ? (
-                          <Coins className="w-5 h-5" />
-                        ) : tx.type === "lp_reward" ? (
-                          <Gift className="w-5 h-5" />
-                        ) : tx.amount >= 0 ? (
-                          <TrendingUp className="w-5 h-5" />
-                        ) : (
-                          <TrendingDown className="w-5 h-5" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-text-primary">
-                          {tx.type === "deposit"
-                            ? "Deposit"
-                            : tx.type === "withdraw"
-                            ? "Withdraw"
-                            : tx.type === "lp_deposit"
-                            ? "LP Deposit"
-                            : tx.type === "lp_withdraw"
-                            ? "LP Withdraw"
-                            : tx.type === "lp_reward"
-                            ? "LP Reward"
-                            : `Trade P&L - ${tx.asset}`}
-                        </p>
-                        <p className="text-xs text-text-muted">{tx.timestamp}</p>
-                      </div>
+                        {showBalance
+                          ? `${tx.amount >= 0 ? "+" : ""}${formatUSD(Math.abs(tx.amount))}`
+                          : "••••"}
+                      </span>
                     </div>
-                    <span
-                      className={cn(
-                        "font-semibold",
-                        tx.amount >= 0 ? "text-success" : "text-danger"
-                      )}
-                    >
-                      {showBalance
-                        ? `${tx.amount >= 0 ? "+" : ""}${formatUSD(Math.abs(tx.amount))}`
-                        : "••••"}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <History className="w-12 h-12 text-text-muted mb-3" />
+                  <p className="text-text-muted">No activity yet</p>
+                  <p className="text-sm text-text-muted/70">Your transactions will appear here</p>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -120,6 +120,9 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
     }
     mapping(uint256 => PendingClose) public pendingCloses;
 
+    /// @notice Positions pending close (prevents race condition)
+    mapping(uint256 => bool) public positionPendingClose;
+
     /// @notice Pending liquidation requests
     struct PendingLiquidation {
         uint256 positionId;
@@ -324,6 +327,24 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         euint64 leverage = FHE.fromExternal(encryptedLeverage, inputProof);
         ebool isLong = FHE.fromExternal(encryptedIsLong, inputProof);
 
+        // Validate leverage (1-10x) using encrypted comparison
+        euint64 minLeverage = FHE.asEuint64(1);
+        euint64 maxLeverage = FHE.asEuint64(MAX_LEVERAGE);
+        ebool leverageValid = FHE.and(
+            FHE.ge(leverage, minLeverage),
+            FHE.le(leverage, maxLeverage)
+        );
+        // Clamp leverage to valid range using FHE.select
+        leverage = FHE.select(
+            leverageValid,
+            leverage,
+            FHE.select(
+                FHE.lt(leverage, minLeverage),
+                minLeverage,
+                maxLeverage
+            )
+        );
+
         // Get current balance
         euint64 currentBalance = _balances[msg.sender];
 
@@ -454,9 +475,11 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         );
 
         // Calculate raw P&L magnitude
-        // P&L = (absPriceDiff * size * leverage) / PRECISION
+        // P&L = (absPriceDiff * size) / entryPrice
+        // Note: size already includes leverage (size = collateral * leverage)
+        // Using PRECISION for scaling: P&L = (absPriceDiff * size) / PRECISION
         euint64 rawPnl = FHE.div(
-            FHE.mul(FHE.mul(absPriceDiff, position.size), position.leverage),
+            FHE.mul(absPriceDiff, position.size),
             PRECISION
         );
 
@@ -502,9 +525,9 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
             FHE.sub(position.entryPrice, currentPrice)
         );
 
-        // Calculate P&L magnitude with leverage
+        // Calculate P&L magnitude (size already includes leverage)
         pnlAmount = FHE.div(
-            FHE.mul(FHE.mul(absPriceDiff, position.size), position.leverage),
+            FHE.mul(absPriceDiff, position.size),
             PRECISION
         );
 
@@ -1580,6 +1603,10 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
         require(position.isOpen, "Position not open");
         require(position.owner == msg.sender, "Not position owner");
+        require(!positionPendingClose[positionId], "Close already pending");
+
+        // Mark position as pending close to prevent race conditions
+        positionPendingClose[positionId] = true;
 
         // Get current price for P&L calculation
         euint64 currentPrice = oracle.getEncryptedPrice(position.assetId);
@@ -1680,8 +1707,9 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         FHE.allowThis(newBalance);
         FHE.allow(newBalance, pending.user);
 
-        // Close position
+        // Close position and clear pending flag
         position.isOpen = false;
+        positionPendingClose[pending.positionId] = false;
 
         emit CloseProcessed(closeId, pending.positionId, finalAmount);
         emit PositionClosed(pending.positionId, pending.user, block.timestamp);

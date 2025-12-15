@@ -113,25 +113,14 @@ export function getChainId(network: SupportedNetwork): number {
   return network === "sepolia" ? 11155111 : 31337;
 }
 
-// Asset IDs (keccak256 of asset symbols)
+// Asset IDs (keccak256 of asset symbols) - Only 6 supported assets
 export const ASSET_IDS: Record<string, `0x${string}`> = {
-  openai: "0x" as `0x${string}`, // keccak256("OPENAI")
-  anthropic: "0x" as `0x${string}`,
-  xai: "0x" as `0x${string}`,
-  perplexity: "0x" as `0x${string}`,
-  groq: "0x" as `0x${string}`,
-  spacex: "0x" as `0x${string}`,
-  anduril: "0x" as `0x${string}`,
-  shieldai: "0x" as `0x${string}`,
-  stripe: "0x" as `0x${string}`,
-  revolut: "0x" as `0x${string}`,
-  ripple: "0x" as `0x${string}`,
-  kraken: "0x" as `0x${string}`,
-  databricks: "0x" as `0x${string}`,
-  canva: "0x" as `0x${string}`,
-  vercel: "0x" as `0x${string}`,
-  bytedance: "0x" as `0x${string}`,
-  discord: "0x" as `0x${string}`,
+  spacex: "0x9fd352ac95c287d47bbccf4420d92735fe50f15b7f1bdc85ae12490f555114ab" as `0x${string}`,
+  bytedance: "0x7a8e8d0c5008129e8077f29f2b784b6f889f3420f121d5b70b5b3326476bbce1" as `0x${string}`,
+  openai: "0xbfe1b9d697e35df099bb4711224ecb98f2ce33a5a09fa3cf15dfb83fc9ec3cd9" as `0x${string}`,
+  stripe: "0x8eddee8eb3ba76411ebdccf6d0ad00841d58a803916546a295c2b0346ea86a11" as `0x${string}`,
+  databricks: "0x0bf812f25cacc694be173fe6fd2b56e3f94f71dcee99e1f1280b2ce7fba46fca" as `0x${string}`,
+  anthropic: "0xee2176d5e35f81b98746f5f98677beb44f0167ae70b6518fbb5b5bdc65da8fdd" as `0x${string}`,
 };
 
 // LP Pool Constants

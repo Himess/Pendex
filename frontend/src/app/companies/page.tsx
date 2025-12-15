@@ -174,14 +174,14 @@ export default function CompaniesPage() {
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <Building2 className="w-8 h-8 text-gold" />
-            <h1 className="text-3xl font-bold text-text-primary">The Setter 30</h1>
+            <h1 className="text-3xl font-bold text-text-primary">Pre-IPO Assets</h1>
           </div>
           <p className="text-text-muted">
-            The most sought-after venture-backed companies in the secondary market
+            Trade the most valuable private companies with encrypted positions
           </p>
           <p className="text-text-muted text-sm mt-1 flex items-center gap-2">
             <Lock className="w-3 h-3 text-gold" />
-            Q3 2025 Rankings
+            6 Tradable Assets
           </p>
         </div>
 
@@ -490,7 +490,7 @@ function CompanyCard({
         {/* Trade Button */}
         <div className="mt-4 pt-4 border-t border-border">
           <div className="flex items-center justify-between">
-            <span className="text-text-muted text-sm">Trade on Shadow Protocol</span>
+            <span className="text-text-muted text-sm">Trade on Pendex</span>
             <span className="text-gold text-sm font-medium flex items-center gap-1 group-hover:translate-x-1 transition-transform">
               Trade <ArrowRight className="w-4 h-4" />
             </span>

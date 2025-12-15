@@ -41,15 +41,15 @@ interface FAQSection {
 
 const FAQ_SECTIONS: FAQSection[] = [
   {
-    title: "What is Shadow Protocol?",
+    title: "What is Pendex?",
     icon: <Shield className="w-5 h-5" />,
     items: [
       {
-        question: "What is Shadow Protocol and what does it do?",
+        question: "What is Pendex and what does it do?",
         answer: (
           <div className="space-y-3">
             <p>
-              Shadow Protocol is a decentralized platform that enables you to trade
+              Pendex is a decentralized platform that enables you to trade
               <strong> Pre-IPO</strong> (pre-initial public offering) company synthetic assets
               with <strong>complete privacy</strong>.
             </p>
@@ -101,7 +101,7 @@ const FAQ_SECTIONS: FAQSection[] = [
               </div>
             </div>
             <div className="bg-background rounded-lg p-4 mt-4">
-              <h4 className="font-medium mb-2">FHE Usage in Shadow Protocol:</h4>
+              <h4 className="font-medium mb-2">FHE Usage in Pendex:</h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                 <div className="bg-card p-2 rounded text-center">
                   <code>euint64</code>
@@ -147,7 +147,7 @@ const FAQ_SECTIONS: FAQSection[] = [
               </li>
             </ul>
             <div className="bg-success/10 border border-success/30 rounded-lg p-4 mt-4">
-              <h4 className="font-semibold text-success mb-2">The Shadow Protocol Difference</h4>
+              <h4 className="font-semibold text-success mb-2">The Pendex Difference</h4>
               <p className="text-sm">
                 We create <strong>synthetic assets</strong> of these companies.
                 This allows anyone to invest in these companies with any amount,
@@ -168,7 +168,7 @@ const FAQ_SECTIONS: FAQSection[] = [
         answer: (
           <div className="space-y-4">
             <p>
-              Shadow Protocol creates <strong>synthetic shares</strong> for Pre-IPO companies.
+              Pendex creates <strong>synthetic shares</strong> for Pre-IPO companies.
               Since these companies are not publicly traded, we use their <strong>latest funding round valuation</strong>
               to determine the price.
             </p>
@@ -385,7 +385,7 @@ const FAQ_SECTIONS: FAQSection[] = [
                 { step: 1, title: "Connect Wallet", desc: "Connect with MetaMask or supported wallet" },
                 { step: 2, title: "Get sUSD", desc: "Get test tokens from faucet or deposit" },
                 { step: 3, title: "Deposit to Vault", desc: "Deposit sUSD to the vault" },
-                { step: 4, title: "Select Asset", desc: "Choose from 17 Pre-IPO companies" },
+                { step: 4, title: "Select Asset", desc: "Choose from 6 Pre-IPO companies" },
                 { step: 5, title: "Open Position", desc: "Set Long/Short, leverage, and amount" },
               ].map((item) => (
                 <div key={item.step} className="flex items-center gap-3">
@@ -458,7 +458,7 @@ const FAQ_SECTIONS: FAQSection[] = [
         answer: (
           <div className="space-y-3">
             <p>
-              Shadow Protocol offers <strong>1x-10x</strong> leverage. Leverage allows you
+              Pendex offers <strong>1x-10x</strong> leverage. Leverage allows you
               to open positions worth multiples of your collateral.
             </p>
             <div className="bg-card-hover rounded-lg p-4">
@@ -790,7 +790,7 @@ const FAQ_SECTIONS: FAQSection[] = [
         answer: (
           <div className="space-y-3">
             <p>
-              Shadow Protocol is currently in <strong>testnet</strong> phase and
+              Pendex is currently in <strong>testnet</strong> phase and
               is being developed for the Zama Developer Program.
             </p>
             <div className="bg-warning/10 border border-warning/30 rounded-lg p-4">
@@ -850,7 +850,7 @@ export default function DocsPage() {
             <span className="text-sm text-gold">Documentation & FAQ</span>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-text-primary mb-3">
-            Shadow Protocol Guide
+            Pendex Guide
           </h1>
           <p className="text-text-muted max-w-2xl mx-auto">
             Find answers to all your questions about the platform. FHE technology, trading mechanics,
@@ -862,7 +862,7 @@ export default function DocsPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-card border border-border rounded-xl p-4 text-center">
             <Layers className="w-6 h-6 text-gold mx-auto mb-2" />
-            <p className="text-2xl font-bold">17</p>
+            <p className="text-2xl font-bold">6</p>
             <p className="text-xs text-text-muted">Pre-IPO Assets</p>
           </div>
           <div className="bg-card border border-border rounded-xl p-4 text-center">

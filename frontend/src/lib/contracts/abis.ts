@@ -421,7 +421,7 @@ export const SHADOW_LIQUIDITY_POOL_ABI = [
     type: "function",
   },
   {
-    inputs: [],
+    inputs: [{ name: "userLpTokens", type: "uint64" }],
     name: "claimRewards",
     outputs: [],
     stateMutability: "nonpayable",

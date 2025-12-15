@@ -53,11 +53,13 @@ export const ASSETS: Asset[] = [
   { id: "anthropic", symbol: "ANTHROPIC", name: "Anthropic", price: 61, change24h: 1.8, category: "AI", logo: LOGOS.anthropic, marketCap: 61 },
 ];
 
-// Contract Addresses (Sepolia Testnet - to be updated after deployment)
+// Contract Addresses (Sepolia Testnet)
 export const CONTRACT_ADDRESSES = {
-  SHADOW_VAULT: "0x...",
-  SHADOW_ORACLE: "0x...",
-  SHADOW_USD: "0x...",
+  SHADOW_VAULT: "0xf6C0B8C7332080790a9425c0B888F74e8e9ff5B5",
+  SHADOW_ORACLE: "0xe0Fa3bbeF65d8Cda715645AE02a50874C04BCb17",
+  SHADOW_USD: "0x9093B02c4Ea2402EC72C2ca9dAAb994F7578fAFb",
+  SHADOW_LIQUIDITY_POOL: "0x...", // Add actual address if deployed
+  SHADOW_MARKET_MAKER: "0x4831ac8D60cF7f1B01DeEeA12B3A0fDB083355fb",
 } as const;
 
 // Leverage Options

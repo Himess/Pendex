@@ -4,9 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { Lock, BarChart3, LineChart, Wallet, Menu, X, HelpCircle, Building2, Settings, History, Shield, Sun, Moon } from "lucide-react";
+import { BarChart3, LineChart, Wallet, Menu, X, HelpCircle, Building2, Sun, Moon } from "lucide-react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { NetworkSelectorCompact } from "./NetworkSelector";
 import { useTheme } from "@/app/providers";
 
 const NAV_ITEMS = [
@@ -14,10 +14,7 @@ const NAV_ITEMS = [
   { href: "/companies", label: "Companies", icon: <Building2 className="w-4 h-4" /> },
   { href: "/trade", label: "Trade", icon: <LineChart className="w-4 h-4" /> },
   { href: "/wallet", label: "Wallet", icon: <Wallet className="w-4 h-4" /> },
-  { href: "/history", label: "History", icon: <History className="w-4 h-4" /> },
   { href: "/docs", label: "Docs", icon: <HelpCircle className="w-4 h-4" /> },
-  { href: "/fhe-test", label: "FHE Test", icon: <Shield className="w-4 h-4" /> },
-  { href: "/admin", label: "Admin", icon: <Settings className="w-4 h-4" /> },
 ];
 
 export function Header() {
@@ -30,16 +27,16 @@ export function Header() {
       <div className="flex items-center justify-between px-4 md:px-6 h-16">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 md:gap-3">
-          <div className="relative">
-            <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gold/20 flex items-center justify-center">
-              <Lock className="w-4 h-4 md:w-5 md:h-5 text-gold" />
-            </div>
-          </div>
-          <div>
-            <h1 className="text-lg md:text-xl font-bold text-text-primary">
-              Shadow<span className="text-gold">Protocol</span>
-            </h1>
-          </div>
+          <Image
+            src="/logo.png"
+            alt="Pendex Logo"
+            width={40}
+            height={40}
+            className="w-8 h-8 md:w-10 md:h-10"
+          />
+          <h1 className="text-lg md:text-xl font-bold text-text-primary">
+            Pen<span className="text-gold">dex</span>
+          </h1>
         </Link>
 
         {/* Center - Navigation (Desktop) */}
@@ -61,7 +58,7 @@ export function Header() {
           ))}
         </nav>
 
-        {/* Right - Theme Toggle + Network Selector + Wallet */}
+        {/* Right - Theme Toggle + Wallet */}
         <div className="flex items-center gap-2 md:gap-4">
           {/* Theme Toggle */}
           <button
@@ -72,10 +69,7 @@ export function Header() {
             {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
 
-          {/* Network Selector */}
-          <div className="hidden md:block">
-            <NetworkSelectorCompact />
-          </div>
+          {/* Wallet Connect - includes network selector */}
           <div className="hidden sm:block">
             <ConnectButton
               showBalance={false}

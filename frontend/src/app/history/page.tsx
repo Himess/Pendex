@@ -41,70 +41,9 @@ interface Transaction {
   lpTokens?: string;
 }
 
-// Mock transactions - in production these would come from event logs
-const MOCK_TRANSACTIONS: Transaction[] = [
-  {
-    id: "1",
-    type: "DEPOSIT",
-    hash: "0x1234...5678",
-    timestamp: Date.now() - 3600000,
-    status: "confirmed",
-    amount: "1,000 sUSD",
-    isEncrypted: true,
-  },
-  {
-    id: "2",
-    type: "OPEN_POSITION",
-    hash: "0x2345...6789",
-    timestamp: Date.now() - 7200000,
-    status: "confirmed",
-    asset: "SPACEX",
-    positionId: "42",
-    side: "LONG",
-    amount: "$5,000",
-    isEncrypted: true,
-  },
-  {
-    id: "3",
-    type: "LP_ADD",
-    hash: "0x3456...7890",
-    timestamp: Date.now() - 86400000,
-    status: "confirmed",
-    amount: "2,500 sUSD",
-    lpTokens: "2,500 LP",
-    isEncrypted: false,
-  },
-  {
-    id: "4",
-    type: "CLOSE_POSITION",
-    hash: "0x4567...8901",
-    timestamp: Date.now() - 172800000,
-    status: "confirmed",
-    asset: "STRIPE",
-    positionId: "38",
-    side: "SHORT",
-    pnl: 125.50,
-    isEncrypted: true,
-  },
-  {
-    id: "5",
-    type: "TRANSFER",
-    hash: "0x5678...9012",
-    timestamp: Date.now() - 259200000,
-    status: "confirmed",
-    amount: "500 sUSD",
-    isEncrypted: true,
-  },
-  {
-    id: "6",
-    type: "CLAIM_REWARDS",
-    hash: "0x6789...0123",
-    timestamp: Date.now() - 345600000,
-    status: "confirmed",
-    amount: "45.23 sUSD",
-    isEncrypted: false,
-  },
-];
+// Transaction history - populated from on-chain events
+// Empty until user performs transactions
+const INITIAL_TRANSACTIONS: Transaction[] = [];
 
 const TX_TYPE_CONFIG: Record<TransactionType, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
   DEPOSIT: { label: "Deposit", icon: ArrowDownRight, color: "text-success" },
@@ -132,7 +71,7 @@ function formatTimestamp(ts: number): string {
 
 export default function HistoryPage() {
   const { address, isConnected } = useAccount();
-  const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
+  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [isLoading, setIsLoading] = useState(false);
   const [filter, setFilter] = useState<TransactionType | "ALL">("ALL");
 

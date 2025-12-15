@@ -9,25 +9,25 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Shadow Protocol Color Palette
-        background: "#0A0A0A",
+        // Pendex Color Palette
+        background: "#0A0A0B",
         card: "#141414",
         "card-hover": "#1a1a1a",
         border: "#2a2a2a",
 
-        // Brand Colors
+        // Brand Colors - Teal/Turquoise
         gold: {
-          DEFAULT: "#F7B731",
-          50: "#FEF6E6",
-          100: "#FDECCC",
-          200: "#FBD999",
-          300: "#F9C766",
-          400: "#F7B731",
-          500: "#E5A520",
-          600: "#B38018",
-          700: "#815C11",
-          800: "#4F380A",
-          900: "#1D1404",
+          DEFAULT: "#2DD4BF",
+          50: "#F0FDFA",
+          100: "#CCFBF1",
+          200: "#99F6E4",
+          300: "#5EEAD4",
+          400: "#2DD4BF",
+          500: "#14B8A6",
+          600: "#0D9488",
+          700: "#0F766E",
+          800: "#115E59",
+          900: "#134E4A",
         },
 
         // Status Colors
@@ -62,14 +62,14 @@ const config: Config = {
         mono: ["JetBrains Mono", "monospace"],
       },
       boxShadow: {
-        "gold-glow": "0 0 20px rgba(247, 183, 49, 0.3)",
-        "gold-glow-sm": "0 0 10px rgba(247, 183, 49, 0.2)",
+        "gold-glow": "0 0 20px rgba(45, 212, 191, 0.3)",
+        "gold-glow-sm": "0 0 10px rgba(45, 212, 191, 0.2)",
         "success-glow": "0 0 15px rgba(16, 185, 129, 0.3)",
         "danger-glow": "0 0 15px rgba(239, 68, 68, 0.3)",
       },
       backgroundImage: {
-        "gold-gradient": "linear-gradient(135deg, #F7B731 0%, #E5A520 100%)",
-        "dark-gradient": "linear-gradient(180deg, #141414 0%, #0A0A0A 100%)",
+        "gold-gradient": "linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)",
+        "dark-gradient": "linear-gradient(180deg, #141414 0%, #0A0A0B 100%)",
       },
     },
   },

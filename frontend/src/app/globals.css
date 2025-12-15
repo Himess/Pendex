@@ -4,14 +4,14 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-/* Dark Theme (Default) */
+/* Dark Theme (Default) - Pendex Teal */
 :root,
 [data-theme="dark"] {
-  --background: #0A0A0A;
+  --background: #0A0A0B;
   --card: #141414;
   --card-hover: #1a1a1a;
   --border: #2a2a2a;
-  --gold: #F7B731;
+  --gold: #2DD4BF;
   --success: #10B981;
   --danger: #EF4444;
   --text-primary: #FFFFFF;
@@ -25,7 +25,7 @@
   --card: #FFFFFF;
   --card-hover: #F0F0F0;
   --border: #E0E0E0;
-  --gold: #D4A017;
+  --gold: #14B8A6;
   --success: #059669;
   --danger: #DC2626;
   --text-primary: #1A1A1A;
