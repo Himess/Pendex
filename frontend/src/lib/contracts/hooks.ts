@@ -268,6 +268,7 @@ export function useOpenPosition() {
       abi: SHADOW_VAULT_ABI,
       functionName: "openPosition",
       args: [assetId, encryptedCollateral, encryptedLeverage, encryptedIsLong, inputProof],
+      gas: BigInt(15000000), // Cap is 16777216, stay under it
     });
   };
 
