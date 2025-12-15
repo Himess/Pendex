@@ -67,9 +67,16 @@ export function MarketStats({ selectedAsset, onSelectAsset }: MarketStatsProps) 
         {/* Asset Info with Dropdown */}
         <div className="relative flex items-center gap-3 pr-4 border-r border-border">
           <button
-            onClick={() => onSelectAsset && setIsDropdownOpen(!isDropdownOpen)}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (onSelectAsset) {
+                setIsDropdownOpen(!isDropdownOpen);
+              }
+            }}
             className={cn(
-              "flex items-center gap-3",
+              "flex items-center gap-3 select-none",
               onSelectAsset && "cursor-pointer hover:opacity-80 transition-opacity"
             )}
           >
