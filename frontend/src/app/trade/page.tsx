@@ -245,9 +245,9 @@ function TradeContent() {
         </div>
 
         {/* Right Panel: Order Book + Trading Panel */}
-        <div className="w-[600px] flex border-l border-border bg-card hidden lg:flex">
+        <div className="w-[540px] flex border-l border-border bg-card hidden lg:flex">
           {/* Order Book */}
-          <div className="w-[280px] flex flex-col border-r border-border">
+          <div className="w-[250px] flex flex-col border-r border-border">
             {/* Tabs */}
             <div className="flex items-center border-b border-border">
               <TabButton
