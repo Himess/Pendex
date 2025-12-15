@@ -26,39 +26,6 @@ interface Position {
   encryptedEntryPrice?: string;
 }
 
-// Demo positions data for fallback when not connected
-const DEMO_POSITIONS: Position[] = [
-  {
-    id: "demo-1",
-    positionId: BigInt(0),
-    asset: "SpaceX",
-    symbol: "SPACEX",
-    side: "LONG",
-    size: 5000,
-    entryPrice: 175.2,
-    currentPrice: 180.0,
-    pnl: 285,
-    pnlPercent: 5.7,
-    isRevealed: false,
-    isEncrypted: true,
-  },
-  {
-    id: "demo-2",
-    positionId: BigInt(0),
-    asset: "Stripe",
-    symbol: "STRIPE",
-    side: "SHORT",
-    size: 2500,
-    entryPrice: 49.5,
-    currentPrice: 48.0,
-    pnl: 125,
-    pnlPercent: 3.0,
-    isRevealed: false,
-    isEncrypted: true,
-  },
-];
-
-
 export function PositionsTable() {
   const { address, isConnected } = useAccount();
   const { data: positionIds, isLoading: isLoadingPositions, refetch: refetchPositions } = useUserPositions(address);
@@ -78,7 +45,7 @@ export function PositionsTable() {
   // Real implementation would use batch contract reads for each position
   const positions = useMemo(() => {
     if (!isConnected || !positionIds || (positionIds as bigint[]).length === 0) {
-      return DEMO_POSITIONS;
+      return [];
     }
 
     // Convert position IDs to position objects
@@ -142,10 +109,7 @@ export function PositionsTable() {
         <div className="flex items-center gap-2">
           <Shield className="w-3.5 h-3.5 text-gold" />
           <h2 className="text-xs font-semibold text-text-primary uppercase tracking-wide">Open Positions</h2>
-          {!isConnected && (
-            <span className="text-[10px] text-text-muted bg-background px-1.5 py-0.5 rounded">Demo</span>
-          )}
-          {isConnected && positions.length > 0 && (
+          {positions.length > 0 && (
             <span className="text-[10px] text-gold bg-gold/10 px-1.5 py-0.5 rounded">
               {positions.length} FHE Encrypted
             </span>
