@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense, useCallback } from "react";
+import { useState, useEffect, Suspense, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header, TradingPanel, PositionsTable, PriceChart, OrderBook, MarketStats } from "@/components";
 import { Asset, ASSETS } from "@/lib/constants";
@@ -9,15 +9,23 @@ import { cn } from "@/lib/utils";
 import { useLiveAssetPrice } from "@/hooks/useLiveOracle";
 import { useCurrentNetwork } from "@/lib/contracts/hooks";
 
-// Resizable divider component
-function ResizeDivider({ onDrag }: { onDrag: (deltaY: number) => void }) {
+// Resizable divider component with percentage-based resizing
+function ResizeDivider({
+  onDrag,
+  containerRef
+}: {
+  onDrag: (deltaPercent: number) => void;
+  containerRef: React.RefObject<HTMLDivElement>;
+}) {
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const startY = e.clientY;
+    const containerHeight = containerRef.current?.clientHeight || 600;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaY = startY - moveEvent.clientY;
-      onDrag(deltaY);
+      const deltaY = moveEvent.clientY - startY;
+      const deltaPercent = (deltaY / containerHeight) * 100;
+      onDrag(deltaPercent);
     };
 
     const handleMouseUp = () => {
@@ -31,11 +39,11 @@ function ResizeDivider({ onDrag }: { onDrag: (deltaY: number) => void }) {
     document.addEventListener("mouseup", handleMouseUp);
     document.body.style.cursor = "row-resize";
     document.body.style.userSelect = "none";
-  }, [onDrag]);
+  }, [onDrag, containerRef]);
 
   return (
     <div
-      className="h-2 bg-border hover:bg-gold/50 cursor-row-resize flex items-center justify-center transition-colors group"
+      className="h-1.5 bg-border hover:bg-gold/50 cursor-row-resize flex items-center justify-center transition-colors group flex-shrink-0"
       onMouseDown={handleMouseDown}
     >
       <GripHorizontal className="w-4 h-4 text-text-muted group-hover:text-gold" />
@@ -194,11 +202,12 @@ function TradeContent() {
   const [mobileTradeOpen, setMobileTradeOpen] = useState(false);
   const [mobileOrderBookOpen, setMobileOrderBookOpen] = useState(false);
 
-  // Resizable panels
-  const [bottomPanelHeight, setBottomPanelHeight] = useState(280);
+  // Resizable panels - percentage based (chart gets chartPercent, positions gets rest)
+  const [chartPercent, setChartPercent] = useState(60); // Chart takes 60%, positions takes 40%
+  const leftPanelRef = useRef<HTMLDivElement>(null);
 
-  const handleBottomPanelResize = useCallback((deltaY: number) => {
-    setBottomPanelHeight(prev => Math.min(Math.max(prev + deltaY, 150), 500));
+  const handleSplitResize = useCallback((deltaPercent: number) => {
+    setChartPercent(prev => Math.min(Math.max(prev + deltaPercent, 30), 80));
   }, []);
 
   // Get live price
@@ -231,25 +240,25 @@ function TradeContent() {
 
       {/* Main Trading Area */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left: Asset Selector (Mobile) + Chart */}
-        <div className="flex-1 flex flex-col min-w-0">
+        {/* Left: Asset Selector (Mobile) + Chart + Positions */}
+        <div ref={leftPanelRef} className="flex-1 flex flex-col min-w-0">
           {/* Asset Selector (visible on smaller screens) */}
-          <div className="md:hidden p-2 border-b border-border bg-card">
+          <div className="md:hidden p-2 border-b border-border bg-card flex-shrink-0">
             <AssetSelector selectedAsset={selectedAsset} onSelectAsset={setSelectedAsset} />
           </div>
 
-          {/* Chart Area */}
-          <div className="flex-1 p-2 min-h-0">
+          {/* Chart Area - percentage based */}
+          <div className="p-2 min-h-0" style={{ height: `${chartPercent}%` }}>
             <PriceChart selectedAsset={selectedAsset} />
           </div>
 
           {/* Resizable Divider */}
-          <ResizeDivider onDrag={handleBottomPanelResize} />
+          <ResizeDivider onDrag={handleSplitResize} containerRef={leftPanelRef} />
 
-          {/* Bottom Panel: Positions / Orders / History */}
+          {/* Bottom Panel: Positions / Orders / History - takes remaining space */}
           <div
-            className="bg-card flex flex-col"
-            style={{ height: bottomPanelHeight }}
+            className="bg-card flex flex-col min-h-0"
+            style={{ height: `${100 - chartPercent}%` }}
           >
             {/* Tabs */}
             <div className="flex items-center border-b border-border px-2">

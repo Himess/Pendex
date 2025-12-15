@@ -129,24 +129,24 @@ export function PositionsTable() {
   };
 
   const EncryptedValue = ({ revealed, value }: { revealed: boolean; value: string }) => (
-    <span className={cn("flex items-center gap-1", revealed ? "revealed-value" : "encrypted-value")}>
+    <span className={cn("flex items-center gap-1 text-xs", revealed ? "revealed-value" : "encrypted-value")}>
       {revealed ? value : "••••••••"}
-      <Lock className={cn("w-3 h-3", revealed ? "text-success" : "text-gold")} />
+      <Lock className={cn("w-2.5 h-2.5", revealed ? "text-success" : "text-gold")} />
     </span>
   );
 
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
+    <div className="bg-card border border-border rounded-lg overflow-hidden h-full flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-border flex items-center justify-between">
+      <div className="px-3 py-2 border-b border-border flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
-          <Shield className="w-4 h-4 text-gold" />
-          <h2 className="text-lg font-semibold text-text-primary">OPEN POSITIONS</h2>
+          <Shield className="w-3.5 h-3.5 text-gold" />
+          <h2 className="text-xs font-semibold text-text-primary uppercase tracking-wide">Open Positions</h2>
           {!isConnected && (
-            <span className="text-xs text-text-muted bg-background px-2 py-0.5 rounded">Demo</span>
+            <span className="text-[10px] text-text-muted bg-background px-1.5 py-0.5 rounded">Demo</span>
           )}
           {isConnected && positions.length > 0 && (
-            <span className="text-xs text-gold bg-gold/10 px-2 py-0.5 rounded">
+            <span className="text-[10px] text-gold bg-gold/10 px-1.5 py-0.5 rounded">
               {positions.length} FHE Encrypted
             </span>
           )}
@@ -154,48 +154,48 @@ export function PositionsTable() {
         <button
           onClick={handleRefresh}
           disabled={isRefreshing || isLoadingPositions}
-          className="p-1.5 rounded hover:bg-card-hover transition-colors"
+          className="p-1 rounded hover:bg-card-hover transition-colors"
         >
           <RefreshCw className={cn(
-            "w-4 h-4 text-text-muted",
+            "w-3.5 h-3.5 text-text-muted",
             (isRefreshing || isLoadingPositions) && "animate-spin"
           )} />
         </button>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full">
+      <div className="overflow-x-auto flex-1">
+        <table className="w-full text-xs">
           <thead>
-            <tr className="text-left text-xs text-text-muted uppercase tracking-wider">
-              <th className="px-4 py-3 font-medium">Asset</th>
-              <th className="px-4 py-3 font-medium">Side</th>
-              <th className="px-4 py-3 font-medium">Size</th>
-              <th className="px-4 py-3 font-medium">Entry Price</th>
-              <th className="px-4 py-3 font-medium">Current Price</th>
-              <th className="px-4 py-3 font-medium">P&L</th>
-              <th className="px-4 py-3 font-medium">Action</th>
+            <tr className="text-left text-[10px] text-text-muted uppercase tracking-wider">
+              <th className="px-3 py-2 font-medium">Asset</th>
+              <th className="px-3 py-2 font-medium">Side</th>
+              <th className="px-3 py-2 font-medium">Size</th>
+              <th className="px-3 py-2 font-medium">Entry Price</th>
+              <th className="px-3 py-2 font-medium">Current Price</th>
+              <th className="px-3 py-2 font-medium">P&L</th>
+              <th className="px-3 py-2 font-medium">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {positions.map((position) => (
               <tr key={position.id} className="hover:bg-card-hover transition-colors">
                 {/* Asset */}
-                <td className="px-4 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-background flex items-center justify-center text-xs font-bold text-gold border border-border">
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-background flex items-center justify-center text-[10px] font-bold text-gold border border-border">
                       {position.symbol.slice(0, 2)}
                     </div>
-                    <span className="font-medium text-text-primary">{position.asset}</span>
+                    <span className="font-medium text-text-primary text-xs">{position.asset}</span>
                   </div>
                 </td>
 
                 {/* Side */}
-                <td className="px-4 py-4">
+                <td className="px-3 py-2">
                   <span
                     className={cn(
-                      "badge",
-                      position.side === "LONG" ? "badge-success" : "badge-danger"
+                      "px-1.5 py-0.5 rounded text-[10px] font-medium",
+                      position.side === "LONG" ? "bg-success/20 text-success" : "bg-danger/20 text-danger"
                     )}
                   >
                     {position.side}
@@ -203,7 +203,7 @@ export function PositionsTable() {
                 </td>
 
                 {/* Size */}
-                <td className="px-4 py-4">
+                <td className="px-3 py-2">
                   <EncryptedValue
                     revealed={position.isRevealed}
                     value={formatUSD(position.size)}
@@ -211,7 +211,7 @@ export function PositionsTable() {
                 </td>
 
                 {/* Entry Price */}
-                <td className="px-4 py-4">
+                <td className="px-3 py-2">
                   <EncryptedValue
                     revealed={position.isRevealed}
                     value={formatUSD(position.entryPrice)}
@@ -219,30 +219,28 @@ export function PositionsTable() {
                 </td>
 
                 {/* Current Price */}
-                <td className="px-4 py-4">
+                <td className="px-3 py-2">
                   <div className="flex items-center gap-1">
                     <span className="text-text-primary">{formatUSD(position.currentPrice)}</span>
-                    <Lock className="w-3 h-3 text-gold" />
+                    <Lock className="w-2.5 h-2.5 text-gold" />
                   </div>
                 </td>
 
                 {/* P&L */}
-                <td className="px-4 py-4">
+                <td className="px-3 py-2">
                   {position.isRevealed ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       {position.pnl >= 0 ? (
-                        <TrendingUp className="w-4 h-4 text-success" />
+                        <TrendingUp className="w-3 h-3 text-success" />
                       ) : (
-                        <TrendingDown className="w-4 h-4 text-danger" />
+                        <TrendingDown className="w-3 h-3 text-danger" />
                       )}
                       <div className={cn(
-                        "font-medium",
+                        "font-medium text-xs",
                         position.pnl >= 0 ? "text-success" : "text-danger"
                       )}>
-                        <div>{position.pnl >= 0 ? "+" : ""}{formatUSD(position.pnl)}</div>
-                        <div className="text-xs">
-                          {formatPercent(position.pnlPercent)}
-                        </div>
+                        <span>{position.pnl >= 0 ? "+" : ""}{formatUSD(position.pnl)}</span>
+                        <span className="text-[10px] ml-1">({formatPercent(position.pnlPercent)})</span>
                       </div>
                     </div>
                   ) : (
@@ -251,11 +249,11 @@ export function PositionsTable() {
                 </td>
 
                 {/* Action */}
-                <td className="px-4 py-4">
+                <td className="px-3 py-2">
                   <button
                     onClick={() => toggleReveal(position.id)}
                     className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200",
+                      "flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-medium transition-all duration-200",
                       position.isRevealed
                         ? "bg-success/20 text-success border border-success/30"
                         : "bg-gold/20 text-gold border border-gold/30 hover:bg-gold/30"
@@ -263,16 +261,16 @@ export function PositionsTable() {
                   >
                     {position.isRevealed ? (
                       <>
-                        <EyeOff className="w-4 h-4" />
+                        <EyeOff className="w-3 h-3" />
                         HIDE
                       </>
                     ) : (
                       <>
-                        <Eye className="w-4 h-4" />
+                        <Eye className="w-3 h-3" />
                         REVEAL
                       </>
                     )}
-                    <Lock className="w-3 h-3" />
+                    <Lock className="w-2.5 h-2.5" />
                   </button>
                 </td>
               </tr>
@@ -283,10 +281,10 @@ export function PositionsTable() {
 
       {/* Empty State */}
       {positions.length === 0 && (
-        <div className="p-8 text-center">
-          <Lock className="w-12 h-12 text-text-muted mx-auto mb-3" />
-          <p className="text-text-secondary">No open positions</p>
-          <p className="text-sm text-text-muted">
+        <div className="p-4 text-center">
+          <Lock className="w-8 h-8 text-text-muted mx-auto mb-2" />
+          <p className="text-xs text-text-secondary">No open positions</p>
+          <p className="text-[10px] text-text-muted">
             Your encrypted positions will appear here
           </p>
         </div>
