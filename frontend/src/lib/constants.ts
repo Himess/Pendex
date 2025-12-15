@@ -90,3 +90,17 @@ export const formatMarketCap = (billions: number): string => {
   }
   return `$${billions.toFixed(1)}B`;
 };
+
+// Compact USD format for large numbers (e.g., $847.5M instead of $847,500,000.00)
+export const formatCompactUSD = (value: number): string => {
+  if (value >= 1_000_000_000) {
+    return `$${(value / 1_000_000_000).toFixed(1)}B`;
+  }
+  if (value >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (value >= 1_000) {
+    return `$${(value / 1_000).toFixed(1)}K`;
+  }
+  return `$${value.toFixed(2)}`;
+};

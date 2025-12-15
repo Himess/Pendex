@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { Header, Footer } from "@/components";
-import { ASSETS, CATEGORIES, Asset, formatUSD, formatPercent, formatMarketCap } from "@/lib/constants";
+import { ASSETS, CATEGORIES, Asset, formatUSD, formatPercent, formatMarketCap, formatCompactUSD } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useLiveOracle, LiveAsset } from "@/hooks/useLiveOracle";
 import { useCurrentNetwork } from "@/lib/contracts/hooks";
@@ -65,12 +65,17 @@ function generateMarketData(asset: Asset) {
   };
 }
 
-// Platform stats
+// Platform stats - more realistic numbers
 const PLATFORM_STATS = {
-  totalVolume: 847500000,
-  totalTrades: 12847,
-  totalUsers: 3241,
-  totalOI: 156000000,
+  totalVolume: 847_523_891,
+  totalTrades: 12_847,
+  totalUsers: 3_241,
+  totalOI: 156_234_567,
+  // Trend percentages
+  volumeTrend: 12.5,
+  tradesTrend: 8.3,
+  usersTrend: 15.2,
+  oiTrend: -2.1,
 };
 
 // Sortable Header Component with 3-click cycle
@@ -320,38 +325,62 @@ export default function MarketsPage() {
 
         {/* Platform Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 text-text-muted mb-2">
-              <BarChart3 className="w-4 h-4" />
-              <span className="text-xs uppercase">24h Volume</span>
+          <div className="bg-gradient-to-br from-card to-card-hover border border-border rounded-xl p-4 hover:border-gold/30 hover:scale-[1.02] transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-text-muted">
+                <BarChart3 className="w-4 h-4 text-gold" />
+                <span className="text-xs uppercase">24h Volume</span>
+              </div>
+              <span className={cn("text-xs flex items-center gap-1", PLATFORM_STATS.volumeTrend >= 0 ? "text-success" : "text-danger")}>
+                {PLATFORM_STATS.volumeTrend >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                {PLATFORM_STATS.volumeTrend >= 0 ? "+" : ""}{PLATFORM_STATS.volumeTrend}%
+              </span>
             </div>
             <p className="text-xl font-bold text-text-primary">
-              {formatUSD(PLATFORM_STATS.totalVolume)}
+              {formatCompactUSD(PLATFORM_STATS.totalVolume)}
             </p>
           </div>
-          <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 text-text-muted mb-2">
-              <Activity className="w-4 h-4" />
-              <span className="text-xs uppercase">Open Interest</span>
+          <div className="bg-gradient-to-br from-card to-card-hover border border-border rounded-xl p-4 hover:border-gold/30 hover:scale-[1.02] transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-text-muted">
+                <Activity className="w-4 h-4 text-gold" />
+                <span className="text-xs uppercase">Open Interest</span>
+              </div>
+              <span className={cn("text-xs flex items-center gap-1", PLATFORM_STATS.oiTrend >= 0 ? "text-success" : "text-danger")}>
+                {PLATFORM_STATS.oiTrend >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                {PLATFORM_STATS.oiTrend >= 0 ? "+" : ""}{PLATFORM_STATS.oiTrend}%
+              </span>
             </div>
             <p className="text-xl font-bold text-text-primary flex items-center gap-2">
-              {formatUSD(PLATFORM_STATS.totalOI)}
+              {formatCompactUSD(PLATFORM_STATS.totalOI)}
               <Lock className="w-4 h-4 text-gold" />
             </p>
           </div>
-          <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 text-text-muted mb-2">
-              <DollarSign className="w-4 h-4" />
-              <span className="text-xs uppercase">24h Trades</span>
+          <div className="bg-gradient-to-br from-card to-card-hover border border-border rounded-xl p-4 hover:border-gold/30 hover:scale-[1.02] transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-text-muted">
+                <DollarSign className="w-4 h-4 text-gold" />
+                <span className="text-xs uppercase">24h Trades</span>
+              </div>
+              <span className={cn("text-xs flex items-center gap-1", PLATFORM_STATS.tradesTrend >= 0 ? "text-success" : "text-danger")}>
+                {PLATFORM_STATS.tradesTrend >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                {PLATFORM_STATS.tradesTrend >= 0 ? "+" : ""}{PLATFORM_STATS.tradesTrend}%
+              </span>
             </div>
             <p className="text-xl font-bold text-text-primary">
               {PLATFORM_STATS.totalTrades.toLocaleString()}
             </p>
           </div>
-          <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 text-text-muted mb-2">
-              <Users className="w-4 h-4" />
-              <span className="text-xs uppercase">Active Traders</span>
+          <div className="bg-gradient-to-br from-card to-card-hover border border-border rounded-xl p-4 hover:border-gold/30 hover:scale-[1.02] transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-text-muted">
+                <Users className="w-4 h-4 text-gold" />
+                <span className="text-xs uppercase">Active Traders</span>
+              </div>
+              <span className={cn("text-xs flex items-center gap-1", PLATFORM_STATS.usersTrend >= 0 ? "text-success" : "text-danger")}>
+                {PLATFORM_STATS.usersTrend >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                {PLATFORM_STATS.usersTrend >= 0 ? "+" : ""}{PLATFORM_STATS.usersTrend}%
+              </span>
             </div>
             <p className="text-xl font-bold text-text-primary">
               {PLATFORM_STATS.totalUsers.toLocaleString()}
@@ -396,7 +425,7 @@ export default function MarketsPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by name, symbol, or category..."
+            placeholder="Search markets..."
             className="w-full pl-12 pr-12 py-3 bg-card border border-border rounded-xl text-text-primary placeholder:text-text-muted focus:outline-none focus:border-gold/50 transition-colors"
           />
           {searchQuery && (
@@ -507,7 +536,8 @@ export default function MarketsPage() {
                   const isBookmarked = bookmarks.has(asset.id);
                   return (
                     <tr key={asset.id} className={cn(
-                      "hover:bg-card-hover transition-colors",
+                      "hover:bg-card-hover transition-all duration-200",
+                      "hover:shadow-[inset_0_0_0_1px_rgba(45,212,191,0.2)]",
                       isBookmarked && "bg-gold/10 border-l-2 border-l-gold"
                     )}>
                       {/* Market + Bookmark */}
@@ -537,10 +567,10 @@ export default function MarketsPage() {
                               toggleBookmark(asset.id);
                             }}
                             className={cn(
-                              "p-1 rounded transition-colors flex-shrink-0",
+                              "p-1.5 rounded-lg transition-all flex-shrink-0",
                               isBookmarked
-                                ? "text-gold"
-                                : "text-text-muted hover:text-gold opacity-50 hover:opacity-100"
+                                ? "text-gold bg-gold/20"
+                                : "text-text-muted hover:text-gold hover:bg-gold/10"
                             )}
                           >
                             <Bookmark className={cn("w-4 h-4", isBookmarked && "fill-current")} />
@@ -592,14 +622,14 @@ export default function MarketsPage() {
                       {/* Volume */}
                       <td className="px-3 py-3 hidden lg:table-cell">
                         <span className="text-text-primary text-sm">
-                          {formatUSD(marketData.volume24h)}
+                          {formatCompactUSD(marketData.volume24h)}
                         </span>
                       </td>
 
                       {/* Open Interest - use live data if available */}
                       <td className="px-3 py-3 hidden xl:table-cell">
                         <span className="flex items-center gap-1 text-text-primary text-sm">
-                          {formatUSD(asset.isLive ? (asset.totalLongOI! + asset.totalShortOI!) : marketData.openInterest)}
+                          {formatCompactUSD(asset.isLive ? (asset.totalLongOI! + asset.totalShortOI!) : marketData.openInterest)}
                           <Lock className="w-3 h-3 text-gold" />
                         </span>
                       </td>
