@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Lock, ArrowUp, ArrowDown, Info, Loader2, CheckCircle, XCircle, ChevronDown, ShieldAlert, Target, Shield, Sparkles, Zap } from "lucide-react";
+import { Lock, ArrowUp, ArrowDown, Info, Loader2, CheckCircle, XCircle, ChevronDown, ShieldAlert, Target, Shield, Sparkles, Zap, Wallet, AlertTriangle } from "lucide-react";
 import { Asset } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 import { keccak256, toHex } from "viem";
-import { useOpenPosition, useContractAddresses } from "@/lib/contracts/hooks";
+import { useOpenPosition, useContractAddresses, useVaultBalance } from "@/lib/contracts/hooks";
+import Link from "next/link";
 import { initFheInstance, encryptPositionParams, isFheInitialized } from "@/lib/fhe/client";
 
 interface TradingPanelProps {
@@ -171,6 +172,11 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
   const { address, isConnected } = useAccount();
   const { shadowVault, hasFHE } = useContractAddresses();
   const { openPosition, isPending, isConfirming, isSuccess, error, hash } = useOpenPosition();
+  const { data: vaultBalanceRaw } = useVaultBalance(address);
+
+  // Format vault balance (6 decimals)
+  const vaultBalance = vaultBalanceRaw ? Number(vaultBalanceRaw) / 1e6 : 0;
+  const hasInsufficientBalance = vaultBalance < parseFloat(collateral || "0");
 
   // Initialize FHE instance on mount
   useEffect(() => {
@@ -290,7 +296,7 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
 
   const isButtonDisabled = !isConnected || !selectedAsset || !collateral || fheInitializing ||
     txStatus === "encrypting" || txStatus === "pending" || txStatus === "confirming" ||
-    (orderType === "limit" && !limitPrice);
+    (orderType === "limit" && !limitPrice) || hasInsufficientBalance;
 
   // Calculate estimated values
   const collateralNum = parseFloat(collateral) || 0;
@@ -401,21 +407,63 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
             </div>
           </div>
 
+          {/* Available Balance */}
+          <div className="flex items-center justify-between py-1 px-2 bg-background rounded border border-border">
+            <div className="flex items-center gap-1">
+              <Wallet className="w-3 h-3 text-gold" />
+              <span className="text-[10px] text-text-muted">Available</span>
+            </div>
+            <span className={cn(
+              "text-[10px] font-medium",
+              vaultBalance > 0 ? "text-gold" : "text-danger"
+            )}>
+              ${vaultBalance.toFixed(2)}
+            </span>
+          </div>
+
+          {/* No Balance Warning */}
+          {isConnected && vaultBalance === 0 && (
+            <Link
+              href="/wallet?tab=deposit"
+              className="flex items-center gap-2 p-2 bg-danger/10 border border-danger/30 rounded text-[10px] text-danger hover:bg-danger/20 transition-colors"
+            >
+              <AlertTriangle className="w-3 h-3" />
+              <span>No balance! Click to deposit sUSD</span>
+            </Link>
+          )}
+
           {/* Collateral Input */}
           <div className="space-y-0.5">
-            <label className="text-[10px] font-medium text-text-secondary">COLLATERAL</label>
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-medium text-text-secondary">COLLATERAL</label>
+              {vaultBalance > 0 && (
+                <button
+                  onClick={() => setCollateral(vaultBalance.toString())}
+                  className="text-[9px] text-gold hover:underline"
+                >
+                  MAX
+                </button>
+              )}
+            </div>
             <div className="relative">
               <input
                 type="number"
                 value={collateral}
                 onChange={(e) => setCollateral(e.target.value)}
                 placeholder="0.00"
-                className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs text-text-primary placeholder-text-muted focus:outline-none focus:border-gold transition-colors pr-12"
+                max={vaultBalance}
+                className={cn(
+                  "w-full bg-background border rounded px-2 py-1.5 text-xs text-text-primary placeholder-text-muted focus:outline-none transition-colors pr-12",
+                  hasInsufficientBalance && collateral ? "border-danger focus:border-danger" : "border-border focus:border-gold"
+                )}
               />
               <span className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted text-[10px]">
-                USDC
+                sUSD
               </span>
             </div>
+            {hasInsufficientBalance && collateral && (
+              <p className="text-[9px] text-danger">Insufficient balance</p>
+            )}
           </div>
 
           {/* Limit Price Input - Only shown for limit orders */}

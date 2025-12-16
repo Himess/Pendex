@@ -25,6 +25,9 @@ import {
   useAddLiquidity,
   useRemoveLiquidity,
   useClaimRewards as useClaimRewardsHook,
+  useFaucet,
+  useDeposit,
+  useWithdraw,
 } from "@/lib/contracts/hooks";
 import { CONTRACTS } from "@/lib/contracts/config";
 import {
@@ -59,6 +62,9 @@ import {
   UserPlus,
   UserMinus,
   Trash2,
+  Droplet,
+  ArrowDownToLine,
+  ArrowUpFromLine,
 } from "lucide-react";
 import { createPublicClient, createWalletClient, custom, http, parseAbi } from "viem";
 import { sepolia } from "viem/chains";
@@ -144,6 +150,9 @@ export default function WalletPage() {
   const { addLiquidity, isPending: _isAddingLiquidity, isSuccess: _addLiquiditySuccess } = useAddLiquidity();
   const { removeLiquidity, isPending: _isRemovingLiquidity, isSuccess: _removeLiquiditySuccess } = useRemoveLiquidity();
   const { claimRewards: claimRewardsContract, isPending: _isClaimingRewards, isSuccess: _claimSuccess } = useClaimRewardsHook();
+  const { claim: claimFaucet, isPending: isFaucetPending, isSuccess: isFaucetSuccess, hash: faucetHash } = useFaucet();
+  const { deposit: depositToVault, isPending: isDepositPending, isSuccess: isDepositSuccess, hash: depositHash } = useDeposit();
+  const { withdraw: withdrawFromVault, isPending: isWithdrawPending, isSuccess: isWithdrawSuccess, hash: withdrawHash } = useWithdraw();
 
   // Derived wallet data from contracts
   const walletData = useMemo(() => ({
@@ -2031,19 +2040,96 @@ export default function WalletPage() {
         )}
 
         {activeTab === "deposit" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Deposit */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Step 1: Faucet - Get Test sUSD */}
             <div className="bg-card border border-border rounded-xl p-6">
-              <div className="flex items-center gap-2 mb-6">
-                <div className="w-10 h-10 rounded-full bg-success/20 text-success flex items-center justify-center">
-                  <Plus className="w-5 h-5" />
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center text-sm font-bold">
+                  1
                 </div>
-                <h3 className="text-lg font-semibold text-text-primary">Deposit USDC</h3>
+                <h3 className="text-lg font-semibold text-text-primary">Get Test sUSD</h3>
               </div>
 
               <div className="space-y-4">
+                <div className="p-4 bg-background rounded-lg">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Droplet className="w-8 h-8 text-gold" />
+                    <div>
+                      <p className="text-sm font-medium text-text-primary">Testnet Faucet</p>
+                      <p className="text-xs text-text-muted">Get up to 10,000 sUSD for testing</p>
+                    </div>
+                  </div>
+                  <div className="text-xs text-text-muted mb-2">
+                    Current Wallet Balance: <span className="text-gold font-medium">{formatUSD(walletData.balance)}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => claimFaucet()}
+                  disabled={isFaucetPending || !isConnected}
+                  className={cn(
+                    "w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2",
+                    isFaucetPending
+                      ? "bg-gold/50 cursor-not-allowed"
+                      : isFaucetSuccess
+                      ? "bg-success text-white"
+                      : "bg-gold text-background hover:bg-gold/90"
+                  )}
+                >
+                  {isFaucetPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Claiming...
+                    </>
+                  ) : isFaucetSuccess ? (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Claimed 10,000 sUSD!
+                    </>
+                  ) : (
+                    <>
+                      <Droplet className="w-4 h-4" />
+                      Claim 10,000 sUSD
+                    </>
+                  )}
+                </button>
+
+                {faucetHash && (
+                  <a
+                    href={`https://sepolia.etherscan.io/tx/${faucetHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-gold hover:underline flex items-center justify-center gap-1"
+                  >
+                    View transaction <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* Step 2: Deposit to Vault */}
+            <div className="bg-card border border-border rounded-xl p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-full bg-success/20 text-success flex items-center justify-center text-sm font-bold">
+                  2
+                </div>
+                <h3 className="text-lg font-semibold text-text-primary">Deposit to Vault</h3>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-3 bg-background rounded-lg space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-text-muted">Wallet Balance</span>
+                    <span className="text-text-primary font-medium">{formatUSD(walletData.balance)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-text-muted">Vault Balance</span>
+                    <span className="text-gold font-medium">{formatUSD(walletData.vaultBalance)}</span>
+                  </div>
+                </div>
+
                 <div>
-                  <label className="text-sm text-text-muted mb-2 block">Amount</label>
+                  <label className="text-sm text-text-muted mb-2 block">Amount to Deposit</label>
                   <div className="relative">
                     <input
                       type="number"
@@ -2052,47 +2138,90 @@ export default function WalletPage() {
                       placeholder="0.00"
                       className="input-field pr-16"
                     />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted">
-                      USDC
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted text-sm">
+                      sUSD
                     </span>
                   </div>
                 </div>
 
                 <div className="flex gap-2">
-                  {[100, 500, 1000, 5000].map((amount) => (
+                  {[100, 500, 1000].map((amount) => (
                     <button
                       key={amount}
                       onClick={() => setDepositAmount(amount.toString())}
-                      className="flex-1 py-2 text-sm bg-background rounded-lg text-text-muted hover:text-text-primary hover:bg-card-hover transition-colors"
+                      className="flex-1 py-2 text-xs bg-background rounded-lg text-text-muted hover:text-text-primary hover:bg-card-hover transition-colors"
                     >
                       ${amount}
                     </button>
                   ))}
+                  <button
+                    onClick={() => setDepositAmount(walletData.balance.toString())}
+                    className="flex-1 py-2 text-xs bg-background rounded-lg text-gold hover:bg-card-hover transition-colors"
+                  >
+                    MAX
+                  </button>
                 </div>
 
-                <button className="w-full py-3 bg-success text-white rounded-lg font-semibold hover:bg-success/90 transition-colors flex items-center justify-center gap-2">
-                  <Plus className="w-4 h-4" />
-                  Deposit
+                <button
+                  onClick={() => {
+                    // For now, simplified - real FHE encryption would be needed
+                    const amount = BigInt(Math.floor(parseFloat(depositAmount || "0") * 1e6));
+                    const paddedAmount = `0x${amount.toString(16).padStart(64, "0")}` as `0x${string}`;
+                    depositToVault(paddedAmount, "0x00");
+                  }}
+                  disabled={isDepositPending || !depositAmount || parseFloat(depositAmount) <= 0}
+                  className={cn(
+                    "w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2",
+                    isDepositPending
+                      ? "bg-success/50 cursor-not-allowed"
+                      : isDepositSuccess
+                      ? "bg-success text-white"
+                      : "bg-success text-white hover:bg-success/90"
+                  )}
+                >
+                  {isDepositPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Depositing...
+                    </>
+                  ) : isDepositSuccess ? (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Deposited!
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDownToLine className="w-4 h-4" />
+                      Deposit to Vault
+                    </>
+                  )}
                 </button>
 
                 <p className="text-xs text-text-muted text-center">
-                  Deposits are processed instantly on Zama network
+                  Vault balance is used for trading
                 </p>
               </div>
             </div>
 
-            {/* Withdraw */}
+            {/* Step 3: Withdraw from Vault */}
             <div className="bg-card border border-border rounded-xl p-6">
-              <div className="flex items-center gap-2 mb-6">
-                <div className="w-10 h-10 rounded-full bg-danger/20 text-danger flex items-center justify-center">
-                  <Minus className="w-5 h-5" />
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-full bg-danger/20 text-danger flex items-center justify-center text-sm font-bold">
+                  3
                 </div>
-                <h3 className="text-lg font-semibold text-text-primary">Withdraw USDC</h3>
+                <h3 className="text-lg font-semibold text-text-primary">Withdraw</h3>
               </div>
 
               <div className="space-y-4">
+                <div className="p-3 bg-background rounded-lg">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-text-muted">Available in Vault</span>
+                    <span className="text-text-primary font-medium">{formatUSD(walletData.vaultBalance)}</span>
+                  </div>
+                </div>
+
                 <div>
-                  <label className="text-sm text-text-muted mb-2 block">Amount</label>
+                  <label className="text-sm text-text-muted mb-2 block">Amount to Withdraw</label>
                   <div className="relative">
                     <input
                       type="number"
@@ -2101,31 +2230,51 @@ export default function WalletPage() {
                       placeholder="0.00"
                       className="input-field pr-16"
                     />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted">
-                      USDC
-                    </span>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-background rounded-lg">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-text-muted">Available</span>
-                    <span className="text-text-primary font-medium">
-                      {showBalance ? formatUSD(walletData.availableBalance) : "••••"}
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted text-sm">
+                      sUSD
                     </span>
                   </div>
                 </div>
 
                 <button
-                  onClick={() => setWithdrawAmount(walletData.availableBalance.toString())}
+                  onClick={() => setWithdrawAmount(walletData.vaultBalance.toString())}
                   className="w-full py-2 text-sm bg-background rounded-lg text-gold hover:bg-card-hover transition-colors"
                 >
                   Withdraw Max
                 </button>
 
-                <button className="w-full py-3 bg-danger text-white rounded-lg font-semibold hover:bg-danger/90 transition-colors flex items-center justify-center gap-2">
-                  <Minus className="w-4 h-4" />
-                  Withdraw
+                <button
+                  onClick={() => {
+                    const amount = BigInt(Math.floor(parseFloat(withdrawAmount || "0") * 1e6));
+                    const paddedAmount = `0x${amount.toString(16).padStart(64, "0")}` as `0x${string}`;
+                    withdrawFromVault(paddedAmount, "0x00");
+                  }}
+                  disabled={isWithdrawPending || !withdrawAmount || parseFloat(withdrawAmount) <= 0}
+                  className={cn(
+                    "w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2",
+                    isWithdrawPending
+                      ? "bg-danger/50 cursor-not-allowed"
+                      : isWithdrawSuccess
+                      ? "bg-success text-white"
+                      : "bg-danger text-white hover:bg-danger/90"
+                  )}
+                >
+                  {isWithdrawPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Withdrawing...
+                    </>
+                  ) : isWithdrawSuccess ? (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Withdrawn!
+                    </>
+                  ) : (
+                    <>
+                      <ArrowUpFromLine className="w-4 h-4" />
+                      Withdraw from Vault
+                    </>
+                  )}
                 </button>
 
                 <p className="text-xs text-text-muted text-center">
