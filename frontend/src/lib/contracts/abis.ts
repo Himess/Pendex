@@ -10,6 +10,14 @@ export const SHADOW_VAULT_ABI = [
     stateMutability: "view",
     type: "function",
   },
+  // Confidential balance with ACL (for decryption)
+  {
+    inputs: [{ name: "user", type: "address" }],
+    name: "confidentialGetBalance",
+    outputs: [{ name: "balance", type: "uint256" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
   {
     inputs: [{ name: "positionId", type: "uint256" }],
     name: "getPosition",
@@ -77,6 +85,20 @@ export const SHADOW_VAULT_ABI = [
     inputs: [{ name: "positionId", type: "uint256" }],
     name: "closePosition",
     outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  // Anonymous position (eaddress mode)
+  {
+    inputs: [
+      { name: "assetId", type: "bytes32" },
+      { name: "encryptedCollateral", type: "bytes32" },
+      { name: "encryptedLeverage", type: "bytes32" },
+      { name: "encryptedIsLong", type: "bytes32" },
+      { name: "inputProof", type: "bytes" },
+    ],
+    name: "openAnonymousPosition",
+    outputs: [{ name: "positionId", type: "uint256" }],
     stateMutability: "nonpayable",
     type: "function",
   },
@@ -172,14 +194,15 @@ export const SHADOW_ORACLE_ABI = [
 ] as const;
 
 export const SHADOW_USD_ABI = [
-  // ERC20 standard
+  // FHE balance check - returns true if user has any balance
   {
-    inputs: [{ name: "account", type: "address" }],
-    name: "balanceOf",
-    outputs: [{ name: "", type: "uint256" }],
+    inputs: [{ name: "user", type: "address" }],
+    name: "isBalanceInitialized",
+    outputs: [{ name: "", type: "bool" }],
     stateMutability: "view",
     type: "function",
   },
+  // Standard approve (for non-FHE operations)
   {
     inputs: [
       { name: "spender", type: "address" },
@@ -190,22 +213,12 @@ export const SHADOW_USD_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
-  {
-    inputs: [
-      { name: "owner", type: "address" },
-      { name: "spender", type: "address" },
-    ],
-    name: "allowance",
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  // Confidential functions
+  // Confidential functions (NOT view - grants ACL permissions)
   {
     inputs: [{ name: "account", type: "address" }],
     name: "confidentialBalanceOf",
-    outputs: [{ name: "", type: "bytes32" }],
-    stateMutability: "view",
+    outputs: [{ name: "balance", type: "uint256" }],
+    stateMutability: "nonpayable",
     type: "function",
   },
   {

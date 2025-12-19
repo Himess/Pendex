@@ -39,7 +39,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("\n4️⃣ Deploying ShadowVault...");
   const vaultDeployment = await deploy("ShadowVault", {
     from: deployer,
-    args: [deployer, oracleDeployment.address, shadowUSDDeployment.address, liquidityPoolDeployment.address],
+    args: [deployer, oracleDeployment.address, shadowUSDDeployment.address, liquidityPoolDeployment.address, deployer], // deployer as treasury
     log: true,
   });
   console.log(`   ✅ ShadowVault: ${vaultDeployment.address}`);

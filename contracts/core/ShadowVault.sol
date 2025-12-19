@@ -291,12 +291,30 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
     }
 
     /**
-     * @notice Get user's encrypted balance
+     * @notice Get user's encrypted balance (view only, no ACL)
      * @param user User address
-     * @return Encrypted balance (only user can decrypt)
+     * @return Encrypted balance handle
      */
     function getBalance(address user) external view returns (euint64) {
         return _balances[user];
+    }
+
+    /**
+     * @notice Get user's encrypted balance with ACL permission for decryption
+     * @dev NOT a view function - grants ACL permissions to caller
+     * @param user User address
+     * @return balance Encrypted balance (caller gets decrypt permission)
+     */
+    function confidentialGetBalance(address user) external returns (euint64 balance) {
+        balance = _balances[user];
+
+        // Grant ACL permissions so caller can decrypt
+        if (FHE.isInitialized(balance)) {
+            FHE.allowThis(balance);
+            FHE.allow(balance, msg.sender);
+        }
+
+        return balance;
     }
 
     // ============================================

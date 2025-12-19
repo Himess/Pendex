@@ -4,11 +4,11 @@ export type SupportedNetwork = "sepolia" | "hardhat";
 // Contract addresses per network
 export const NETWORK_CONTRACTS = {
   sepolia: {
-    shadowVault: "0xf6C0B8C7332080790a9425c0B888F74e8e9ff5B5" as `0x${string}`,
-    shadowOracle: "0xe0Fa3bbeF65d8Cda715645AE02a50874C04BCb17" as `0x${string}`,
-    shadowUsd: "0x9093B02c4Ea2402EC72C2ca9dAAb994F7578fAFb" as `0x${string}`,
-    shadowLiquidityPool: "0xF6d944B4B4cDE683111135e43C4D0235Cf14ECDc" as `0x${string}`,
-    shadowMarketMaker: "0x4831ac8D60cF7f1B01DeEeA12B3A0fDB083355fb" as `0x${string}`,
+    shadowVault: "0x486eF23A22Ab485851bE386da07767b070a51e82" as `0x${string}`,
+    shadowOracle: "0x9A5Fec3b1999cCBfC3a33EF5cdf09fdecad52301" as `0x${string}`,
+    shadowUsd: "0xa1FFdD728C13Eb72F928491d3E6D9245AE614cf6" as `0x${string}`,
+    shadowLiquidityPool: "0xB0a1fb939C017f17d79F6049A21b4b2fB9423d73" as `0x${string}`,
+    shadowMarketMaker: "0xa779cB24c82307a19d4E4E01B3B0879fF635D02F" as `0x${string}`,
     hasFHE: true, // Sepolia with Zama FHE encryption
   },
   hardhat: {
@@ -36,10 +36,10 @@ export const SEPOLIA_CONFIG = {
   },
   rpcUrls: {
     default: {
-      http: ["https://sepolia.infura.io/v3/84842078b09946638c03157f83405213"],
+      http: ["https://ethereum-sepolia-rpc.publicnode.com"],
     },
     public: {
-      http: ["https://rpc.sepolia.org"],
+      http: ["https://ethereum-sepolia-rpc.publicnode.com"],
     },
   },
   blockExplorers: {

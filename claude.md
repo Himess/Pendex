@@ -1,5 +1,5 @@
 # Pendex - Claude Memory File
-**Son Guncelleme:** 2025-12-15 (Session 3 - Rebranding)
+**Son Guncelleme:** 2025-12-19 (Session 6 - Nice to Have Features + Scripts)
 
 ---
 
@@ -9,18 +9,18 @@
 **Yeni Isim:** Pendex (eski: Shadow Protocol)
 **Renk:** Teal/Turkuaz (#2DD4BF)
 **Logo:** Geometric P tasarimi (public/logo.png)
-**Durum:** 9.5/10 - Hackathon'a hazir!
+**Durum:** 8/10 - Hackathon'a hazir!
 **Local:** `/Users/himess/Projects/private-preipo` (SILME!)
+**Live URL:** https://shadow-protocol-nine.vercel.app/
 
-**Session 3'te Yapilanlar:**
-1. Rebranding: Shadow Protocol → Pendex
-2. Renk degisikligi: Gold (#F7B731) → Teal (#2DD4BF)
-3. Logo eklendi (geometric P)
-4. Header/Footer/Docs guncellendi
-5. Companies 30→6 asset olarak duzeltildi
-6. Fake data temizlendi (wallet, history)
-7. Header navigasyonu sadeleştirildi (History, FHE Test, Admin kaldirildi)
-8. Hardcoded credentials kaldirildi (guvenlik fix)
+**Session 6'da Yapilanlar:**
+1. Transaction History - Blockchain eventlerinden gercek islem gecmisi
+2. Anonymous Mode - `openAnonymousPosition` hook entegrasyonu
+3. P&L Tracking - FHE-aware gosterim
+4. Price Simulator script - Random fiyat degisimleri
+5. Keeper Bot script - Limit order execution
+6. Add Liquidity script - LP'ye test likidite ekleme
+7. Error Handling - TradingPanel iyilestirmeleri
 
 **Kritik:** DefinePlugin kullan (ProvidePlugin DEGIL), chart v5 API, public RPC
 
@@ -32,143 +32,48 @@
 **Temel Konsept:**
 - Kullanici pozisyonlari FHE ile sifreleniyor
 - Kimse (validator bile) pozisyonlari goremiyor
-- Pre-IPO sirketlerde kaldiracli islem (2x-100x)
+- Pre-IPO sirketlerde kaldiracli islem (1x-10x)
 
 **Local Path:** `/Users/himess/Projects/private-preipo` (SILME!)
 
 ---
 
-## RENK PALETI (YENİ - Teal)
-```css
---gold: #2DD4BF;           /* Ana marka rengi (turkuaz) */
---background: #0A0A0B;     /* Koyu arka plan */
---card: #141414;           /* Kart arka plan */
---card-hover: #1a1a1a;     /* Hover durumu */
---border: #2a2a2a;         /* Kenar rengi */
---success: #10B981;        /* Basarili islemler */
---danger: #EF4444;         /* Hata/tehlike */
---text-primary: #FFFFFF;   /* Ana metin */
---text-secondary: #A0A0A0; /* Ikincil metin */
---text-muted: #6B7280;     /* Soluk metin */
-```
+## PROJE DURUMU: 8/10
 
----
+### Tamamlanan Ozellikler
+- [x] FHE encrypted trading (collateral, leverage, isLong)
+- [x] Deposit/Withdraw FHE encryption
+- [x] Balance decryption (sUSD, Vault, LP, Rewards)
+- [x] Limit orders UI
+- [x] Anonymous mode toggle
+- [x] Transaction history from blockchain events
+- [x] P&L tracking (FHE-aware)
+- [x] Price simulator script
+- [x] Keeper bot script
+- [x] Add liquidity script
+- [x] Error handling improvements
 
-## PROJE DURUMU: 9.5/10
+### Kalan Isler (YAPILACAKLAR)
 
-## ASSET LISTESI (6 Sirket)
-| Sira | Sirket | Valuation | Kategori |
-|------|--------|-----------|----------|
-| 1 | SpaceX | $350B | Aerospace |
-| 2 | ByteDance | $300B | Social |
-| 3 | OpenAI | $157B | AI |
-| 4 | Stripe | $70B | FinTech |
-| 5 | Databricks | $62B | Data |
-| 6 | Anthropic | $61B | AI |
+#### YUKSEK ONCELIK - Hackathon icin
+| # | Is | Aciklama | Zorluk |
+|---|-----|----------|--------|
+| 1 | End-to-End Test | Gercek FHE transaction test et (deposit → trade → withdraw) | Orta |
+| 2 | Demo Video | 2-3 dakikalik proje tanitim videosu | Kolay |
 
----
+#### ORTA ONCELIK
+| # | Is | Aciklama | Zorluk |
+|---|-----|----------|--------|
+| 3 | README Guncelle | Hackathon icin proje dokumantasyonu | Kolay |
+| 4 | Vercel Domain | shadow-protocol-nine.vercel.app → pendex.vercel.app | Kolay |
+| 5 | Price Simulator Calistir | Demo sirasinda fiyatlar hareket etsin | Kolay |
 
-## FRONTEND OZELLIKLERI
-
-### PriceChart.tsx (850+ lines)
-- **Timeframes:** 1M, 5M, 1H, 1D (hepsi calisiyor)
-- **2 Aylik History:** FHE Launch badge ile
-- **TradingView Cizim Araclari:**
-
-| Tool | Shortcut | Aciklama |
-|------|----------|----------|
-| Cursor | V | Normal secim |
-| Crosshair | C | Hassas crosshair |
-| Horizontal Line | H | Tek tikla yatay cizgi |
-| Trend Line | T | 2 tikla trend cizgisi |
-| Ray | R | 2 tikla uzayan isin |
-| Rectangle | G | 2 tikla dikdortgen |
-| Fib Retracement | F | Fibonacci seviyeleri |
-| Price Range | P | Fiyat araligi + % degisim |
-| Text Note | N | Metin notu |
-
-- Color Picker (8 renk), ESC iptal, Delete sil
-
-### OrderBook.tsx (430+ lines - CANLI!)
-- **Live Updates:** Her 500ms-2s'de otomatik guncelleme
-- **Price Flash:** Fiyat degisiminde yesil/kirmizi flash
-- **Recent Trades Ticker:** Son 5 islem altta gorunur
-- **Trades/Second:** ⚡ 0.8/s gibi gosterge
-- **Animated Depth Bars:** Smooth transitions
-
-### TradingPanel.tsx (590+ lines - FHE Animations)
-- **Encryption Modal:** Tam ekran animasyon
-  - Shield + Lock animated icons
-  - Progress bars: Collateral → Leverage → Direction
-  - "Powered by Zama FHE" badge
-- **Success Celebration:**
-  - Yesil checkmark animasyonu
-  - Confetti-style sparkles
-  - "Position Opened!" mesaji
-  - Etherscan link
-- **FHE Ready Badge:** Header'da status gostergesi
-- **Position Preview:** Gercek hesaplamalar (size, liq price, fees)
-
----
-
-## CONTRACT ADDRESSES (Sepolia)
-```
-ShadowOracle:            0xe0Fa3bbeF65d8Cda715645AE02a50874C04BCb17
-ShadowMarketMakerSimple: 0x4831ac8D60cF7f1B01DeEeA12B3A0fDB083355fb
-ShadowVault:             0xf6C0B8C7332080790a9425c0B888F74e8e9ff5B5
-ShadowUSD:               0x9093B02c4Ea2402EC72C2ca9dAAb994F7578fAFb
-Deployer:                0xad850C8eB45E80b99ad76A22fBDd0b04F4A1FD27
-```
-
-Not: Contract isimleri "Shadow" olarak kaldi (on-chain degisiklik zor),
-ama frontend artik "Pendex" olarak gorunuyor.
-
----
-
-## KRITIK TEKNIK BILGILER
-
-### Webpack Polyfills (Vercel)
-```javascript
-// DefinePlugin KULLAN, ProvidePlugin DEGIL!
-config.plugins.push(
-  new webpack.DefinePlugin({ "global": "globalThis" })
-);
-
-// require.resolve KULLAN
-fallback: {
-  events: require.resolve("events/"),
-  buffer: require.resolve("buffer/"),
-  process: require.resolve("process/browser"),
-}
-```
-
-### lightweight-charts v5
-```javascript
-// YANLIS: chart.addCandlestickSeries({...})
-// DOGRU:
-const { CandlestickSeries } = await import("lightweight-charts");
-chart.addSeries(CandlestickSeries, {...})
-```
-
-### RPC Rate Limiting
-```javascript
-// Public RPC + yavas polling
-const RPC = "https://rpc.sepolia.org";
-const POLL_INTERVAL = 10000; // 10 saniye
-```
-
----
-
-## UNIQUE FEATURES
-
-1. **Anonymous Trading (eaddress)** - Position owner encrypted
-2. **Encrypted Limit Orders** - Front-running IMKANSIZ
-3. **GMX-Style LP Pool** - Trader losses = LP gains
-4. **Leverage Trading (2x-100x)** - Encrypted P&L
-5. **FHE Random** - randEuint64/randEuint8
-6. **Professional Chart** - TradingView-style drawing tools
-7. **Live Order Book** - Real-time updates + trade ticker
-8. **FHE Encryption Animations** - Visual feedback for encryption
+#### DUSUK ONCELIK (Nice to Have)
+| # | Is | Aciklama | Zorluk |
+|---|-----|----------|--------|
+| 6 | Keeper Bot Calistir | Limit orderlarin otomatik execute edilmesi | Orta |
+| 7 | LP APY Gosterimi | Gercek APY hesaplama | Orta |
+| 8 | Mobile Responsive | Mobil uyumluluk kontrol | Orta |
 
 ---
 
@@ -178,37 +83,79 @@ const POLL_INTERVAL = 10000; // 10 saniye
 pendex/  (/Users/himess/Projects/private-preipo)
 ├── contracts/
 │   ├── core/
-│   │   ├── ShadowVault.sol
-│   │   ├── ShadowOracle.sol
-│   │   └── ShadowLiquidityPool.sol
+│   │   ├── ShadowVault.sol         - Ana trading vault (FHE)
+│   │   ├── ShadowOracle.sol        - Fiyat oracle
+│   │   └── ShadowLiquidityPool.sol - LP pool
 │   ├── tokens/
-│   │   └── ShadowUSD.sol
+│   │   └── ShadowUSD.sol           - Stablecoin
 │   └── bots/
 │       └── ShadowMarketMakerSimple.sol
+├── scripts/                         - YENI SCRIPTLER
+│   ├── priceSimulator.ts           - Fiyat simulasyonu
+│   ├── keeperBot.ts                - Limit order keeper
+│   ├── addLiquidity.ts             - LP likidite ekleme
+│   └── addAssets.ts                - Oracle asset ekleme
 ├── frontend/
 │   ├── public/
-│   │   └── logo.png          - Pendex logo (teal geometric P)
-│   ├── next.config.js        - Webpack polyfills
+│   │   └── logo.png
+│   ├── next.config.js
 │   └── src/
 │       ├── app/
-│       │   ├── globals.css   - Teal renk schemasi
-│       │   ├── trade/        - Trading UI
-│       │   ├── wallet/       - Decrypt + Operators
-│       │   └── markets/      - 6 assets
+│       │   ├── globals.css
+│       │   ├── trade/page.tsx
+│       │   ├── wallet/page.tsx     - FHE deposit/withdraw + history
+│       │   ├── markets/page.tsx
+│       │   ├── companies/page.tsx
+│       │   └── docs/page.tsx
 │       ├── components/
-│       │   ├── Header.tsx    - Pendex logo + isim
-│       │   ├── Footer.tsx    - Pendex branding
-│       │   ├── PriceChart.tsx
-│       │   ├── OrderBook.tsx
-│       │   └── TradingPanel.tsx
+│       │   ├── Header.tsx
+│       │   ├── Footer.tsx
+│       │   ├── PriceChart.tsx      - TradingView-style chart
+│       │   ├── OrderBook.tsx       - Canli order book
+│       │   └── TradingPanel.tsx    - FHE trading + error handling
 │       └── lib/
-│           ├── constants.ts  - 6 asset definitions
-│           └── companyData.ts - Sirket bilgileri
+│           ├── constants.ts
+│           ├── companyData.ts
+│           ├── fhe/client.ts       - FHE SDK wrapper
+│           └── contracts/
+│               ├── hooks.ts        - Wagmi hooks
+│               └── abis.ts         - Contract ABIs
 ├── docs/
 │   └── FHEVM_INTEGRATION.md
 └── test/
-    └── ShadowProtocol.test.ts  (53 tests)
+    └── ShadowProtocol.test.ts
 ```
+
+---
+
+## CONTRACT ADDRESSES (Sepolia)
+```
+ShadowOracle:            0x9A5Fec3b1999cCBfC3a33EF5cdf09fdecad52301
+ShadowUSD:               0xa1FFdD728C13Eb72F928491d3E6D9245AE614cf6
+ShadowLiquidityPool:     0xB0a1fb939C017f17d79F6049A21b4b2fB9423d73
+ShadowVault:             0x486eF23A22Ab485851bE386da07767b070a51e82
+ShadowMarketMaker:       0xa779cB24c82307a19d4E4E01B3B0879fF635D02F
+Deployer:                0xad850C8eB45E80b99ad76A22fBDd0b04F4A1FD27
+```
+
+### Sepolia FHE Adresleri
+```
+Coprocessor:  0x92C920834Ec8941d2C77D188936E1f7A6f49c127
+ACL:          0xf0Ffdc93b7E186bC2f8CB3dAA75D86d1930A433D
+KMS Verifier: 0xbE0E383937d564D7FF0BC3b46c51f0bF8d5C311A
+```
+
+---
+
+## ASSET LISTESI (6 Sirket)
+| Sira | Sirket | Fiyat | Kategori | Asset ID |
+|------|--------|-------|----------|----------|
+| 1 | OpenAI | $250 | AI | 0xbfe1b9d... |
+| 2 | Anthropic | $95 | AI | 0xee2176d... |
+| 3 | SpaceX | $180 | Aerospace | 0x9fd352a... |
+| 4 | Stripe | $48 | FinTech | 0x8eddee8... |
+| 5 | Databricks | $55 | Data | 0x0bf812f... |
+| 6 | ByteDance | $165 | Social | 0x7a8e8d0... |
 
 ---
 
@@ -218,63 +165,170 @@ pendex/  (/Users/himess/Projects/private-preipo)
 # Proje dizini
 cd /Users/himess/Projects/private-preipo
 
-# Test
-npx hardhat test  # 53 passing
-
 # Frontend dev
 cd frontend && npm run dev
 
 # Frontend build
 cd frontend && npm run build
+
+# Hardhat test
+npx hardhat test
+
+# === YENI SCRIPTLER ===
+
+# Fiyat simulasyonu (surekli)
+npx hardhat run scripts/priceSimulator.ts --network sepolia
+
+# Fiyat simulasyonu (tek seferlik)
+npx hardhat run scripts/priceSimulator.ts --network sepolia -- --once
+
+# Keeper bot (surekli)
+npx hardhat run scripts/keeperBot.ts --network sepolia
+
+# Keeper bot (tek seferlik)
+npx hardhat run scripts/keeperBot.ts --network sepolia -- --once
+
+# LP'ye likidite ekle
+npx hardhat run scripts/addLiquidity.ts --network sepolia
 ```
 
 ---
 
-## COMMIT RULES
-- NEVER use "Claude", "AI", "Generated" in commits
-- NEVER use "Co-Authored-By: Claude"
-- Normal, insan gibi commit mesajlari yaz
+## SESSION 6 - NICE TO HAVE FEATURES (19 Aralik 2025)
+
+### Tamamlanan Isler
+
+#### 1. Transaction History (wallet/page.tsx)
+- Blockchain eventlerinden gercek islem gecmisi
+- PositionOpened, PositionClosed, LiquidityAdded, LiquidityRemoved, RewardsClaimed, Mint
+- Son 7 gunluk eventler (~50400 block)
+- Etherscan linkleri
+
+#### 2. Anonymous Mode (TradingPanel.tsx)
+- `useOpenAnonymousPosition` hook eklendi
+- Toggle acikken `openAnonymousPosition` cagiriliyor
+- eaddress ile encrypted owner
+
+#### 3. P&L Tracking (wallet/page.tsx)
+- FHE Protected badge
+- Position sayilari transaction history'den
+- Privacy bilgisi
+
+#### 4. Price Simulator (scripts/priceSimulator.ts)
+- %1-2 random fiyat degisimi
+- 30 saniyede bir guncelleme
+- Min/max limitler (base price'in %80-%120)
+
+#### 5. Keeper Bot (scripts/keeperBot.ts)
+- Limit orderlari kontrol eder
+- Liquidation'lari kontrol eder
+- 60 saniyede bir calisir
+
+#### 6. Add Liquidity (scripts/addLiquidity.ts)
+- LP'ye $100,000 test likidite ekler
+
+#### 7. Error Handling (TradingPanel.tsx)
+- Yuksek leverage uyarisi (8-9x sari, 10x kirmizi)
+- User-friendly error mesajlari
+- Retry butonu (network/timeout hatalari icin)
+- Error mesaji 8 saniye gorunur
 
 ---
 
-## SESSION 3 YAPILAN DEGISIKLIKLER (15 Aralik 2025)
+## TEKNIK NOTLAR
 
-### Rebranding
-- [x] Shadow Protocol → Pendex
-- [x] Gold (#F7B731) → Teal (#2DD4BF)
-- [x] Logo eklendi (public/logo.png)
-- [x] Header.tsx - logo + "Pendex" ismi
-- [x] Footer.tsx - "Pendex" branding
-- [x] layout.tsx - title guncellendi
-- [x] docs/page.tsx - tum referanslar guncellendi
+### FHE Decryption Flow
+```typescript
+const handle = await contract.confidentialBalanceOf(address);
+const keypair = instance.generateKeypair();
+const eip712 = instance.createEIP712(keypair.publicKey, [contractAddr], startTime, "1");
+const signature = await signer.signTypedData(eip712.domain, eip712.types, eip712.message);
+const results = await instance.userDecrypt([{handle, contractAddress}], ...);
+```
 
-### Bug Fixes
-- [x] Companies 30→6 asset (companyData.ts)
-- [x] Wallet fake data temizlendi
-- [x] History fake data temizlendi
-- [x] Header navigasyonu sadeleştirildi
-- [x] Hardcoded credentials kaldirildi (hardhat.config.ts)
-- [x] .env.example eklendi
+### FHE Encryption Flow
+```typescript
+const input = instance.createEncryptedInput(contractAddress, userAddress);
+input.add64(BigInt(amount));
+const encrypted = await input.encrypt();
+await contract.deposit(encrypted.handles[0], encrypted.inputProof);
+```
 
-### Kalan Isler
-- [ ] Asset ID placeholders duzelt (frontend config)
-- [ ] LP APY gosterimi duzelt
-- [ ] Deposit bug fix
-- [ ] Deploy to Vercel with new branding
+### Webpack Polyfills
+```javascript
+config.plugins.push(
+  new webpack.DefinePlugin({ "global": "globalThis" })
+);
+fallback: {
+  events: require.resolve("events/"),
+  buffer: require.resolve("buffer/"),
+  process: require.resolve("process/browser"),
+}
+```
+
+---
+
+## RENK PALETI
+```css
+--gold: #2DD4BF;           /* Ana marka rengi (turkuaz) */
+--background: #0A0A0B;     /* Koyu arka plan */
+--card: #141414;           /* Kart arka plan */
+--success: #10B981;        /* Basarili islemler */
+--danger: #EF4444;         /* Hata/tehlike */
+```
+
+---
+
+## UNIQUE FEATURES
+
+1. **Anonymous Trading (eaddress)** - Position owner encrypted
+2. **Encrypted Limit Orders** - Front-running IMKANSIZ
+3. **GMX-Style LP Pool** - Trader losses = LP gains
+4. **Leverage Trading (1x-10x)** - Encrypted P&L
+5. **FHE Random** - randEuint64/randEuint8
+6. **Professional Chart** - TradingView-style drawing tools
+7. **Live Order Book** - Real-time updates + trade ticker
+8. **FHE Encryption Animations** - Visual feedback
 
 ---
 
 ## SONUC
 
-Pendex hackathon icin tamamen hazir:
-- Yeni branding: Pendex + Teal renk schemasi
-- Chart profesyonel (TradingView tools + 9 cizim araci)
-- Order Book canli (500ms-2s updates + trade ticker)
-- FHE animasyonlari (encryption modal + success celebration)
-- 6 buyuk Pre-IPO asset
-- Tum FHE features calisir durumda
+Pendex hackathon icin hazir:
+- FHE encrypted trading
+- Anonymous mode
+- Real transaction history
+- Price simulation
+- Keeper bot
+- Error handling
 
-**Puan: 9.5/10**
+**Puan: 8/10** - Demo icin hazir!
+
+### Siradaki Adimlar:
+1. End-to-end test yap (deposit → trade → withdraw)
+2. Demo video cek (2-3 dk)
+3. README guncelle
+4. Vercel domain degistir (pendex.vercel.app)
+
+**Live URL:** https://shadow-protocol-nine.vercel.app/
+
+---
+
+## YENI SESSION ICIN PROMPT
+
+Yeni terminalde su promptu kullan:
+
+```
+Pendex projesine devam ediyorum. Bu bir Zama FHE Hackathon projesi - Pre-IPO sirketlerde (SpaceX, OpenAI, Anthropic vb.) FHE encrypted kaldiracli trading platformu.
+
+Proje dizini: /Users/himess/Projects/private-preipo
+Frontend: /Users/himess/Projects/private-preipo/frontend
+
+Lutfen once claude.md dosyasini oku:
+cat /Users/himess/Projects/private-preipo/claude.md
+
+Sonra ne yapmami istedigimi soyle.
+```
 
 ---
 
@@ -284,10 +338,13 @@ Pendex hackathon icin tamamen hazir:
 # 1. Dizine git
 cd /Users/himess/Projects/private-preipo
 
-# 2. Git durumu kontrol
+# 2. Claude.md'yi oku
+cat claude.md
+
+# 3. Git durumu kontrol
 git status
 git log --oneline -5
 
-# 3. Frontend calistir
+# 4. Frontend calistir
 cd frontend && npm run dev
 ```

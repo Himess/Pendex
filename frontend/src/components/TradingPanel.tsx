@@ -6,9 +6,16 @@ import { Asset } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 import { keccak256, toHex } from "viem";
-import { useOpenPosition, useContractAddresses, useVaultBalance } from "@/lib/contracts/hooks";
+import { useOpenPosition, useOpenAnonymousPosition, useContractAddresses, useUserPositions } from "@/lib/contracts/hooks";
 import Link from "next/link";
-import { initFheInstance, encryptPositionParams, isFheInitialized } from "@/lib/fhe/client";
+import {
+  initFheInstance,
+  encryptPositionParams,
+  isFheInitialized,
+  decryptValue,
+} from "@/lib/fhe/client";
+import { useWalletClient, usePublicClient } from "wagmi";
+import { parseAbi } from "viem";
 
 interface TradingPanelProps {
   selectedAsset: Asset | null;
@@ -146,6 +153,16 @@ function SuccessAnimation({ isActive, hash }: { isActive: boolean; hash?: string
   );
 }
 
+// Contract ABI for FHE balance decryption
+const SHADOW_VAULT_ABI = parseAbi([
+  "function confidentialGetBalance(address user) external returns (uint256)",
+]);
+
+// Contract addresses
+const CONTRACT_ADDRESSES = {
+  shadowVault: "0x486eF23A22Ab485851bE386da07767b070a51e82" as `0x${string}`,
+};
+
 export function TradingPanel({ selectedAsset }: TradingPanelProps) {
   const [isLong, setIsLong] = useState(true);
   const [leverage, setLeverage] = useState(5);
@@ -172,11 +189,167 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
   const { address, isConnected } = useAccount();
   const { shadowVault, hasFHE } = useContractAddresses();
   const { openPosition, isPending, isConfirming, isSuccess, error, hash } = useOpenPosition();
-  const { data: vaultBalanceRaw } = useVaultBalance(address);
+  const {
+    openAnonymousPosition,
+    isPending: isAnonPending,
+    isConfirming: isAnonConfirming,
+    isSuccess: isAnonSuccess,
+    error: anonError,
+    hash: anonHash
+  } = useOpenAnonymousPosition();
 
-  // Format vault balance (6 decimals)
-  const vaultBalance = vaultBalanceRaw ? Number(vaultBalanceRaw) / 1e6 : 0;
+  // Error handling state
+  const [retryCount, setRetryCount] = useState(0);
+  const [lastOrderParams, setLastOrderParams] = useState<{
+    assetId: `0x${string}`;
+    collateral: string;
+    leverage: number;
+    isLong: boolean;
+  } | null>(null);
+  const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
+
+  // Fetch user positions
+  const { data: positionIds } = useUserPositions(address);
+  const [showPositions, setShowPositions] = useState(false);
+  const openPositionCount = (positionIds?.length || 0);
+
+  // Track vault balance - FHE decrypted or localStorage cached
+  const [vaultBalance, setVaultBalance] = useState(0);
+  const [isDecryptingBalance, setIsDecryptingBalance] = useState(false);
+  const [balanceDecrypted, setBalanceDecrypted] = useState(false);
+
+  // FHE Decrypt vault balance
+  const handleDecryptVaultBalance = useCallback(async () => {
+    if (!walletClient || !address || !fheReady) {
+      console.log("Missing requirements for FHE decryption");
+      return;
+    }
+
+    try {
+      setIsDecryptingBalance(true);
+      console.log("🔐 Starting FHE vault balance decryption...");
+
+      // 1. Get the encrypted balance handle from contract
+      const { result: handle } = await publicClient!.simulateContract({
+        address: CONTRACT_ADDRESSES.shadowVault,
+        abi: SHADOW_VAULT_ABI,
+        functionName: "confidentialGetBalance",
+        args: [address],
+        account: address,
+      });
+
+      console.log("📦 Got encrypted handle:", handle);
+
+      if (!handle || handle === BigInt(0)) {
+        console.log("No encrypted balance found, setting to 0");
+        setVaultBalance(0);
+        setBalanceDecrypted(true);
+        return;
+      }
+
+      // Convert bigint handle to hex string
+      const handleHex = ("0x" + handle.toString(16).padStart(64, "0")) as `0x${string}`;
+      console.log("🔑 Handle as hex:", handleHex);
+
+      // 2. Decrypt using FHE SDK
+      const decryptedValue = await decryptValue(
+        handleHex,
+        CONTRACT_ADDRESSES.shadowVault,
+        address,
+        walletClient
+      );
+
+      console.log("✅ Decrypted vault balance:", decryptedValue);
+
+      // Convert from 6 decimals to display value
+      const balance = Number(decryptedValue) / 1e6;
+      setVaultBalance(balance);
+      setBalanceDecrypted(true);
+
+      // Cache in localStorage for future reference
+      localStorage.setItem(`vault_balance_${address}`, balance.toString());
+    } catch (error) {
+      console.error("❌ FHE vault balance decryption failed:", error);
+      // Fall back to localStorage
+      const stored = localStorage.getItem(`vault_balance_${address}`);
+      if (stored) {
+        setVaultBalance(parseFloat(stored));
+      }
+    } finally {
+      setIsDecryptingBalance(false);
+    }
+  }, [walletClient, address, fheReady, publicClient]);
+
+  // Load vault balance from localStorage on mount, then try FHE decryption
+  useEffect(() => {
+    if (address) {
+      // First, load cached value from localStorage
+      const stored = localStorage.getItem(`vault_balance_${address}`);
+      if (stored) {
+        setVaultBalance(parseFloat(stored));
+      }
+    }
+  }, [address]);
+
+  // Listen for storage changes (when deposit is made on wallet page)
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === `vault_balance_${address}` && e.newValue) {
+        setVaultBalance(parseFloat(e.newValue));
+        setBalanceDecrypted(true); // Wallet page decrypted it
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [address]);
+
   const hasInsufficientBalance = vaultBalance < parseFloat(collateral || "0");
+  const isHighLeverage = leverage >= 8;
+  const isMaxLeverage = leverage === 10;
+
+  // User-friendly error message parser
+  const parseErrorMessage = (err: Error | null): string => {
+    if (!err) return "";
+    const msg = err.message.toLowerCase();
+
+    // Common error patterns
+    if (msg.includes("user rejected") || msg.includes("user denied")) {
+      return "Transaction cancelled by user";
+    }
+    if (msg.includes("insufficient funds") || msg.includes("insufficient balance")) {
+      return "Insufficient balance for gas fees";
+    }
+    if (msg.includes("nonce too low")) {
+      return "Transaction conflict. Please try again.";
+    }
+    if (msg.includes("replacement transaction underpriced")) {
+      return "Gas price too low. Increase gas and retry.";
+    }
+    if (msg.includes("timeout") || msg.includes("timed out")) {
+      return "Network timeout. Check connection and retry.";
+    }
+    if (msg.includes("network") || msg.includes("disconnected")) {
+      return "Network error. Check your connection.";
+    }
+    if (msg.includes("execution reverted")) {
+      // Try to extract revert reason
+      if (msg.includes("deposit first")) {
+        return "Please deposit sUSD first";
+      }
+      if (msg.includes("no balance")) {
+        return "Insufficient vault balance";
+      }
+      if (msg.includes("asset not tradeable")) {
+        return "This asset is not available for trading";
+      }
+      return "Transaction failed. Check your balance.";
+    }
+
+    // Truncate long messages
+    const shortMsg = err.message.slice(0, 100);
+    return shortMsg.length < err.message.length ? shortMsg + "..." : shortMsg;
+  };
 
   // Initialize FHE instance on mount
   useEffect(() => {
@@ -199,14 +372,19 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
     }
   }, [hasFHE]);
 
-  // Update status based on transaction state
+  // Update status based on transaction state (includes both regular and anonymous position hooks)
   useEffect(() => {
-    if (isPending) {
+    const pending = isPending || isAnonPending;
+    const confirming = isConfirming || isAnonConfirming;
+    const success = isSuccess || isAnonSuccess;
+    const txError = error || anonError;
+
+    if (pending) {
       setTxStatus("pending");
       setShowEncryptAnimation(false);
-    } else if (isConfirming) {
+    } else if (confirming) {
       setTxStatus("confirming");
-    } else if (isSuccess) {
+    } else if (success) {
       setTxStatus("success");
       setShowSuccessAnimation(true);
       setCollateral("");
@@ -214,16 +392,17 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
         setTxStatus("idle");
         setShowSuccessAnimation(false);
       }, 3000);
-    } else if (error) {
+    } else if (txError) {
       setTxStatus("error");
-      setErrorMessage(error.message);
+      setErrorMessage(parseErrorMessage(txError));
       setShowEncryptAnimation(false);
+      // Keep error visible longer for user to read
       setTimeout(() => {
         setTxStatus("idle");
         setErrorMessage(null);
-      }, 5000);
+      }, 8000);
     }
-  }, [isPending, isConfirming, isSuccess, error]);
+  }, [isPending, isConfirming, isSuccess, error, isAnonPending, isAnonConfirming, isAnonSuccess, anonError]);
 
   const handlePlaceOrder = useCallback(async () => {
     if (!selectedAsset || !collateral || !address) return;
@@ -253,13 +432,25 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
           address
         );
 
-        openPosition(
-          assetId,
-          encrypted.encryptedCollateral,
-          encrypted.encryptedLeverage,
-          encrypted.encryptedIsLong,
-          encrypted.inputProof
-        );
+        // Use anonymous position if user selected anonymous mode
+        if (isAnonymous) {
+          console.log("🕵️ Opening ANONYMOUS position...");
+          openAnonymousPosition(
+            assetId,
+            encrypted.encryptedCollateral,
+            encrypted.encryptedLeverage,
+            encrypted.encryptedIsLong,
+            encrypted.inputProof
+          );
+        } else {
+          openPosition(
+            assetId,
+            encrypted.encryptedCollateral,
+            encrypted.encryptedLeverage,
+            encrypted.encryptedIsLong,
+            encrypted.inputProof
+          );
+        }
       } else {
         // Mock mode for Sepolia - use plain values encoded as bytes32
         const mockCollateral = ("0x" + collateralAmount.toString(16).padStart(64, "0")) as `0x${string}`;
@@ -267,7 +458,13 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
         const mockIsLong = ("0x" + (isLong ? "1" : "0").padStart(64, "0")) as `0x${string}`;
         const mockProof = "0x00" as `0x${string}`;
 
-        openPosition(assetId, mockCollateral, mockLeverage, mockIsLong, mockProof);
+        // Use anonymous position if user selected anonymous mode
+        if (isAnonymous) {
+          console.log("🕵️ Opening ANONYMOUS position (mock)...");
+          openAnonymousPosition(assetId, mockCollateral, mockLeverage, mockIsLong, mockProof);
+        } else {
+          openPosition(assetId, mockCollateral, mockLeverage, mockIsLong, mockProof);
+        }
       }
     } catch (err) {
       console.error("Order placement failed:", err);
@@ -275,7 +472,7 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
       setShowEncryptAnimation(false);
       setErrorMessage(err instanceof Error ? err.message : "Failed to place order");
     }
-  }, [selectedAsset, collateral, address, leverage, isLong, hasFHE, fheReady, shadowVault, openPosition]);
+  }, [selectedAsset, collateral, address, leverage, isLong, hasFHE, fheReady, shadowVault, openPosition, isAnonymous, openAnonymousPosition]);
 
   const getButtonText = () => {
     if (!isConnected) return "CONNECT WALLET";
@@ -405,6 +602,19 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
               <span>5x</span>
               <span>10x</span>
             </div>
+            {/* High Leverage Warning */}
+            {isMaxLeverage && (
+              <div className="flex items-center gap-1 mt-1 p-1 bg-danger/10 border border-danger/30 rounded text-[9px] text-danger">
+                <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                <span>Max leverage! High liquidation risk</span>
+              </div>
+            )}
+            {isHighLeverage && !isMaxLeverage && (
+              <div className="flex items-center gap-1 mt-1 p-1 bg-yellow-500/10 border border-yellow-500/30 rounded text-[9px] text-yellow-500">
+                <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                <span>High leverage - trade carefully</span>
+              </div>
+            )}
           </div>
 
           {/* Available Balance */}
@@ -413,12 +623,23 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
               <Wallet className="w-3 h-3 text-gold" />
               <span className="text-[10px] text-text-muted">Available</span>
             </div>
-            <span className={cn(
-              "text-[10px] font-medium",
-              vaultBalance > 0 ? "text-gold" : "text-danger"
-            )}>
-              ${vaultBalance.toFixed(2)}
-            </span>
+            <div className="flex items-center gap-1">
+              {!balanceDecrypted && hasFHE && fheReady && vaultBalance === 0 && (
+                <button
+                  onClick={handleDecryptVaultBalance}
+                  disabled={isDecryptingBalance}
+                  className="text-[8px] text-gold hover:underline"
+                >
+                  {isDecryptingBalance ? "..." : "🔓"}
+                </button>
+              )}
+              <span className={cn(
+                "text-[10px] font-medium",
+                vaultBalance > 0 ? "text-gold" : "text-danger"
+              )}>
+                {isDecryptingBalance ? "..." : `$${vaultBalance.toFixed(2)}`}
+              </span>
+            </div>
           </div>
 
           {/* No Balance Warning */}
@@ -607,10 +828,21 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
             {getButtonText()}
           </button>
 
-          {/* Error Message */}
+          {/* Error Message with Retry */}
           {errorMessage && (
-            <div className="text-[9px] text-danger bg-danger/10 p-1 rounded">
-              {errorMessage}
+            <div className="text-[9px] text-danger bg-danger/10 p-1.5 rounded space-y-1">
+              <div className="flex items-start gap-1">
+                <XCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+              {(errorMessage.includes("retry") || errorMessage.includes("try again") || errorMessage.includes("timeout") || errorMessage.includes("network")) && (
+                <button
+                  onClick={handlePlaceOrder}
+                  className="w-full py-1 bg-danger/20 hover:bg-danger/30 rounded text-[8px] font-medium transition-colors"
+                >
+                  Retry Transaction
+                </button>
+              )}
             </div>
           )}
 
@@ -633,6 +865,73 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
           )}>
             {hasFHE ? "🔒 Encrypted" : "Demo Mode"}
           </div>
+
+          {/* Open Positions Section */}
+          {isConnected && (
+            <div className="border-t border-border pt-2 mt-2">
+              <button
+                onClick={() => setShowPositions(!showPositions)}
+                className="w-full flex items-center justify-between py-1 text-[10px] text-text-secondary hover:text-text-primary transition-colors"
+              >
+                <div className="flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-gold" />
+                  <span className="font-medium">Open Positions</span>
+                  {openPositionCount > 0 && (
+                    <span className="bg-gold/20 text-gold px-1 rounded text-[8px]">
+                      {openPositionCount}
+                    </span>
+                  )}
+                </div>
+                <ChevronDown className={cn("w-3 h-3 transition-transform", showPositions && "rotate-180")} />
+              </button>
+
+              {showPositions && (
+                <div className="mt-2 space-y-1.5">
+                  {openPositionCount === 0 ? (
+                    <p className="text-[9px] text-text-muted text-center py-2">
+                      No open positions
+                    </p>
+                  ) : (
+                    <>
+                      {positionIds?.map((posId) => (
+                        <div
+                          key={posId.toString()}
+                          className="bg-background rounded p-1.5 border border-border"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[9px] font-mono text-gold">
+                              #{posId.toString()}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[8px] text-text-muted bg-success/20 text-success px-1 rounded">
+                                Open
+                              </span>
+                              <Lock className="w-2.5 h-2.5 text-gold" />
+                            </div>
+                          </div>
+                          <div className="flex justify-between mt-1 text-[8px] text-text-muted">
+                            <span>🔐 Encrypted position</span>
+                            <Link
+                              href={`/wallet?tab=positions&id=${posId.toString()}`}
+                              className="text-gold hover:underline"
+                            >
+                              View →
+                            </Link>
+                          </div>
+                        </div>
+                      ))}
+                      <Link
+                        href="/wallet?tab=positions"
+                        className="block text-center text-[9px] text-gold hover:underline py-1"
+                      >
+                        Manage All Positions →
+                      </Link>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </>

@@ -23,7 +23,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { cn } from "@/lib/utils";
 import { CONTRACTS } from "@/lib/contracts/config";
-import { useEncryptedUsdBalance, useUserPositions } from "@/lib/contracts/hooks";
+import { useHasUsdBalance, useUserPositions } from "@/lib/contracts/hooks";
 
 // Zama Gateway status simulation
 type GatewayStatus = "idle" | "requesting" | "processing" | "decrypting" | "complete" | "error";
@@ -72,7 +72,7 @@ const DECRYPTION_STEPS: DecryptionStep[] = [
 export default function FHETestPage() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const { data: encryptedBalance } = useEncryptedUsdBalance(address);
+  const { data: hasBalance } = useHasUsdBalance(address);
   const { data: positionIds } = useUserPositions(address);
 
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus>("idle");

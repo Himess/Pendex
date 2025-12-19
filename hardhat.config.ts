@@ -3,12 +3,16 @@ import "@nomicfoundation/hardhat-chai-matchers";
 import "@nomicfoundation/hardhat-ethers";
 import "@nomicfoundation/hardhat-verify";
 import "@typechain/hardhat";
+import * as dotenv from "dotenv";
 import "hardhat-deploy";
 import "hardhat-gas-reporter";
 import type { HardhatUserConfig } from "hardhat/config";
 import "solidity-coverage";
 
 import "./tasks/accounts";
+
+// Load .env file
+dotenv.config();
 
 // Configuration from environment variables
 // IMPORTANT: Never commit real credentials! Use .env file
@@ -54,7 +58,8 @@ const config: HardhatUserConfig = {
         count: 10,
       },
       chainId: 11155111,
-      url: `https://sepolia.infura.io/v3/${INFURA_API_KEY}`,
+      // Use free public Sepolia RPC
+      url: INFURA_API_KEY ? `https://sepolia.infura.io/v3/${INFURA_API_KEY}` : "https://ethereum-sepolia-rpc.publicnode.com",
     },
     zama: {
       accounts: {

@@ -9,9 +9,11 @@ import {
   initFheInstance,
   isFheInitialized,
   requestUserDecryption,
+  encryptUint64,
+  getFheInstance,
 } from "@/lib/fhe/client";
 import {
-  useUsdBalance,
+  useHasUsdBalance,
   useVaultBalance,
   useLpBalance,
   usePendingRewards,
@@ -84,6 +86,47 @@ const SHADOW_USD_ABI = parseAbi([
   "function confidentialBalanceOf(address account) external returns (uint256)",
 ]);
 
+// ShadowVault ABI for encrypted vault balance
+const SHADOW_VAULT_ABI = parseAbi([
+  "function confidentialGetBalance(address user) external returns (uint256)",
+]);
+
+// ShadowLiquidityPool ABI for encrypted LP balance
+const SHADOW_LP_ABI = parseAbi([
+  "function getLpBalance(address user) external view returns (uint256)",
+  "function getPendingRewards(address user) external view returns (uint256)",
+]);
+
+// Event ABIs for transaction history
+const VAULT_EVENTS_ABI = parseAbi([
+  "event PositionOpened(uint256 indexed positionId, address indexed trader, bytes32 indexed assetId, uint256 timestamp)",
+  "event PositionClosed(uint256 indexed positionId, address indexed trader, uint256 timestamp)",
+  "event LimitOrderCreated(uint256 indexed orderId, address indexed user, bytes32 indexed assetId, uint256 timestamp)",
+  "event LimitOrderExecuted(uint256 indexed orderId, uint256 positionId, uint256 timestamp)",
+]);
+
+const LP_EVENTS_ABI = parseAbi([
+  "event LiquidityAdded(address indexed provider, uint256 amount, uint256 lpTokens)",
+  "event LiquidityRemoved(address indexed provider, uint256 amount, uint256 lpTokens)",
+  "event RewardsClaimed(address indexed provider, uint256 epoch)",
+]);
+
+const USD_EVENTS_ABI = parseAbi([
+  "event Mint(address indexed to, uint256 publicAmount)",
+  "event Burn(address indexed from, uint256 publicAmount)",
+]);
+
+// Transaction type interface
+interface Transaction {
+  id: string;
+  type: string;
+  amount: number;
+  asset?: string;
+  timestamp: string;
+  status: string;
+  txHash?: string;
+}
+
 // Operator interface
 interface Operator {
   address: string;
@@ -103,21 +146,16 @@ function formatApyFromBps(bps: bigint | undefined): number {
   return Number(bps) / 100; // 1500 bps = 15.00%
 }
 
-// Transaction history - will be populated from on-chain events
-// For now, empty array until we implement event indexing
-const TRANSACTIONS: {
-  id: string;
-  type: string;
-  amount: number;
-  asset?: string;
-  timestamp: string;
-  status: string;
-  txHash?: string;
-}[] = [];
+// Asset ID to symbol mapping (for transaction display)
+const ASSET_ID_TO_SYMBOL: Record<string, string> = {
+  "0xbfe1b9d697e35df099bb4711224ecb98f2ce33a5a09fa3cf15dfb83fc9ec3cd9": "OPENAI",
+  "0xee2176d5e35f81b98746f5f98677beb44f0167ae70b6518fbb5b5bdc65da8fdd": "ANTHROPIC",
+  "0x9fd352ac95c287d47bbccf4420d92735fe50f15b7f1bdc85ae12490f555114ab": "SPACEX",
+  "0x8eddee8eb3ba76411ebdccf6d0ad00841d58a803916546a295c2b0346ea86a11": "STRIPE",
+  "0x0bf812f25cacc694be173fe6fd2b56e3f94f71dcee99e1f1280b2ce7fba46fca": "DATABRICKS",
+  "0x7a8e8d0c5008129e8077f29f2b784b6f889f3420f121d5b70b5b3326476bbce1": "BYTEDANCE",
+};
 
-// P&L history - will be populated from position data
-// For now, empty array until we implement position tracking
-const PNL_HISTORY: { date: string; pnl: number }[] = [];
 
 function formatTimeRemaining(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -131,9 +169,197 @@ export default function WalletPage() {
   const chainId = useChainId();
 
   // ==================== CONTRACT DATA HOOKS ====================
-  // Wallet balances
-  const { data: usdBalance, isLoading: usdLoading } = useUsdBalance(address);
-  const { data: vaultBalance, isLoading: vaultLoading } = useVaultBalance(address);
+  // Wallet balances - hasUsdBalance is boolean (FHE encrypted)
+  const { data: hasUsdBalance, isLoading: usdLoading, refetch: refetchUsdBalance } = useHasUsdBalance(address);
+  const { data: vaultBalance, isLoading: vaultLoading, refetch: refetchVaultBalance } = useVaultBalance(address);
+
+  // Track faucet claims locally (since actual balance is encrypted)
+  const [claimedAmount, setClaimedAmount] = useState<number>(0);
+  // Track vault balance locally
+  const [localVaultBalance, setLocalVaultBalance] = useState<number>(0);
+  // Deposit amount for vault
+  const [depositAmount, setDepositAmount] = useState("");
+
+  // Transaction history from on-chain events
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoadingTxHistory, setIsLoadingTxHistory] = useState(false);
+
+  // Load claimed amount and vault balance from localStorage on mount
+  useEffect(() => {
+    if (address) {
+      const storedClaimed = localStorage.getItem(`faucet_claimed_${address}`);
+      if (storedClaimed) {
+        setClaimedAmount(parseFloat(storedClaimed));
+      }
+      const storedVault = localStorage.getItem(`vault_balance_${address}`);
+      if (storedVault) {
+        setLocalVaultBalance(parseFloat(storedVault));
+      }
+    }
+  }, [address]);
+
+  // Fetch transaction history from on-chain events
+  useEffect(() => {
+    if (!address || !isConnected) return;
+
+    const fetchTransactionHistory = async () => {
+      setIsLoadingTxHistory(true);
+      try {
+        const client = createPublicClient({
+          chain: sepolia,
+          transport: http("https://rpc.sepolia.org"),
+        });
+
+        const allTransactions: Transaction[] = [];
+        const currentBlock = await client.getBlockNumber();
+        // Look back ~7 days (roughly 50400 blocks at 12s/block)
+        const fromBlock = currentBlock - BigInt(50400);
+
+        // Fetch Position events from Vault
+        const [positionOpenedLogs, positionClosedLogs] = await Promise.all([
+          client.getLogs({
+            address: CONTRACT_ADDRESSES.shadowVault as `0x${string}`,
+            event: VAULT_EVENTS_ABI[0],
+            args: { trader: address },
+            fromBlock,
+            toBlock: "latest",
+          }),
+          client.getLogs({
+            address: CONTRACT_ADDRESSES.shadowVault as `0x${string}`,
+            event: VAULT_EVENTS_ABI[1],
+            args: { trader: address },
+            fromBlock,
+            toBlock: "latest",
+          }),
+        ]);
+
+        // Fetch LP events
+        const [liquidityAddedLogs, liquidityRemovedLogs, rewardsClaimedLogs] = await Promise.all([
+          client.getLogs({
+            address: CONTRACT_ADDRESSES.shadowLiquidityPool as `0x${string}`,
+            event: LP_EVENTS_ABI[0],
+            args: { provider: address },
+            fromBlock,
+            toBlock: "latest",
+          }),
+          client.getLogs({
+            address: CONTRACT_ADDRESSES.shadowLiquidityPool as `0x${string}`,
+            event: LP_EVENTS_ABI[1],
+            args: { provider: address },
+            fromBlock,
+            toBlock: "latest",
+          }),
+          client.getLogs({
+            address: CONTRACT_ADDRESSES.shadowLiquidityPool as `0x${string}`,
+            event: LP_EVENTS_ABI[2],
+            args: { provider: address },
+            fromBlock,
+            toBlock: "latest",
+          }),
+        ]);
+
+        // Fetch Mint events from ShadowUSD (faucet claims)
+        const mintLogs = await client.getLogs({
+          address: CONTRACT_ADDRESSES.shadowUSD as `0x${string}`,
+          event: USD_EVENTS_ABI[0],
+          args: { to: address },
+          fromBlock,
+          toBlock: "latest",
+        });
+
+        // Process position opened events
+        for (const log of positionOpenedLogs) {
+          const block = await client.getBlock({ blockNumber: log.blockNumber });
+          const assetId = log.args.assetId as string;
+          allTransactions.push({
+            id: `pos-open-${log.transactionHash}-${log.logIndex}`,
+            type: "position_open",
+            amount: 0, // Amount is encrypted
+            asset: ASSET_ID_TO_SYMBOL[assetId] || "Unknown",
+            timestamp: new Date(Number(block.timestamp) * 1000).toISOString(),
+            status: "completed",
+            txHash: log.transactionHash,
+          });
+        }
+
+        // Process position closed events
+        for (const log of positionClosedLogs) {
+          const block = await client.getBlock({ blockNumber: log.blockNumber });
+          allTransactions.push({
+            id: `pos-close-${log.transactionHash}-${log.logIndex}`,
+            type: "position_close",
+            amount: 0, // P&L is encrypted
+            timestamp: new Date(Number(block.timestamp) * 1000).toISOString(),
+            status: "completed",
+            txHash: log.transactionHash,
+          });
+        }
+
+        // Process LP add events
+        for (const log of liquidityAddedLogs) {
+          const block = await client.getBlock({ blockNumber: log.blockNumber });
+          allTransactions.push({
+            id: `lp-add-${log.transactionHash}-${log.logIndex}`,
+            type: "lp_deposit",
+            amount: Number(log.args.amount || 0) / 1e6,
+            timestamp: new Date(Number(block.timestamp) * 1000).toISOString(),
+            status: "completed",
+            txHash: log.transactionHash,
+          });
+        }
+
+        // Process LP remove events
+        for (const log of liquidityRemovedLogs) {
+          const block = await client.getBlock({ blockNumber: log.blockNumber });
+          allTransactions.push({
+            id: `lp-remove-${log.transactionHash}-${log.logIndex}`,
+            type: "lp_withdraw",
+            amount: Number(log.args.amount || 0) / 1e6,
+            timestamp: new Date(Number(block.timestamp) * 1000).toISOString(),
+            status: "completed",
+            txHash: log.transactionHash,
+          });
+        }
+
+        // Process rewards claimed events
+        for (const log of rewardsClaimedLogs) {
+          const block = await client.getBlock({ blockNumber: log.blockNumber });
+          allTransactions.push({
+            id: `reward-${log.transactionHash}-${log.logIndex}`,
+            type: "lp_reward",
+            amount: 0, // Encrypted amount
+            timestamp: new Date(Number(block.timestamp) * 1000).toISOString(),
+            status: "completed",
+            txHash: log.transactionHash,
+          });
+        }
+
+        // Process mint (faucet) events
+        for (const log of mintLogs) {
+          const block = await client.getBlock({ blockNumber: log.blockNumber });
+          allTransactions.push({
+            id: `mint-${log.transactionHash}-${log.logIndex}`,
+            type: "deposit",
+            amount: Number(log.args.publicAmount || 0) / 1e6,
+            timestamp: new Date(Number(block.timestamp) * 1000).toISOString(),
+            status: "completed",
+            txHash: log.transactionHash,
+          });
+        }
+
+        // Sort by timestamp (newest first)
+        allTransactions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+        setTransactions(allTransactions);
+      } catch (error) {
+        console.error("Failed to fetch transaction history:", error);
+      } finally {
+        setIsLoadingTxHistory(false);
+      }
+    };
+
+    fetchTransactionHistory();
+  }, [address, isConnected]);
 
   // LP Pool data
   const { data: lpBalance, isLoading: lpLoading } = useLpBalance(address);
@@ -154,19 +380,55 @@ export default function WalletPage() {
   const { deposit: depositToVault, isPending: isDepositPending, isSuccess: isDepositSuccess, hash: depositHash } = useDeposit();
   const { withdraw: withdrawFromVault, isPending: isWithdrawPending, isSuccess: isWithdrawSuccess, hash: withdrawHash } = useWithdraw();
 
+  // Track faucet success and update claimed amount
+  useEffect(() => {
+    if (isFaucetSuccess && address) {
+      const newClaimed = claimedAmount + 10000; // Faucet gives 10,000 sUSD
+      setClaimedAmount(newClaimed);
+      localStorage.setItem(`faucet_claimed_${address}`, newClaimed.toString());
+      // Refetch balance check
+      setTimeout(() => refetchUsdBalance(), 2000);
+    }
+  }, [isFaucetSuccess]);
+
+  // Track deposit success and update balances
+  useEffect(() => {
+    if (isDepositSuccess && address) {
+      // After deposit, reduce claimed amount and increase vault balance
+      const depositedAmount = parseFloat(depositAmount || "0");
+      if (depositedAmount > 0) {
+        // Update wallet balance (claimed from faucet)
+        const newClaimed = Math.max(0, claimedAmount - depositedAmount);
+        setClaimedAmount(newClaimed);
+        localStorage.setItem(`faucet_claimed_${address}`, newClaimed.toString());
+
+        // Update vault balance
+        const newVaultBalance = localVaultBalance + depositedAmount;
+        setLocalVaultBalance(newVaultBalance);
+        localStorage.setItem(`vault_balance_${address}`, newVaultBalance.toString());
+      }
+      setTimeout(() => {
+        refetchVaultBalance();
+        refetchUsdBalance();
+      }, 2000);
+    }
+  }, [isDepositSuccess]);
+
   // Derived wallet data from contracts
+  // Note: All balances are FHE encrypted, we track locally for UI
   const walletData = useMemo(() => ({
-    balance: formatBalance(usdBalance as bigint | undefined),
-    vaultBalance: formatBalance(vaultBalance as bigint | undefined),
-    availableBalance: formatBalance(usdBalance as bigint | undefined),
-    lockedInPositions: formatBalance(vaultBalance as bigint | undefined),
+    balance: claimedAmount, // Estimated from faucet claims (actual is encrypted)
+    hasBalance: hasUsdBalance as boolean, // True if any balance exists on-chain
+    vaultBalance: localVaultBalance, // Tracked locally since actual is encrypted
+    availableBalance: claimedAmount,
+    lockedInPositions: localVaultBalance,
     // PnL data would come from position tracking - placeholder for now
     totalPnL: 0,
     totalPnLPercent: 0,
     todayPnL: 0,
     todayPnLPercent: 0,
     isLoading: usdLoading || vaultLoading,
-  }), [usdBalance, vaultBalance, usdLoading, vaultLoading]);
+  }), [claimedAmount, hasUsdBalance, localVaultBalance, usdLoading, vaultLoading]);
 
   // Derived LP data from contracts
   const lpData = useMemo(() => ({
@@ -185,7 +447,6 @@ export default function WalletPage() {
 
   const [showBalance, setShowBalance] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "history" | "deposit" | "liquidity" | "transfer" | "decrypt" | "operators">("overview");
-  const [depositAmount, setDepositAmount] = useState("");
 
   // Operator state (ERC-7984)
   const [operators, setOperators] = useState<Operator[]>([]);
@@ -349,6 +610,12 @@ export default function WalletPage() {
           sUsdBalance: balance as bigint,
         }));
         setShowBalance(true);
+
+        // Update localStorage with real decrypted balance (for TradingPanel sync)
+        const balanceNumber = Number(balance) / 1e6; // 6 decimals
+        setClaimedAmount(balanceNumber);
+        localStorage.setItem(`faucet_claimed_${address}`, balanceNumber.toString());
+        console.log("✅ Updated local balance from FHE decryption:", balanceNumber);
       }
     } catch (error) {
       console.error("❌ Decryption failed:", error);
@@ -416,6 +683,279 @@ export default function WalletPage() {
       setIsClaiming(false);
     }
   };
+
+  // Real FHE Deposit Handler
+  const handleFheDeposit = useCallback(async () => {
+    if (!address || !depositAmount || !isFheReady) {
+      console.error("Missing requirements for FHE deposit");
+      return;
+    }
+
+    try {
+      console.log("🔐 Encrypting deposit amount with FHE...");
+      const amountInMicroUnits = BigInt(Math.floor(parseFloat(depositAmount) * 1e6));
+
+      // Encrypt the amount using Zama FHE
+      const { encryptedAmount, inputProof } = await encryptUint64(
+        amountInMicroUnits,
+        CONTRACT_ADDRESSES.shadowVault,
+        address
+      );
+
+      console.log("✅ Amount encrypted, sending to vault...");
+      console.log("   Encrypted:", encryptedAmount.slice(0, 20) + "...");
+      console.log("   Proof:", inputProof.slice(0, 20) + "...");
+
+      // Call the deposit function with encrypted data
+      depositToVault(encryptedAmount, inputProof);
+    } catch (error) {
+      console.error("❌ FHE deposit failed:", error);
+    }
+  }, [address, depositAmount, isFheReady, depositToVault]);
+
+  // Real FHE Withdraw Handler
+  const handleFheWithdraw = useCallback(async () => {
+    if (!address || !withdrawAmount || !isFheReady) {
+      console.error("Missing requirements for FHE withdraw");
+      return;
+    }
+
+    try {
+      console.log("🔐 Encrypting withdraw amount with FHE...");
+      const amountInMicroUnits = BigInt(Math.floor(parseFloat(withdrawAmount) * 1e6));
+
+      // Encrypt the amount using Zama FHE
+      const { encryptedAmount, inputProof } = await encryptUint64(
+        amountInMicroUnits,
+        CONTRACT_ADDRESSES.shadowVault,
+        address
+      );
+
+      console.log("✅ Amount encrypted, withdrawing from vault...");
+      console.log("   Encrypted:", encryptedAmount.slice(0, 20) + "...");
+      console.log("   Proof:", inputProof.slice(0, 20) + "...");
+
+      // Call the withdraw function with encrypted data
+      withdrawFromVault(encryptedAmount, inputProof);
+    } catch (error) {
+      console.error("❌ FHE withdraw failed:", error);
+    }
+  }, [address, withdrawAmount, isFheReady, withdrawFromVault]);
+
+  // Decrypt Vault Balance
+  const handleDecryptVaultBalance = useCallback(async () => {
+    if (!walletClient || !address || !isFheReady) {
+      setDecryptionError("Wallet not connected or FHE not ready");
+      return;
+    }
+
+    if (chainId !== 11155111) {
+      setDecryptionError("Please switch to Sepolia testnet for FHE decryption");
+      return;
+    }
+
+    setIsDecrypting(true);
+    setDecryptionError(null);
+
+    try {
+      console.log("📝 Calling confidentialGetBalance for vault...");
+
+      const publicClient = createPublicClient({
+        chain: sepolia,
+        transport: http(),
+      });
+
+      // Simulate to get the handle
+      const vaultHandle = await publicClient.simulateContract({
+        address: CONTRACT_ADDRESSES.shadowVault as `0x${string}`,
+        abi: SHADOW_VAULT_ABI,
+        functionName: "confidentialGetBalance",
+        args: [address],
+        account: address,
+      });
+
+      const handle = vaultHandle.result as bigint;
+      const handleHex = `0x${handle.toString(16).padStart(64, "0")}` as `0x${string}`;
+
+      console.log("🔐 Got vault handle:", handleHex);
+
+      if (handle === BigInt(0)) {
+        setDecryptedValues((prev) => ({ ...prev, vaultBalance: BigInt(0) }));
+        setLocalVaultBalance(0);
+        localStorage.setItem(`vault_balance_${address}`, "0");
+        return;
+      }
+
+      // Execute call to grant ACL
+      const hash = await walletClient.writeContract({
+        address: CONTRACT_ADDRESSES.shadowVault as `0x${string}`,
+        abi: SHADOW_VAULT_ABI,
+        functionName: "confidentialGetBalance",
+        args: [address],
+      });
+
+      console.log("✅ Vault ACL granted, tx:", hash);
+
+      // Request decryption
+      const results = await requestUserDecryption(
+        [{ handle: handleHex, contractAddress: CONTRACT_ADDRESSES.shadowVault }],
+        address,
+        walletClient
+      );
+
+      const resultKey = Object.keys(results).find(k => k.toLowerCase() === handleHex.toLowerCase()) || handleHex;
+      if (results[resultKey] !== undefined) {
+        const balance = typeof results[resultKey] === "bigint"
+          ? results[resultKey]
+          : BigInt(results[resultKey].toString());
+        setDecryptedValues((prev) => ({ ...prev, vaultBalance: balance as bigint }));
+
+        // Update localStorage for TradingPanel sync
+        const balanceNumber = Number(balance) / 1e6;
+        setLocalVaultBalance(balanceNumber);
+        localStorage.setItem(`vault_balance_${address}`, balanceNumber.toString());
+        console.log("✅ Vault balance decrypted:", balanceNumber);
+      }
+    } catch (error) {
+      console.error("❌ Vault decryption failed:", error);
+      setDecryptionError(
+        error instanceof Error ? error.message : "Vault decryption failed"
+      );
+    } finally {
+      setIsDecrypting(false);
+    }
+  }, [walletClient, address, isFheReady, chainId]);
+
+  // Decrypt LP Balance
+  const handleDecryptLpBalance = useCallback(async () => {
+    if (!walletClient || !address || !isFheReady) {
+      console.log("Missing requirements for LP decryption");
+      return;
+    }
+
+    if (chainId !== 11155111) {
+      console.log("Wrong chain for FHE");
+      return;
+    }
+
+    try {
+      console.log("🔐 Decrypting LP Balance...");
+      const publicClient = createPublicClient({
+        chain: sepolia,
+        transport: http(),
+      });
+
+      // Get the LP balance handle (view function)
+      const handle = await publicClient.readContract({
+        address: CONTRACT_ADDRESSES.shadowLiquidityPool,
+        abi: SHADOW_LP_ABI,
+        functionName: "getLpBalance",
+        args: [address],
+      });
+
+      console.log("📦 LP balance handle:", handle);
+
+      if (!handle || handle === BigInt(0)) {
+        console.log("No LP balance found");
+        setDecryptedValues((prev) => ({ ...prev, lpBalance: BigInt(0) }));
+        return;
+      }
+
+      // Convert to hex string and try to decrypt
+      const handleHex = ("0x" + (handle as bigint).toString(16).padStart(64, "0")) as `0x${string}`;
+
+      const results = await requestUserDecryption(
+        [{ handle: handleHex, contractAddress: CONTRACT_ADDRESSES.shadowLiquidityPool }],
+        address,
+        walletClient
+      );
+
+      const balance = results[handleHex] ?? results[handleHex.toLowerCase() as `0x${string}`];
+      if (balance !== undefined) {
+        console.log("✅ Decrypted LP balance:", balance);
+        setDecryptedValues((prev) => ({ ...prev, lpBalance: balance as bigint }));
+      }
+    } catch (error) {
+      console.error("❌ LP balance decryption failed:", error);
+    }
+  }, [walletClient, address, isFheReady, chainId]);
+
+  // Decrypt Pending Rewards
+  const handleDecryptPendingRewards = useCallback(async () => {
+    if (!walletClient || !address || !isFheReady) {
+      console.log("Missing requirements for rewards decryption");
+      return;
+    }
+
+    if (chainId !== 11155111) {
+      console.log("Wrong chain for FHE");
+      return;
+    }
+
+    try {
+      console.log("🔐 Decrypting Pending Rewards...");
+      const publicClient = createPublicClient({
+        chain: sepolia,
+        transport: http(),
+      });
+
+      // Get the pending rewards handle (view function)
+      const handle = await publicClient.readContract({
+        address: CONTRACT_ADDRESSES.shadowLiquidityPool,
+        abi: SHADOW_LP_ABI,
+        functionName: "getPendingRewards",
+        args: [address],
+      });
+
+      console.log("📦 Pending rewards handle:", handle);
+
+      if (!handle || handle === BigInt(0)) {
+        console.log("No pending rewards found");
+        setDecryptedValues((prev) => ({ ...prev, pendingRewards: BigInt(0) }));
+        return;
+      }
+
+      // Convert to hex string and try to decrypt
+      const handleHex = ("0x" + (handle as bigint).toString(16).padStart(64, "0")) as `0x${string}`;
+
+      const results = await requestUserDecryption(
+        [{ handle: handleHex, contractAddress: CONTRACT_ADDRESSES.shadowLiquidityPool }],
+        address,
+        walletClient
+      );
+
+      const rewards = results[handleHex] ?? results[handleHex.toLowerCase() as `0x${string}`];
+      if (rewards !== undefined) {
+        console.log("✅ Decrypted pending rewards:", rewards);
+        setDecryptedValues((prev) => ({ ...prev, pendingRewards: rewards as bigint }));
+      }
+    } catch (error) {
+      console.error("❌ Pending rewards decryption failed:", error);
+    }
+  }, [walletClient, address, isFheReady, chainId]);
+
+  // Decrypt All Balances at once
+  const handleDecryptAllBalances = useCallback(async () => {
+    setIsDecrypting(true);
+    setDecryptionError(null);
+
+    try {
+      // Decrypt sUSD balance
+      await handleDecryptBalance();
+      // Decrypt Vault balance
+      await handleDecryptVaultBalance();
+      // Decrypt LP balance
+      await handleDecryptLpBalance();
+      // Decrypt pending rewards
+      await handleDecryptPendingRewards();
+      console.log("✅ All balances decrypted!");
+    } catch (error) {
+      console.error("❌ Decrypt all failed:", error);
+      setDecryptionError("Failed to decrypt all balances");
+    } finally {
+      setIsDecrypting(false);
+    }
+  }, [handleDecryptBalance, handleDecryptVaultBalance, handleDecryptLpBalance, handleDecryptPendingRewards]);
 
   const handleConfidentialTransfer = async () => {
     if (!transferTo || !transferAmount) return;
@@ -1458,63 +1998,75 @@ export default function WalletPage() {
 
         {activeTab === "overview" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* P&L Chart */}
+            {/* P&L Chart - FHE Protected */}
             <div className="bg-card border border-border rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-text-primary mb-4">7-Day P&L History</h3>
-              {PNL_HISTORY.length > 0 ? (
-                <div className="space-y-3">
-                  {PNL_HISTORY.map((day, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-text-muted">{day.date}</span>
-                      <div className="flex-1 mx-4 h-2 bg-background rounded-full overflow-hidden">
-                        <div
-                          className={cn(
-                            "h-full rounded-full transition-all",
-                            day.pnl >= 0 ? "bg-success" : "bg-danger"
-                          )}
-                          style={{
-                            width: `${Math.min(Math.abs(day.pnl) / 6, 100)}%`,
-                            marginLeft: day.pnl < 0 ? "auto" : 0,
-                          }}
-                        />
-                      </div>
-                      <span
-                        className={cn(
-                          "text-sm font-medium w-24 text-right",
-                          day.pnl >= 0 ? "text-success" : "text-danger"
-                        )}
-                      >
-                        {showBalance
-                          ? `${day.pnl >= 0 ? "+" : ""}${formatUSD(day.pnl)}`
-                          : "••••"}
-                      </span>
-                    </div>
-                  ))}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-text-primary">Trading Performance</h3>
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-gold/10 rounded text-xs text-gold">
+                  <Shield className="w-3 h-3" />
+                  FHE Protected
                 </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <PieChart className="w-12 h-12 text-text-muted mb-3" />
-                  <p className="text-text-muted">No P&L history yet</p>
-                  <p className="text-sm text-text-muted/70">Start trading to see your performance</p>
+              </div>
+
+              {/* Position Stats */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-background rounded-lg p-4">
+                  <p className="text-sm text-text-muted mb-1">Opened Positions</p>
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-success" />
+                    <span className="text-2xl font-bold text-text-primary">
+                      {transactions.filter(tx => tx.type === "position_open").length}
+                    </span>
+                  </div>
                 </div>
-              )}
+                <div className="bg-background rounded-lg p-4">
+                  <p className="text-sm text-text-muted mb-1">Closed Positions</p>
+                  <div className="flex items-center gap-2">
+                    <TrendingDown className="w-5 h-5 text-gold" />
+                    <span className="text-2xl font-bold text-text-primary">
+                      {transactions.filter(tx => tx.type === "position_close").length}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Encrypted P&L Notice */}
+              <div className="border border-border/50 rounded-lg p-4 bg-background/50">
+                <div className="flex items-center gap-3 mb-2">
+                  <Lock className="w-5 h-5 text-gold" />
+                  <span className="font-medium text-text-primary">P&L is Fully Encrypted</span>
+                </div>
+                <p className="text-sm text-text-muted">
+                  Your profit and loss data is protected by Fully Homomorphic Encryption (FHE).
+                  No one can see your trading performance - not even validators or the protocol.
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+                  <span className="text-xs text-text-muted">Privacy: Active</span>
+                </div>
+              </div>
             </div>
 
             {/* Recent Activity */}
             <div className="bg-card border border-border rounded-xl p-6">
               <h3 className="text-lg font-semibold text-text-primary mb-4">Recent Activity</h3>
-              {TRANSACTIONS.length > 0 ? (
+              {isLoadingTxHistory ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Loader2 className="w-8 h-8 text-gold animate-spin mb-3" />
+                  <p className="text-text-muted">Loading transactions...</p>
+                </div>
+              ) : transactions.length > 0 ? (
                 <div className="space-y-4">
-                  {TRANSACTIONS.slice(0, 5).map((tx) => (
+                  {transactions.slice(0, 5).map((tx) => (
                     <div key={tx.id} className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div
                           className={cn(
                             "w-10 h-10 rounded-full flex items-center justify-center",
-                            tx.type === "deposit" || tx.type === "lp_deposit"
+                            tx.type === "deposit" || tx.type === "lp_deposit" || tx.type === "position_open"
                               ? "bg-success/20 text-success"
-                              : tx.type === "withdraw" || tx.type === "lp_withdraw"
-                              ? "bg-danger/20 text-danger"
+                              : tx.type === "withdraw" || tx.type === "lp_withdraw" || tx.type === "position_close"
+                              ? "bg-gold/20 text-gold"
                               : tx.type === "lp_reward"
                               ? "bg-gold/20 text-gold"
                               : tx.amount >= 0
@@ -1532,6 +2084,10 @@ export default function WalletPage() {
                             <Coins className="w-5 h-5" />
                           ) : tx.type === "lp_reward" ? (
                             <Gift className="w-5 h-5" />
+                          ) : tx.type === "position_open" ? (
+                            <TrendingUp className="w-5 h-5" />
+                          ) : tx.type === "position_close" ? (
+                            <TrendingDown className="w-5 h-5" />
                           ) : tx.amount >= 0 ? (
                             <TrendingUp className="w-5 h-5" />
                           ) : (
@@ -1541,7 +2097,7 @@ export default function WalletPage() {
                         <div>
                           <p className="text-sm font-medium text-text-primary">
                             {tx.type === "deposit"
-                              ? "Deposit"
+                              ? "Faucet Claim"
                               : tx.type === "withdraw"
                               ? "Withdraw"
                               : tx.type === "lp_deposit"
@@ -1550,21 +2106,45 @@ export default function WalletPage() {
                               ? "LP Withdraw"
                               : tx.type === "lp_reward"
                               ? "LP Reward"
+                              : tx.type === "position_open"
+                              ? `Open Position - ${tx.asset}`
+                              : tx.type === "position_close"
+                              ? "Close Position"
                               : `Trade P&L - ${tx.asset}`}
                           </p>
-                          <p className="text-xs text-text-muted">{tx.timestamp}</p>
+                          <p className="text-xs text-text-muted">
+                            {new Date(tx.timestamp).toLocaleDateString()} {new Date(tx.timestamp).toLocaleTimeString()}
+                          </p>
                         </div>
                       </div>
-                      <span
-                        className={cn(
-                          "font-semibold",
-                          tx.amount >= 0 ? "text-success" : "text-danger"
+                      <div className="flex items-center gap-2">
+                        {tx.type === "position_open" || tx.type === "position_close" ? (
+                          <span className="text-sm text-text-muted flex items-center gap-1">
+                            <Lock className="w-3 h-3" /> Encrypted
+                          </span>
+                        ) : (
+                          <span
+                            className={cn(
+                              "font-semibold",
+                              tx.amount >= 0 ? "text-success" : "text-danger"
+                            )}
+                          >
+                            {showBalance
+                              ? `${tx.amount >= 0 ? "+" : ""}${formatUSD(Math.abs(tx.amount))}`
+                              : "••••"}
+                          </span>
                         )}
-                      >
-                        {showBalance
-                          ? `${tx.amount >= 0 ? "+" : ""}${formatUSD(Math.abs(tx.amount))}`
-                          : "••••"}
-                      </span>
+                        {tx.txHash && (
+                          <a
+                            href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-gold hover:text-gold/80"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1953,89 +2533,131 @@ export default function WalletPage() {
 
         {activeTab === "history" && (
           <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-text-muted uppercase">
-                  <th className="px-6 py-4 font-medium">Type</th>
-                  <th className="px-6 py-4 font-medium">Amount</th>
-                  <th className="px-6 py-4 font-medium">Date</th>
-                  <th className="px-6 py-4 font-medium">Status</th>
-                  <th className="px-6 py-4 font-medium">Tx Hash</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {TRANSACTIONS.map((tx) => (
-                  <tr key={tx.id} className="hover:bg-card-hover transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={cn(
-                            "w-8 h-8 rounded-full flex items-center justify-center",
-                            tx.type === "deposit" || tx.type === "lp_deposit"
-                              ? "bg-success/20 text-success"
-                              : tx.type === "withdraw" || tx.type === "lp_withdraw"
-                              ? "bg-danger/20 text-danger"
-                              : tx.type === "lp_reward"
-                              ? "bg-gold/20 text-gold"
-                              : tx.amount >= 0
-                              ? "bg-success/20 text-success"
-                              : "bg-danger/20 text-danger"
-                          )}
-                        >
-                          {tx.type === "deposit" ? (
-                            <ArrowDownLeft className="w-4 h-4" />
-                          ) : tx.type === "withdraw" ? (
-                            <ArrowUpRight className="w-4 h-4" />
-                          ) : tx.type === "lp_deposit" || tx.type === "lp_withdraw" ? (
-                            <Coins className="w-4 h-4" />
-                          ) : tx.type === "lp_reward" ? (
-                            <Gift className="w-4 h-4" />
-                          ) : tx.amount >= 0 ? (
-                            <TrendingUp className="w-4 h-4" />
-                          ) : (
-                            <TrendingDown className="w-4 h-4" />
-                          )}
-                        </div>
-                        <span className="font-medium text-text-primary capitalize">
-                          {tx.type === "trade_pnl" ? `Trade - ${tx.asset}` : tx.type.replace("_", " ")}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={cn(
-                          "font-semibold",
-                          tx.amount >= 0 ? "text-success" : "text-danger"
-                        )}
-                      >
-                        {showBalance
-                          ? `${tx.amount >= 0 ? "+" : ""}${formatUSD(Math.abs(tx.amount))}`
-                          : "••••"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-text-muted">{tx.timestamp}</td>
-                    <td className="px-6 py-4">
-                      <span className="px-2 py-1 bg-success/20 text-success text-xs rounded-full">
-                        {tx.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {tx.txHash ? (
-                        <a
-                          href="#"
-                          className="text-gold hover:underline flex items-center gap-1"
-                        >
-                          {tx.txHash}
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      ) : (
-                        <span className="text-text-muted">-</span>
-                      )}
-                    </td>
+            {isLoadingTxHistory ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <Loader2 className="w-8 h-8 text-gold animate-spin mb-3" />
+                <p className="text-text-muted">Loading transaction history...</p>
+              </div>
+            ) : transactions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <History className="w-12 h-12 text-text-muted mb-3" />
+                <p className="text-text-muted">No transactions yet</p>
+                <p className="text-sm text-text-muted/70">Your transaction history will appear here</p>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-text-muted uppercase">
+                    <th className="px-6 py-4 font-medium">Type</th>
+                    <th className="px-6 py-4 font-medium">Amount / Asset</th>
+                    <th className="px-6 py-4 font-medium">Date</th>
+                    <th className="px-6 py-4 font-medium">Status</th>
+                    <th className="px-6 py-4 font-medium">Tx Hash</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {transactions.map((tx) => (
+                    <tr key={tx.id} className="hover:bg-card-hover transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={cn(
+                              "w-8 h-8 rounded-full flex items-center justify-center",
+                              tx.type === "deposit" || tx.type === "lp_deposit" || tx.type === "position_open"
+                                ? "bg-success/20 text-success"
+                                : tx.type === "withdraw" || tx.type === "lp_withdraw"
+                                ? "bg-danger/20 text-danger"
+                                : tx.type === "lp_reward" || tx.type === "position_close"
+                                ? "bg-gold/20 text-gold"
+                                : tx.amount >= 0
+                                ? "bg-success/20 text-success"
+                                : "bg-danger/20 text-danger"
+                            )}
+                          >
+                            {tx.type === "deposit" ? (
+                              <ArrowDownLeft className="w-4 h-4" />
+                            ) : tx.type === "withdraw" ? (
+                              <ArrowUpRight className="w-4 h-4" />
+                            ) : tx.type === "lp_deposit" || tx.type === "lp_withdraw" ? (
+                              <Coins className="w-4 h-4" />
+                            ) : tx.type === "lp_reward" ? (
+                              <Gift className="w-4 h-4" />
+                            ) : tx.type === "position_open" ? (
+                              <TrendingUp className="w-4 h-4" />
+                            ) : tx.type === "position_close" ? (
+                              <TrendingDown className="w-4 h-4" />
+                            ) : tx.amount >= 0 ? (
+                              <TrendingUp className="w-4 h-4" />
+                            ) : (
+                              <TrendingDown className="w-4 h-4" />
+                            )}
+                          </div>
+                          <span className="font-medium text-text-primary">
+                            {tx.type === "deposit"
+                              ? "Faucet Claim"
+                              : tx.type === "position_open"
+                              ? "Open Position"
+                              : tx.type === "position_close"
+                              ? "Close Position"
+                              : tx.type === "lp_deposit"
+                              ? "LP Deposit"
+                              : tx.type === "lp_withdraw"
+                              ? "LP Withdraw"
+                              : tx.type === "lp_reward"
+                              ? "LP Reward"
+                              : tx.type.replace("_", " ")}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {tx.type === "position_open" || tx.type === "position_close" ? (
+                          <div className="flex items-center gap-2">
+                            {tx.asset && <span className="font-medium text-text-primary">{tx.asset}</span>}
+                            <span className="text-sm text-text-muted flex items-center gap-1">
+                              <Lock className="w-3 h-3" /> Encrypted
+                            </span>
+                          </div>
+                        ) : (
+                          <span
+                            className={cn(
+                              "font-semibold",
+                              tx.amount >= 0 ? "text-success" : "text-danger"
+                            )}
+                          >
+                            {showBalance
+                              ? `${tx.amount >= 0 ? "+" : ""}${formatUSD(Math.abs(tx.amount))}`
+                              : "••••"}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-text-muted">
+                        {new Date(tx.timestamp).toLocaleDateString()} {new Date(tx.timestamp).toLocaleTimeString()}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="px-2 py-1 bg-success/20 text-success text-xs rounded-full">
+                          {tx.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {tx.txHash ? (
+                          <a
+                            href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-gold hover:underline flex items-center gap-1"
+                          >
+                            {tx.txHash.slice(0, 10)}...
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : (
+                          <span className="text-text-muted">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
 
@@ -2163,13 +2785,8 @@ export default function WalletPage() {
                 </div>
 
                 <button
-                  onClick={() => {
-                    // For now, simplified - real FHE encryption would be needed
-                    const amount = BigInt(Math.floor(parseFloat(depositAmount || "0") * 1e6));
-                    const paddedAmount = `0x${amount.toString(16).padStart(64, "0")}` as `0x${string}`;
-                    depositToVault(paddedAmount, "0x00");
-                  }}
-                  disabled={isDepositPending || !depositAmount || parseFloat(depositAmount) <= 0}
+                  onClick={handleFheDeposit}
+                  disabled={isDepositPending || !depositAmount || parseFloat(depositAmount) <= 0 || !isFheReady}
                   className={cn(
                     "w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2",
                     isDepositPending
@@ -2244,12 +2861,8 @@ export default function WalletPage() {
                 </button>
 
                 <button
-                  onClick={() => {
-                    const amount = BigInt(Math.floor(parseFloat(withdrawAmount || "0") * 1e6));
-                    const paddedAmount = `0x${amount.toString(16).padStart(64, "0")}` as `0x${string}`;
-                    withdrawFromVault(paddedAmount, "0x00");
-                  }}
-                  disabled={isWithdrawPending || !withdrawAmount || parseFloat(withdrawAmount) <= 0}
+                  onClick={handleFheWithdraw}
+                  disabled={isWithdrawPending || !withdrawAmount || parseFloat(withdrawAmount) <= 0 || !isFheReady}
                   className={cn(
                     "w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2",
                     isWithdrawPending

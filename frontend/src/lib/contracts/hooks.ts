@@ -30,11 +30,12 @@ export function useContractAddresses() {
 
 // ============ SHADOW USD HOOKS ============
 
-export function useUsdBalance(address: `0x${string}` | undefined) {
+// Check if user has any sUSD balance (encrypted)
+export function useHasUsdBalance(address: `0x${string}` | undefined) {
   return useReadContract({
     address: CONTRACTS.shadowUsd,
     abi: SHADOW_USD_ABI,
-    functionName: "balanceOf",
+    functionName: "isBalanceInitialized",
     args: address ? [address] : undefined,
     query: {
       enabled: !!address,
@@ -42,17 +43,14 @@ export function useUsdBalance(address: `0x${string}` | undefined) {
   });
 }
 
-export function useEncryptedUsdBalance(address: `0x${string}` | undefined) {
-  return useReadContract({
-    address: CONTRACTS.shadowUsd,
-    abi: SHADOW_USD_ABI,
-    functionName: "confidentialBalanceOf",
-    args: address ? [address] : undefined,
-    query: {
-      enabled: !!address,
-    },
-  });
+// Legacy alias for compatibility - now returns boolean check instead of balance
+export function useUsdBalance(address: `0x${string}` | undefined) {
+  return useHasUsdBalance(address);
 }
+
+// Note: confidentialBalanceOf is NOT a view function (grants ACL)
+// Use the manual decryption flow in wallet page instead of this hook
+// Removed: useEncryptedUsdBalance - not compatible with useReadContract
 
 export function useConfidentialTransfer() {
   const { writeContract, data: hash, isPending, error } = useWriteContract();
@@ -274,6 +272,38 @@ export function useOpenPosition() {
 
   return {
     openPosition,
+    hash,
+    isPending,
+    isConfirming,
+    isSuccess,
+    error,
+  };
+}
+
+export function useOpenAnonymousPosition() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  const openAnonymousPosition = (
+    assetId: `0x${string}`,
+    encryptedCollateral: `0x${string}`,
+    encryptedLeverage: `0x${string}`,
+    encryptedIsLong: `0x${string}`,
+    inputProof: `0x${string}`
+  ) => {
+    writeContract({
+      address: CONTRACTS.shadowVault,
+      abi: SHADOW_VAULT_ABI,
+      functionName: "openAnonymousPosition",
+      args: [assetId, encryptedCollateral, encryptedLeverage, encryptedIsLong, inputProof],
+      gas: BigInt(15000000),
+    });
+  };
+
+  return {
+    openAnonymousPosition,
     hash,
     isPending,
     isConfirming,
