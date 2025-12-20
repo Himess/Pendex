@@ -4,8 +4,8 @@ export type SupportedNetwork = "sepolia" | "hardhat";
 // Contract addresses per network
 export const NETWORK_CONTRACTS = {
   sepolia: {
-    // Session 8 Deployment - Direct sUSD Trading
-    shadowVault: "0x7a4D60498083Bc2dCC0490d0B95fc9D07940B0FD" as `0x${string}`,
+    // Session 8 Deployment v2 - FHE ACL Fix for vaultDeposit/vaultWithdraw
+    shadowVault: "0x8bD67c72b563A28C6B917Ad3dC09cF39FB58b292" as `0x${string}`,
     shadowOracle: "0xadee307469f5FEF36485aB0194Bc1C042b7Cd2FE" as `0x${string}`,
     shadowUsd: "0x6C365a341C2A7D94cb0204A3f22CC810A7357F18" as `0x${string}`,
     shadowLiquidityPool: "0xF15e759229dc61f7ece238503368B1a0BafF0773" as `0x${string}`,

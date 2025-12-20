@@ -366,6 +366,9 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
         // UPDATED: Transfer sUSD directly from user to vault (no separate deposit step!)
         // This uses the sUSD balance directly - like Hyperliquid!
+        // CRITICAL: Grant ACL to ShadowUSD contract BEFORE calling vaultDeposit
+        // ShadowUSD needs permission to use collateral in FHE.ge() operations
+        FHE.allow(collateral, address(shadowUsd));
         bool transferSuccess = shadowUsd.vaultDeposit(msg.sender, collateral);
         require(transferSuccess, "Insufficient sUSD balance");
 
@@ -437,6 +440,8 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
         // UPDATED: Transfer sUSD directly back to user's wallet
         // This returns the collateral + P&L to user's sUSD balance
+        // CRITICAL: Grant ACL to ShadowUSD contract BEFORE calling vaultWithdraw
+        FHE.allow(finalAmount, address(shadowUsd));
         shadowUsd.vaultWithdraw(msg.sender, finalAmount);
 
         // Mark position as closed
@@ -1023,6 +1028,8 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         ebool isLong = FHE.fromExternal(encryptedIsLong, inputProof);
 
         // UPDATED: Transfer sUSD directly from user to vault (no separate deposit step!)
+        // CRITICAL: Grant ACL to ShadowUSD contract BEFORE calling vaultDeposit
+        FHE.allow(collateral, address(shadowUsd));
         bool transferSuccess = shadowUsd.vaultDeposit(msg.sender, collateral);
         require(transferSuccess, "Insufficient sUSD balance");
 
@@ -1108,6 +1115,8 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         euint64 finalAmount = FHE.add(position.collateral, pnl);
 
         // UPDATED: Transfer sUSD directly back to user's wallet
+        // CRITICAL: Grant ACL to ShadowUSD contract BEFORE calling vaultWithdraw
+        FHE.allow(finalAmount, address(shadowUsd));
         shadowUsd.vaultWithdraw(msg.sender, finalAmount);
 
         // Mark position as closed
@@ -1665,6 +1674,8 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
         // UPDATED: Transfer sUSD directly back to user's wallet
         euint64 amountToReturn = FHE.asEuint64(finalAmount);
+        // CRITICAL: Grant ACL to ShadowUSD contract BEFORE calling vaultWithdraw
+        FHE.allow(amountToReturn, address(shadowUsd));
         shadowUsd.vaultWithdraw(pending.user, amountToReturn);
 
         // Close position and clear pending flag
