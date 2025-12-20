@@ -23,17 +23,16 @@ let initializationPromise: Promise<FhevmInstance> | null = null;
 
 // Manual Sepolia configuration (fallback if SepoliaConfig doesn't work)
 // From: https://docs.zama.org/protocol/relayer-sdk-guides/fhevm-relayer/initialization
-// Updated December 2025 - Zama updated their infrastructure
 const SEPOLIA_MANUAL_CONFIG = {
-  aclContractAddress: "0x687820221192C5B662b25367F70076A37bc79b6c" as const,
-  kmsContractAddress: "0x1364cBBf2cDF5032C47d8226a6f6FBD2AFCDacAC" as const,
-  inputVerifierContractAddress: "0xbc91f3daD1A5F19F8390c400196e58073B6a0BC4" as const,
-  verifyingContractAddressDecryption: "0xb6E160B1ff80D67Bfe90A85eE06Ce0A2613607D1" as const,
-  verifyingContractAddressInputVerification: "0x7048C39f048125eDa9d678AEbaDfB22F7900a29F" as const,
+  aclContractAddress: "0xf0Ffdc93b7E186bC2f8CB3dAA75D86d1930A433D" as const,
+  kmsContractAddress: "0xbE0E383937d564D7FF0BC3b46c51f0bF8d5C311A" as const,
+  inputVerifierContractAddress: "0xBBC1fFCdc7C316aAAd72E807D9b0272BE8F84DA0" as const,
+  verifyingContractAddressDecryption: "0x5D8BD78e2ea6bbE41f26dFe9fdaEAa349e077478" as const,
+  verifyingContractAddressInputVerification: "0x483b9dE06E4E4C7D35CCf5837A1668487406D955" as const,
   chainId: 11155111,
-  gatewayChainId: 55815,
+  gatewayChainId: 10901,
   network: "https://eth-sepolia.public.blastapi.io",
-  relayerUrl: "https://relayer.testnet.zama.cloud",
+  relayerUrl: "https://relayer.testnet.zama.org",
 };
 
 /**

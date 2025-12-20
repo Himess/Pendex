@@ -3,6 +3,10 @@ const webpack = require("webpack");
 
 const nextConfig = {
   reactStrictMode: true,
+  // Enable WASM support for Zama FHE SDK
+  experimental: {
+    asyncWebAssembly: true,
+  },
   images: {
     remotePatterns: [
       {
@@ -72,6 +76,20 @@ const nextConfig = {
     }
 
     config.externals.push("pino-pretty", "lokijs", "encoding");
+
+    // WASM support for Zama FHE SDK
+    config.experiments = {
+      ...config.experiments,
+      asyncWebAssembly: true,
+      layers: true,
+    };
+
+    // Handle WASM files
+    config.module.rules.push({
+      test: /\.wasm$/,
+      type: "webassembly/async",
+    });
+
     return config;
   },
 };
