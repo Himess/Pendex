@@ -84,9 +84,20 @@ const nextConfig = {
       layers: true,
     };
 
-    // Handle WASM files
+    // Exclude Zama SDK WASM from webpack parsing - load as asset instead
     config.module.rules.push({
       test: /\.wasm$/,
+      include: /node_modules\/@zama-fhe/,
+      type: "asset/resource",
+      generator: {
+        filename: "static/wasm/[name][ext]",
+      },
+    });
+
+    // Other WASM files use async loading
+    config.module.rules.push({
+      test: /\.wasm$/,
+      exclude: /node_modules\/@zama-fhe/,
       type: "webassembly/async",
     });
 
