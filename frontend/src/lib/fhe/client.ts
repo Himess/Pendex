@@ -12,7 +12,7 @@ import {
   type FhevmInstance,
   type FhevmInstanceConfig,
   type HandleContractPair,
-} from "@zama-fhe/relayer-sdk/bundle";
+} from "@zama-fhe/relayer-sdk/web";
 
 // Re-export types
 export type { FhevmInstance, FhevmInstanceConfig, HandleContractPair };
