@@ -19,9 +19,11 @@ export type { FhevmInstance, FhevmInstanceConfig, HandleContractPair };
 // Singleton instance
 let fhevmInstance: FhevmInstance | null = null;
 let initializationPromise: Promise<FhevmInstance> | null = null;
+let sdkInitialized = false;
 
 // Manual Sepolia configuration (fallback if SepoliaConfig doesn't work)
 // From: https://docs.zama.org/protocol/relayer-sdk-guides/fhevm-relayer/initialization
+// Updated with latest contract addresses from Zama docs
 const SEPOLIA_MANUAL_CONFIG = {
   aclContractAddress: "0xf0Ffdc93b7E186bC2f8CB3dAA75D86d1930A433D" as const,
   kmsContractAddress: "0xbE0E383937d564D7FF0BC3b46c51f0bF8d5C311A" as const,
@@ -29,7 +31,7 @@ const SEPOLIA_MANUAL_CONFIG = {
   verifyingContractAddressDecryption: "0x5D8BD78e2ea6bbE41f26dFe9fdaEAa349e077478" as const,
   verifyingContractAddressInputVerification: "0x483b9dE06E4E4C7D35CCf5837A1668487406D955" as const,
   chainId: 11155111,
-  gatewayChainId: 10901,
+  gatewayChainId: 55815, // Updated gateway chain ID
   network: "https://eth-sepolia.public.blastapi.io",
   relayerUrl: "https://relayer.testnet.zama.org",
 };
@@ -60,16 +62,31 @@ export async function initFheInstance(): Promise<FhevmInstance> {
 
       // Dynamic import to avoid SSR/WASM issues
       const sdk = await import("@zama-fhe/relayer-sdk/web");
-      const { createInstance, SepoliaConfig } = sdk;
+      const { createInstance, SepoliaConfig, initSDK } = sdk;
+
+      // CRITICAL: Initialize WASM modules first before createInstance
+      if (!sdkInitialized) {
+        console.log("🔄 Initializing WASM modules via initSDK()...");
+        try {
+          await initSDK();
+          sdkInitialized = true;
+          console.log("✅ WASM modules initialized successfully");
+        } catch (wasmError) {
+          console.warn("⚠️ initSDK warning (may be already initialized):", wasmError);
+          sdkInitialized = true; // Continue anyway, might already be initialized
+        }
+      }
 
       // Try using SepoliaConfig first (simpler approach)
       let instance: FhevmInstance;
       try {
+        console.log("📡 Attempting createInstance with SepoliaConfig...");
         instance = await createInstance(SepoliaConfig);
         console.log("✅ FHEVM instance initialized with SepoliaConfig");
       } catch (sepoliaError) {
         console.warn("⚠️ SepoliaConfig failed, trying manual config:", sepoliaError);
         // Fallback to manual configuration
+        console.log("📡 Attempting createInstance with manual config...");
         instance = await createInstance(SEPOLIA_MANUAL_CONFIG);
         console.log("✅ FHEVM instance initialized with manual config");
       }
