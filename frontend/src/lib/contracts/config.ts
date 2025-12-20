@@ -4,11 +4,11 @@ export type SupportedNetwork = "sepolia" | "hardhat";
 // Contract addresses per network
 export const NETWORK_CONTRACTS = {
   sepolia: {
-    shadowVault: "0x486eF23A22Ab485851bE386da07767b070a51e82" as `0x${string}`,
-    shadowOracle: "0x9A5Fec3b1999cCBfC3a33EF5cdf09fdecad52301" as `0x${string}`,
-    shadowUsd: "0xa1FFdD728C13Eb72F928491d3E6D9245AE614cf6" as `0x${string}`,
-    shadowLiquidityPool: "0xB0a1fb939C017f17d79F6049A21b4b2fB9423d73" as `0x${string}`,
-    shadowMarketMaker: "0xa779cB24c82307a19d4E4E01B3B0879fF635D02F" as `0x${string}`,
+    // Session 8 Deployment - Direct sUSD Trading
+    shadowVault: "0x7a4D60498083Bc2dCC0490d0B95fc9D07940B0FD" as `0x${string}`,
+    shadowOracle: "0xadee307469f5FEF36485aB0194Bc1C042b7Cd2FE" as `0x${string}`,
+    shadowUsd: "0x6C365a341C2A7D94cb0204A3f22CC810A7357F18" as `0x${string}`,
+    shadowLiquidityPool: "0xF15e759229dc61f7ece238503368B1a0BafF0773" as `0x${string}`,
     hasFHE: true, // Sepolia with Zama FHE encryption
   },
   hardhat: {

@@ -23,7 +23,6 @@ export function useContractAddresses() {
     shadowOracle: contracts.shadowOracle,
     shadowUsd: contracts.shadowUsd,
     shadowLiquidityPool: contracts.shadowLiquidityPool,
-    shadowMarketMaker: contracts.shadowMarketMaker,
     hasFHE: contracts.hasFHE,
   };
 }

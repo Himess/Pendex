@@ -883,7 +883,6 @@ export default function AdminPage() {
                   { label: "Vault", address: CONTRACTS.shadowVault },
                   { label: "ShadowUSD", address: CONTRACTS.shadowUsd },
                   { label: "Liquidity Pool", address: CONTRACTS.shadowLiquidityPool },
-                  { label: "Market Maker", address: CONTRACTS.shadowMarketMaker },
                 ].map(({ label, address }) => (
                   <div key={label} className="flex justify-between items-center p-3 bg-background/50 rounded-lg">
                     <span className="text-text-secondary">{label}:</span>

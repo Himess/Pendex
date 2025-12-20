@@ -3,10 +3,6 @@ const webpack = require("webpack");
 
 const nextConfig = {
   reactStrictMode: true,
-  // Enable WASM support for Zama FHE SDK
-  experimental: {
-    asyncWebAssembly: true,
-  },
   images: {
     remotePatterns: [
       {
@@ -27,6 +23,17 @@ const nextConfig = {
     "@metamask/sdk",
   ],
   webpack: (config, { isServer }) => {
+    // CRITICAL: Handle Zama WASM files FIRST (before any other rules)
+    // This must be at the beginning to take precedence
+    config.module.rules.unshift({
+      test: /\.wasm$/,
+      include: /node_modules[\\/]@zama-fhe/,
+      type: "asset/resource",
+      generator: {
+        filename: "static/wasm/[name][ext]",
+      },
+    });
+
     // Node.js polyfills for browser
     config.resolve.fallback = {
       ...config.resolve.fallback,
@@ -77,29 +84,12 @@ const nextConfig = {
 
     config.externals.push("pino-pretty", "lokijs", "encoding");
 
-    // WASM support for Zama FHE SDK
+    // WASM support
     config.experiments = {
       ...config.experiments,
       asyncWebAssembly: true,
       layers: true,
     };
-
-    // Exclude Zama SDK WASM from webpack parsing - load as asset instead
-    config.module.rules.push({
-      test: /\.wasm$/,
-      include: /node_modules\/@zama-fhe/,
-      type: "asset/resource",
-      generator: {
-        filename: "static/wasm/[name][ext]",
-      },
-    });
-
-    // Other WASM files use async loading
-    config.module.rules.push({
-      test: /\.wasm$/,
-      exclude: /node_modules\/@zama-fhe/,
-      type: "webassembly/async",
-    });
 
     return config;
   },

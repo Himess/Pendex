@@ -1,5 +1,5 @@
 # Pendex - Claude Memory File
-**Son Guncelleme:** 2025-12-20 (Session 7 - FHE SDK Fix + Clean UI)
+**Son Guncelleme:** 2025-12-20 (Session 8 - Direct sUSD Trading)
 
 ---
 
@@ -13,6 +13,12 @@
 **Windows Path:** `C:\Users\USER\shadow-protocol\frontend`
 **Live URL:** https://shadow-protocol-nine.vercel.app/
 
+**Session 8'de Yapilanlar:**
+1. DIRECT sUSD TRADING - Vault deposit gereksiz, Hyperliquid gibi!
+2. Contract'lar guncellendi - openPosition/closePosition sUSD kullanir
+3. TradingPanel sUSD balance gosteriyor
+4. Faucet'ten alinca direkt trade edebilirsin
+
 **Session 7'de Yapilanlar:**
 1. FHE SDK WASM sorunu COZULDU - initSDK() + webpack asset/resource
 2. EIP-712 signing fix - viem object format
@@ -25,6 +31,7 @@
 - Viem signTypedData object format: `{domain, types, primaryType, message}`
 - gatewayChainId: 55815 (eski 10901 YANLIS)
 - Relayer URL: `https://relayer.testnet.zama.org` (.org DOGRU, .cloud DNS yok)
+- **sUSD direkt kullan** - vault deposit GEREKSIZ!
 
 ---
 
@@ -69,6 +76,53 @@
 | # | Is | Aciklama | Zorluk |
 |---|-----|----------|--------|
 | 3 | README Guncelle | Hackathon icin proje dokumantasyonu | Kolay |
+
+---
+
+## SESSION 8 - DIRECT sUSD TRADING (20 Aralik 2025)
+
+### Mimari Degisiklik: Hyperliquid-Style Trading
+
+**Problem:** Eski tasarimda kullanici:
+1. Faucet'ten sUSD al
+2. Vault'a deposit yap (GEREKSIZ ADIM!)
+3. Trade ac
+
+**Yeni Tasarim:** Hyperliquid gibi direkt trading:
+1. Faucet'ten sUSD al
+2. Trade ac ← sUSD direkt kullaniliyor!
+
+### Contract Degisiklikleri (ShadowVault.sol)
+
+**Guncellenen Fonksiyonlar:**
+```solidity
+// openPosition - sUSD direkt ceker
+bool transferSuccess = shadowUsd.vaultDeposit(msg.sender, collateral);
+require(transferSuccess, "Insufficient sUSD balance");
+
+// closePosition - sUSD direkt geri gonderir
+shadowUsd.vaultWithdraw(msg.sender, finalAmount);
+
+// openAnonymousPosition - ayni sekilde sUSD kullanir
+// closeAnonymousPosition - ayni sekilde sUSD doner
+// finalizePositionClose - async close icin sUSD kullanir
+```
+
+### Frontend Degisiklikleri (TradingPanel.tsx)
+
+**Degisen Alanlar:**
+- `vaultBalance` → `sUsdBalance`
+- `handleDecryptVaultBalance` → `handleDecryptSUsdBalance`
+- ShadowVault ABI → ShadowUSD ABI (`confidentialBalanceOf`)
+- "No balance" uyarisi: "Click to deposit" → "Click to get from faucet"
+- localStorage key: `vault_balance_` → `susd_balance_`
+
+### Vault/LP Amaci
+
+**Vault/LP artik sadece YIELD FARMING icin:**
+- Kullanicilar LP stake edip trader kayiplarından kazanabilir
+- Trade collateral ile iliskisi YOK
+- GMX-style revenue sharing
 
 ---
 
@@ -211,14 +265,22 @@ const SEPOLIA_CONFIG = {
 
 ---
 
-## CONTRACT ADDRESSES (Sepolia)
+## CONTRACT ADDRESSES (Sepolia) - Session 8 Deployment
+```
+ShadowOracle:            0xadee307469f5FEF36485aB0194Bc1C042b7Cd2FE
+ShadowUSD:               0x6C365a341C2A7D94cb0204A3f22CC810A7357F18
+ShadowLiquidityPool:     0xF15e759229dc61f7ece238503368B1a0BafF0773
+ShadowVault:             0x7a4D60498083Bc2dCC0490d0B95fc9D07940B0FD
+Deployer:                0xad850C8eB45E80b99ad76A22fBDd0b04F4A1FD27
+```
+
+### Eski Adresler (Session 7 ve oncesi)
 ```
 ShadowOracle:            0x9A5Fec3b1999cCBfC3a33EF5cdf09fdecad52301
 ShadowUSD:               0xa1FFdD728C13Eb72F928491d3E6D9245AE614cf6
 ShadowLiquidityPool:     0xB0a1fb939C017f17d79F6049A21b4b2fB9423d73
 ShadowVault:             0x486eF23A22Ab485851bE386da07767b070a51e82
 ShadowMarketMaker:       0xa779cB24c82307a19d4E4E01B3B0879fF635D02F
-Deployer:                0xad850C8eB45E80b99ad76A22fBDd0b04F4A1FD27
 ```
 
 ---

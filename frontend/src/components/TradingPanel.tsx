@@ -154,13 +154,13 @@ function SuccessAnimation({ isActive, hash }: { isActive: boolean; hash?: string
 }
 
 // Contract ABI for FHE balance decryption
-const SHADOW_VAULT_ABI = parseAbi([
-  "function confidentialGetBalance(address user) external returns (uint256)",
+const SHADOW_USD_ABI = parseAbi([
+  "function confidentialBalanceOf(address account) external returns (uint256)",
 ]);
 
-// Contract addresses
+// Contract addresses - Session 8 Deployment
 const CONTRACT_ADDRESSES = {
-  shadowVault: "0x486eF23A22Ab485851bE386da07767b070a51e82" as `0x${string}`,
+  shadowUsd: "0x6C365a341C2A7D94cb0204A3f22CC810A7357F18" as `0x${string}`,
 };
 
 export function TradingPanel({ selectedAsset }: TradingPanelProps) {
@@ -214,13 +214,14 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
   const [showPositions, setShowPositions] = useState(false);
   const openPositionCount = (positionIds?.length || 0);
 
-  // Track vault balance - FHE decrypted or localStorage cached
-  const [vaultBalance, setVaultBalance] = useState(0);
+  // Track sUSD balance - FHE decrypted or localStorage cached
+  // UPDATED: Now uses sUSD balance directly (not vault deposit)
+  const [sUsdBalance, setSUsdBalance] = useState(0);
   const [isDecryptingBalance, setIsDecryptingBalance] = useState(false);
   const [balanceDecrypted, setBalanceDecrypted] = useState(false);
 
-  // FHE Decrypt vault balance
-  const handleDecryptVaultBalance = useCallback(async () => {
+  // FHE Decrypt sUSD balance
+  const handleDecryptSUsdBalance = useCallback(async () => {
     if (!walletClient || !address || !fheReady) {
       console.log("Missing requirements for FHE decryption");
       return;
@@ -228,13 +229,13 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
 
     try {
       setIsDecryptingBalance(true);
-      console.log("🔐 Starting FHE vault balance decryption...");
+      console.log("🔐 Starting FHE sUSD balance decryption...");
 
-      // 1. Get the encrypted balance handle from contract
+      // 1. Get the encrypted balance handle from ShadowUSD contract
       const { result: handle } = await publicClient!.simulateContract({
-        address: CONTRACT_ADDRESSES.shadowVault,
-        abi: SHADOW_VAULT_ABI,
-        functionName: "confidentialGetBalance",
+        address: CONTRACT_ADDRESSES.shadowUsd,
+        abi: SHADOW_USD_ABI,
+        functionName: "confidentialBalanceOf",
         args: [address],
         account: address,
       });
@@ -243,7 +244,7 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
 
       if (!handle || handle === BigInt(0)) {
         console.log("No encrypted balance found, setting to 0");
-        setVaultBalance(0);
+        setSUsdBalance(0);
         setBalanceDecrypted(true);
         return;
       }
@@ -255,56 +256,56 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
       // 2. Decrypt using FHE SDK
       const decryptedValue = await decryptValue(
         handleHex,
-        CONTRACT_ADDRESSES.shadowVault,
+        CONTRACT_ADDRESSES.shadowUsd,
         address,
         walletClient
       );
 
-      console.log("✅ Decrypted vault balance:", decryptedValue);
+      console.log("✅ Decrypted sUSD balance:", decryptedValue);
 
       // Convert from 6 decimals to display value
       const balance = Number(decryptedValue) / 1e6;
-      setVaultBalance(balance);
+      setSUsdBalance(balance);
       setBalanceDecrypted(true);
 
       // Cache in localStorage for future reference
-      localStorage.setItem(`vault_balance_${address}`, balance.toString());
+      localStorage.setItem(`susd_balance_${address}`, balance.toString());
     } catch (error) {
-      console.error("❌ FHE vault balance decryption failed:", error);
+      console.error("❌ FHE sUSD balance decryption failed:", error);
       // Fall back to localStorage
-      const stored = localStorage.getItem(`vault_balance_${address}`);
+      const stored = localStorage.getItem(`susd_balance_${address}`);
       if (stored) {
-        setVaultBalance(parseFloat(stored));
+        setSUsdBalance(parseFloat(stored));
       }
     } finally {
       setIsDecryptingBalance(false);
     }
   }, [walletClient, address, fheReady, publicClient]);
 
-  // Load vault balance from localStorage on mount, then try FHE decryption
+  // Load sUSD balance from localStorage on mount
   useEffect(() => {
     if (address) {
       // First, load cached value from localStorage
-      const stored = localStorage.getItem(`vault_balance_${address}`);
+      const stored = localStorage.getItem(`susd_balance_${address}`);
       if (stored) {
-        setVaultBalance(parseFloat(stored));
+        setSUsdBalance(parseFloat(stored));
       }
     }
   }, [address]);
 
-  // Listen for storage changes (when deposit is made on wallet page)
+  // Listen for storage changes (when faucet is used on wallet page)
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === `vault_balance_${address}` && e.newValue) {
-        setVaultBalance(parseFloat(e.newValue));
-        setBalanceDecrypted(true); // Wallet page decrypted it
+      if (e.key === `susd_balance_${address}` && e.newValue) {
+        setSUsdBalance(parseFloat(e.newValue));
+        setBalanceDecrypted(true);
       }
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, [address]);
 
-  const hasInsufficientBalance = vaultBalance < parseFloat(collateral || "0");
+  const hasInsufficientBalance = sUsdBalance < parseFloat(collateral || "0");
   const isHighLeverage = leverage >= 8;
   const isMaxLeverage = leverage === 10;
 
@@ -621,12 +622,12 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
           <div className="flex items-center justify-between py-1 px-2 bg-background rounded border border-border">
             <div className="flex items-center gap-1">
               <Wallet className="w-3 h-3 text-gold" />
-              <span className="text-[10px] text-text-muted">Available</span>
+              <span className="text-[10px] text-text-muted">sUSD</span>
             </div>
             <div className="flex items-center gap-1">
-              {!balanceDecrypted && hasFHE && fheReady && vaultBalance === 0 && (
+              {!balanceDecrypted && hasFHE && fheReady && sUsdBalance === 0 && (
                 <button
-                  onClick={handleDecryptVaultBalance}
+                  onClick={handleDecryptSUsdBalance}
                   disabled={isDecryptingBalance}
                   className="text-[8px] text-gold hover:underline"
                 >
@@ -635,21 +636,21 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
               )}
               <span className={cn(
                 "text-[10px] font-medium",
-                vaultBalance > 0 ? "text-gold" : "text-danger"
+                sUsdBalance > 0 ? "text-gold" : "text-danger"
               )}>
-                {isDecryptingBalance ? "..." : `$${vaultBalance.toFixed(2)}`}
+                {isDecryptingBalance ? "..." : `$${sUsdBalance.toFixed(2)}`}
               </span>
             </div>
           </div>
 
-          {/* No Balance Warning */}
-          {isConnected && vaultBalance === 0 && (
+          {/* No Balance Warning - Link to faucet */}
+          {isConnected && sUsdBalance === 0 && (
             <Link
-              href="/wallet?tab=deposit"
+              href="/wallet?tab=faucet"
               className="flex items-center gap-2 p-2 bg-danger/10 border border-danger/30 rounded text-[10px] text-danger hover:bg-danger/20 transition-colors"
             >
               <AlertTriangle className="w-3 h-3" />
-              <span>No balance! Click to deposit sUSD</span>
+              <span>No sUSD! Click to get from faucet</span>
             </Link>
           )}
 
@@ -657,9 +658,9 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
           <div className="space-y-0.5">
             <div className="flex items-center justify-between">
               <label className="text-[10px] font-medium text-text-secondary">COLLATERAL</label>
-              {vaultBalance > 0 && (
+              {sUsdBalance > 0 && (
                 <button
-                  onClick={() => setCollateral(vaultBalance.toString())}
+                  onClick={() => setCollateral(sUsdBalance.toString())}
                   className="text-[9px] text-gold hover:underline"
                 >
                   MAX
@@ -672,7 +673,7 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
                 value={collateral}
                 onChange={(e) => setCollateral(e.target.value)}
                 placeholder="0.00"
-                max={vaultBalance}
+                max={sUsdBalance}
                 className={cn(
                   "w-full bg-background border rounded px-2 py-1.5 text-xs text-text-primary placeholder-text-muted focus:outline-none transition-colors pr-12",
                   hasInsufficientBalance && collateral ? "border-danger focus:border-danger" : "border-border focus:border-gold"
@@ -683,7 +684,7 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
               </span>
             </div>
             {hasInsufficientBalance && collateral && (
-              <p className="text-[9px] text-danger">Insufficient balance</p>
+              <p className="text-[9px] text-danger">Insufficient sUSD balance</p>
             )}
           </div>
 

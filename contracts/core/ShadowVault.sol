@@ -323,6 +323,7 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
     /**
      * @notice Open a new leveraged position
+     * @dev UPDATED: Now uses sUSD balance directly - no separate vault deposit needed!
      * @param assetId Asset to trade
      * @param encryptedCollateral Encrypted collateral amount
      * @param encryptedLeverage Encrypted leverage (1-10x)
@@ -363,25 +364,10 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
             )
         );
 
-        // Get current balance
-        euint64 currentBalance = _balances[msg.sender];
-
-        // FHE.isInitialized() - Ensure balance exists before trading
-        require(FHE.isInitialized(currentBalance), "Deposit first");
-        require(euint64.unwrap(currentBalance) != 0, "No balance");
-
-        // Check sufficient balance for collateral
-        ebool hasSufficientBalance = FHE.ge(currentBalance, collateral);
-
-        // Deduct collateral from balance
-        euint64 newBalance = FHE.select(
-            hasSufficientBalance,
-            FHE.sub(currentBalance, collateral),
-            currentBalance
-        );
-        _balances[msg.sender] = newBalance;
-        FHE.allowThis(newBalance);
-        FHE.allow(newBalance, msg.sender);
+        // UPDATED: Transfer sUSD directly from user to vault (no separate deposit step!)
+        // This uses the sUSD balance directly - like Hyperliquid!
+        bool transferSuccess = shadowUsd.vaultDeposit(msg.sender, collateral);
+        require(transferSuccess, "Insufficient sUSD balance");
 
         // Calculate position size: collateral * leverage
         euint64 size = FHE.mul(collateral, leverage);
@@ -431,6 +417,7 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
     /**
      * @notice Close an existing position
+     * @dev UPDATED: Returns sUSD directly to user's wallet (no internal balance)
      * @param positionId Position to close
      */
     function closePosition(uint256 positionId) external nonReentrant {
@@ -448,19 +435,9 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         // Calculate final amount: collateral + pnl (can be negative)
         euint64 finalAmount = FHE.add(position.collateral, pnl);
 
-        // Add back to user balance
-        euint64 currentBalance = _balances[msg.sender];
-        euint64 newBalance;
-
-        if (euint64.unwrap(currentBalance) == 0) {
-            newBalance = finalAmount;
-        } else {
-            newBalance = FHE.add(currentBalance, finalAmount);
-        }
-
-        _balances[msg.sender] = newBalance;
-        FHE.allowThis(newBalance);
-        FHE.allow(newBalance, msg.sender);
+        // UPDATED: Transfer sUSD directly back to user's wallet
+        // This returns the collateral + P&L to user's sUSD balance
+        shadowUsd.vaultWithdraw(msg.sender, finalAmount);
 
         // Mark position as closed
         position.isOpen = false;
@@ -1022,7 +999,7 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
     /**
      * @notice Open a FULLY ANONYMOUS leveraged position
-     * @dev Uses eaddress to encrypt the owner's address - nobody can see who owns this position!
+     * @dev UPDATED: Uses sUSD balance directly + eaddress for encrypted owner
      * @param assetId Asset to trade
      * @param encryptedCollateral Encrypted collateral amount
      * @param encryptedLeverage Encrypted leverage (1-10x)
@@ -1045,22 +1022,9 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         euint64 leverage = FHE.fromExternal(encryptedLeverage, inputProof);
         ebool isLong = FHE.fromExternal(encryptedIsLong, inputProof);
 
-        // Get current balance (from regular balance)
-        euint64 currentBalance = _balances[msg.sender];
-        require(euint64.unwrap(currentBalance) != 0, "No balance");
-
-        // Check sufficient balance for collateral
-        ebool hasSufficientBalance = FHE.ge(currentBalance, collateral);
-
-        // Deduct collateral from balance
-        euint64 newBalance = FHE.select(
-            hasSufficientBalance,
-            FHE.sub(currentBalance, collateral),
-            currentBalance
-        );
-        _balances[msg.sender] = newBalance;
-        FHE.allowThis(newBalance);
-        FHE.allow(newBalance, msg.sender);
+        // UPDATED: Transfer sUSD directly from user to vault (no separate deposit step!)
+        bool transferSuccess = shadowUsd.vaultDeposit(msg.sender, collateral);
+        require(transferSuccess, "Insufficient sUSD balance");
 
         // Calculate position size: collateral * leverage
         euint64 size = FHE.mul(collateral, leverage);
@@ -1115,7 +1079,7 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
     /**
      * @notice Close an anonymous position
-     * @dev Verifies ownership through encrypted address comparison
+     * @dev UPDATED: Returns sUSD directly to user's wallet
      * @param positionId Position to close
      */
     function closeAnonymousPosition(uint256 positionId) external nonReentrant {
@@ -1143,19 +1107,8 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         // Calculate final amount: collateral + pnl
         euint64 finalAmount = FHE.add(position.collateral, pnl);
 
-        // Add back to user balance
-        euint64 currentBalance = _balances[msg.sender];
-        euint64 newBalance;
-
-        if (euint64.unwrap(currentBalance) == 0) {
-            newBalance = finalAmount;
-        } else {
-            newBalance = FHE.add(currentBalance, finalAmount);
-        }
-
-        _balances[msg.sender] = newBalance;
-        FHE.allowThis(newBalance);
-        FHE.allow(newBalance, msg.sender);
+        // UPDATED: Transfer sUSD directly back to user's wallet
+        shadowUsd.vaultWithdraw(msg.sender, finalAmount);
 
         // Mark position as closed
         position.isOpen = false;
@@ -1710,20 +1663,9 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         pending.processed = true;
         pending.finalAmount = finalAmount;
 
-        // Add final amount to user balance
-        euint64 currentBalance = _balances[pending.user];
-        euint64 amountToAdd = FHE.asEuint64(finalAmount);
-        euint64 newBalance;
-
-        if (euint64.unwrap(currentBalance) == 0) {
-            newBalance = amountToAdd;
-        } else {
-            newBalance = FHE.add(currentBalance, amountToAdd);
-        }
-
-        _balances[pending.user] = newBalance;
-        FHE.allowThis(newBalance);
-        FHE.allow(newBalance, pending.user);
+        // UPDATED: Transfer sUSD directly back to user's wallet
+        euint64 amountToReturn = FHE.asEuint64(finalAmount);
+        shadowUsd.vaultWithdraw(pending.user, amountToReturn);
 
         // Close position and clear pending flag
         position.isOpen = false;

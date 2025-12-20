@@ -187,8 +187,14 @@ export default function WalletPage() {
   // Load claimed amount and vault balance from localStorage on mount
   useEffect(() => {
     if (address) {
+      // Load sUSD balance from localStorage (synced with TradingPanel)
+      const storedSUsd = localStorage.getItem(`susd_balance_${address}`);
+      if (storedSUsd) {
+        setClaimedAmount(parseFloat(storedSUsd));
+      }
+      // Also check legacy key for backwards compatibility
       const storedClaimed = localStorage.getItem(`faucet_claimed_${address}`);
-      if (storedClaimed) {
+      if (storedClaimed && !storedSUsd) {
         setClaimedAmount(parseFloat(storedClaimed));
       }
       const storedVault = localStorage.getItem(`vault_balance_${address}`);
@@ -622,8 +628,8 @@ export default function WalletPage() {
         // Update localStorage with real decrypted balance (for TradingPanel sync)
         const balanceNumber = Number(balance) / 1e6; // 6 decimals
         setClaimedAmount(balanceNumber);
-        localStorage.setItem(`faucet_claimed_${address}`, balanceNumber.toString());
-        console.log("✅ Updated local balance from FHE decryption:", balanceNumber);
+        localStorage.setItem(`susd_balance_${address}`, balanceNumber.toString());
+        console.log("✅ Updated sUSD balance from FHE decryption:", balanceNumber);
       }
     } catch (error) {
       console.error("❌ Decryption failed:", error);
