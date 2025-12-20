@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Header, Footer } from "@/components";
 import { formatUSD, formatPercent } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -481,6 +481,7 @@ export default function WalletPage() {
   const [isDecrypting, setIsDecrypting] = useState(false);
   const [decryptionError, setDecryptionError] = useState<string | null>(null);
   const [decryptedBalance, setDecryptedBalance] = useState<bigint | null>(null);
+  const hasAttemptedDecrypt = useRef(false); // Prevent infinite retry loop
   const [decryptedValues, setDecryptedValues] = useState<{
     sUsdBalance?: bigint;
     vaultBalance?: bigint;
@@ -521,15 +522,19 @@ export default function WalletPage() {
     init();
   }, []);
 
-  // Auto-decrypt balance when FHE ready and wallet connected
-  // Note: Using `decryptedBalance === null` instead of `!decryptedBalance`
-  // because BigInt(0) is falsy, which would cause infinite loop
+  // Reset decrypt attempt flag when address changes
   useEffect(() => {
-    if (isFheReady && isConnected && walletClient && address && chainId === 11155111 && decryptedBalance === null && !isDecrypting) {
-      // Silently auto-decrypt in background
+    hasAttemptedDecrypt.current = false;
+  }, [address]);
+
+  // Auto-decrypt balance when FHE ready and wallet connected
+  // Uses hasAttemptedDecrypt ref to prevent infinite retry loop on error
+  useEffect(() => {
+    if (isFheReady && isConnected && walletClient && address && chainId === 11155111 && !hasAttemptedDecrypt.current && !isDecrypting) {
+      hasAttemptedDecrypt.current = true; // Mark as attempted BEFORE calling
       handleDecryptBalance();
     }
-  }, [isFheReady, isConnected, walletClient, address, chainId, decryptedBalance, isDecrypting]);
+  }, [isFheReady, isConnected, walletClient, address, chainId, isDecrypting]);
 
   useEffect(() => {
     const timer = setInterval(() => {
