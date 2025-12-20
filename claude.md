@@ -1,5 +1,5 @@
 # Pendex - Claude Memory File
-**Son Guncelleme:** 2025-12-19 (Session 6 - Nice to Have Features + Scripts)
+**Son Guncelleme:** 2025-12-20 (Session 7 - FHE SDK Fix + Clean UI)
 
 ---
 
@@ -9,20 +9,22 @@
 **Yeni Isim:** Pendex (eski: Shadow Protocol)
 **Renk:** Teal/Turkuaz (#2DD4BF)
 **Logo:** Geometric P tasarimi (public/logo.png)
-**Durum:** 8/10 - Hackathon'a hazir!
-**Local:** `/Users/himess/Projects/private-preipo` (SILME!)
+**Durum:** 9/10 - FHE CALISIYOR!
+**Windows Path:** `C:\Users\USER\shadow-protocol\frontend`
 **Live URL:** https://shadow-protocol-nine.vercel.app/
 
-**Session 6'da Yapilanlar:**
-1. Transaction History - Blockchain eventlerinden gercek islem gecmisi
-2. Anonymous Mode - `openAnonymousPosition` hook entegrasyonu
-3. P&L Tracking - FHE-aware gosterim
-4. Price Simulator script - Random fiyat degisimleri
-5. Keeper Bot script - Limit order execution
-6. Add Liquidity script - LP'ye test likidite ekleme
-7. Error Handling - TradingPanel iyilestirmeleri
+**Session 7'de Yapilanlar:**
+1. FHE SDK WASM sorunu COZULDU - initSDK() + webpack asset/resource
+2. EIP-712 signing fix - viem object format
+3. Clean UI - FHE badges kaldirildi, otomatik decrypt
+4. Invisible FHE - arka planda calisiyor, user fark etmiyor
 
-**Kritik:** DefinePlugin kullan (ProvidePlugin DEGIL), chart v5 API, public RPC
+**KRITIK OGRENIMLER:**
+- `initSDK()` MUTLAKA `createInstance()` ONCE cagirilmali
+- WASM icin `type: "asset/resource"` kullan (webassembly/async DEGIL)
+- Viem signTypedData object format: `{domain, types, primaryType, message}`
+- gatewayChainId: 55815 (eski 10901 YANLIS)
+- Relayer URL: `https://relayer.testnet.zama.org` (.org DOGRU, .cloud DNS yok)
 
 ---
 
@@ -34,20 +36,22 @@
 - Kimse (validator bile) pozisyonlari goremiyor
 - Pre-IPO sirketlerde kaldiracli islem (1x-10x)
 
-**Local Path:** `/Users/himess/Projects/private-preipo` (SILME!)
+**Windows Path:** `C:\Users\USER\shadow-protocol`
 
 ---
 
-## PROJE DURUMU: 8/10
+## PROJE DURUMU: 9/10
 
 ### Tamamlanan Ozellikler
 - [x] FHE encrypted trading (collateral, leverage, isLong)
 - [x] Deposit/Withdraw FHE encryption
-- [x] Balance decryption (sUSD, Vault, LP, Rewards)
+- [x] Balance decryption - GERCEK FHE CALISIYOR!
+- [x] Auto-decrypt on page load
+- [x] Clean UI - no FHE badges
 - [x] Limit orders UI
 - [x] Anonymous mode toggle
 - [x] Transaction history from blockchain events
-- [x] P&L tracking (FHE-aware)
+- [x] P&L tracking
 - [x] Price simulator script
 - [x] Keeper bot script
 - [x] Add liquidity script
@@ -58,72 +62,151 @@
 #### YUKSEK ONCELIK - Hackathon icin
 | # | Is | Aciklama | Zorluk |
 |---|-----|----------|--------|
-| 1 | End-to-End Test | Gercek FHE transaction test et (deposit → trade → withdraw) | Orta |
+| 1 | End-to-End Test | Trade ac → pozisyon kapat (deposit zaten test edildi) | Orta |
 | 2 | Demo Video | 2-3 dakikalik proje tanitim videosu | Kolay |
 
 #### ORTA ONCELIK
 | # | Is | Aciklama | Zorluk |
 |---|-----|----------|--------|
 | 3 | README Guncelle | Hackathon icin proje dokumantasyonu | Kolay |
-| 4 | Vercel Domain | shadow-protocol-nine.vercel.app → pendex.vercel.app | Kolay |
-| 5 | Price Simulator Calistir | Demo sirasinda fiyatlar hareket etsin | Kolay |
-
-#### DUSUK ONCELIK (Nice to Have)
-| # | Is | Aciklama | Zorluk |
-|---|-----|----------|--------|
-| 6 | Keeper Bot Calistir | Limit orderlarin otomatik execute edilmesi | Orta |
-| 7 | LP APY Gosterimi | Gercek APY hesaplama | Orta |
-| 8 | Mobile Responsive | Mobil uyumluluk kontrol | Orta |
 
 ---
 
-## DOSYA YAPISI
+## SESSION 7 - FHE SDK FIX + CLEAN UI (20 Aralik 2025)
 
+### 1. FHE SDK WASM Sorunu COZULDU
+
+**Problem:** Build sirasinda WASM parse hatasi:
 ```
-pendex/  (/Users/himess/Projects/private-preipo)
-├── contracts/
-│   ├── core/
-│   │   ├── ShadowVault.sol         - Ana trading vault (FHE)
-│   │   ├── ShadowOracle.sol        - Fiyat oracle
-│   │   └── ShadowLiquidityPool.sol - LP pool
-│   ├── tokens/
-│   │   └── ShadowUSD.sol           - Stablecoin
-│   └── bots/
-│       └── ShadowMarketMakerSimple.sol
-├── scripts/                         - YENI SCRIPTLER
-│   ├── priceSimulator.ts           - Fiyat simulasyonu
-│   ├── keeperBot.ts                - Limit order keeper
-│   ├── addLiquidity.ts             - LP likidite ekleme
-│   └── addAssets.ts                - Oracle asset ekleme
-├── frontend/
-│   ├── public/
-│   │   └── logo.png
-│   ├── next.config.js
-│   └── src/
-│       ├── app/
-│       │   ├── globals.css
-│       │   ├── trade/page.tsx
-│       │   ├── wallet/page.tsx     - FHE deposit/withdraw + history
-│       │   ├── markets/page.tsx
-│       │   ├── companies/page.tsx
-│       │   └── docs/page.tsx
-│       ├── components/
-│       │   ├── Header.tsx
-│       │   ├── Footer.tsx
-│       │   ├── PriceChart.tsx      - TradingView-style chart
-│       │   ├── OrderBook.tsx       - Canli order book
-│       │   └── TradingPanel.tsx    - FHE trading + error handling
-│       └── lib/
-│           ├── constants.ts
-│           ├── companyData.ts
-│           ├── fhe/client.ts       - FHE SDK wrapper
-│           └── contracts/
-│               ├── hooks.ts        - Wagmi hooks
-│               └── abis.ts         - Contract ABIs
-├── docs/
-│   └── FHEVM_INTEGRATION.md
-└── test/
-    └── ShadowProtocol.test.ts
+Module parse failed: Internal failure: parseVec could not cast the value
+./node_modules/@zama-fhe/relayer-sdk/lib/tfhe_bg.wasm
+```
+
+**Cozum (next.config.js):**
+```javascript
+// Zama WASM'i asset olarak yukle (parse etme!)
+config.module.rules.push({
+  test: /\.wasm$/,
+  include: /node_modules\/@zama-fhe/,
+  type: "asset/resource",
+  generator: {
+    filename: "static/wasm/[name][ext]",
+  },
+});
+```
+
+### 2. initSDK() Gerekli!
+
+**Problem:** `createInstance()` cagrilinca WASM uzerinden `__wbindgen_malloc` hatasi
+
+**Cozum (lib/fhe/client.ts):**
+```typescript
+const sdk = await import("@zama-fhe/relayer-sdk/web");
+const { createInstance, SepoliaConfig, initSDK } = sdk;
+
+// KRITIK: Once initSDK() cagir!
+await initSDK();
+
+// Sonra createInstance()
+const instance = await createInstance(SepoliaConfig);
+```
+
+### 3. EIP-712 Signing (Viem Format)
+
+**YANLIS (ethers.js style):**
+```typescript
+await signer.signTypedData(domain, types, message);
+```
+
+**DOGRU (viem style):**
+```typescript
+await signer.signTypedData({
+  domain: eip712.domain,
+  types: eip712.types,
+  primaryType: eip712.primaryType,  // BU LAZIM!
+  message: eip712.message,
+});
+```
+
+### 4. Clean UI Refactor
+
+**Kaldirilanlar:**
+- "FHE Ready" status badge
+- "Decrypt Balance" butonu
+- Hide/Show toggle
+- "Balance Decrypted Successfully" mesaji
+- Decrypt tab (tum sayfa)
+- "FHE Protected" badge
+- Lock ikonlari
+- Tum "encryption" mesajlari
+
+**Eklenenler:**
+- Otomatik decrypt (sayfa acilinca, arka planda)
+- Sadece hata durumunda kucuk error mesaji
+- Balance direkt gosteriliyor
+
+**Felsefe:** FHE arka planda calisiyor, kullanici fark etmiyor. Clean, profesyonel UI.
+
+---
+
+## TEKNIK NOTLAR (GUNCELLENMIS)
+
+### FHE SDK Initialization (DOGRU SIRA)
+```typescript
+// 1. Dynamic import (SSR/WASM icin)
+const sdk = await import("@zama-fhe/relayer-sdk/web");
+const { createInstance, SepoliaConfig, initSDK } = sdk;
+
+// 2. ONCE initSDK() - WASM modullerini yukle
+await initSDK();
+
+// 3. SONRA createInstance()
+const instance = await createInstance(SepoliaConfig);
+```
+
+### FHE Decryption Flow (GUNCELLENMIS)
+```typescript
+const handle = await contract.confidentialBalanceOf(address);
+const keypair = instance.generateKeypair();
+const eip712 = instance.createEIP712(keypair.publicKey, [contractAddr], startTime, "1");
+
+// VIEM FORMAT - primaryType SART!
+const signature = await signer.signTypedData({
+  domain: eip712.domain,
+  types: eip712.types,
+  primaryType: eip712.primaryType,
+  message: eip712.message,
+});
+
+const results = await instance.userDecrypt([{handle, contractAddress}], ...);
+```
+
+### Webpack Config (WASM icin)
+```javascript
+// next.config.js
+config.module.rules.push({
+  test: /\.wasm$/,
+  include: /node_modules\/@zama-fhe/,
+  type: "asset/resource",  // webassembly/async DEGIL!
+  generator: {
+    filename: "static/wasm/[name][ext]",
+  },
+});
+```
+
+### Sepolia FHE Config (DOGRU DEGERLER)
+```typescript
+const SEPOLIA_CONFIG = {
+  aclContractAddress: "0xf0Ffdc93b7E186bC2f8CB3dAA75D86d1930A433D",
+  kmsContractAddress: "0xbE0E383937d564D7FF0BC3b46c51f0bF8d5C311A",
+  inputVerifierContractAddress: "0xBBC1fFCdc7C316aAAd72E807D9b0272BE8F84DA0",
+  verifyingContractAddressDecryption: "0x5D8BD78e2ea6bbE41f26dFe9fdaEAa349e077478",
+  verifyingContractAddressInputVerification: "0x483b9dE06E4E4C7D35CCf5837A1668487406D955",
+  chainId: 11155111,
+  gatewayChainId: 55815,  // ONEMLI: 10901 YANLIS!
+  network: "https://eth-sepolia.public.blastapi.io",
+  relayerUrl: "https://relayer.testnet.zama.org",  // .org DOGRU, .cloud YOK!
+};
 ```
 
 ---
@@ -136,13 +219,6 @@ ShadowLiquidityPool:     0xB0a1fb939C017f17d79F6049A21b4b2fB9423d73
 ShadowVault:             0x486eF23A22Ab485851bE386da07767b070a51e82
 ShadowMarketMaker:       0xa779cB24c82307a19d4E4E01B3B0879fF635D02F
 Deployer:                0xad850C8eB45E80b99ad76A22fBDd0b04F4A1FD27
-```
-
-### Sepolia FHE Adresleri
-```
-ACL:          0xf0Ffdc93b7E186bC2f8CB3dAA75D86d1930A433D
-KMS Verifier: 0xbE0E383937d564D7FF0BC3b46c51f0bF8d5C311A
-Relayer URL:  https://relayer.testnet.zama.org
 ```
 
 ---
@@ -159,111 +235,20 @@ Relayer URL:  https://relayer.testnet.zama.org
 
 ---
 
-## QUICK COMMANDS
+## QUICK COMMANDS (Windows)
 
-```bash
+```powershell
 # Proje dizini
-cd /Users/himess/Projects/private-preipo
+cd C:\Users\USER\shadow-protocol\frontend
 
 # Frontend dev
-cd frontend && npm run dev
+npm run dev
 
 # Frontend build
-cd frontend && npm run build
+npm run build
 
-# Hardhat test
-npx hardhat test
-
-# === YENI SCRIPTLER ===
-
-# Fiyat simulasyonu (surekli)
-npx hardhat run scripts/priceSimulator.ts --network sepolia
-
-# Fiyat simulasyonu (tek seferlik)
-npx hardhat run scripts/priceSimulator.ts --network sepolia -- --once
-
-# Keeper bot (surekli)
-npx hardhat run scripts/keeperBot.ts --network sepolia
-
-# Keeper bot (tek seferlik)
-npx hardhat run scripts/keeperBot.ts --network sepolia -- --once
-
-# LP'ye likidite ekle
-npx hardhat run scripts/addLiquidity.ts --network sepolia
-```
-
----
-
-## SESSION 6 - NICE TO HAVE FEATURES (19 Aralik 2025)
-
-### Tamamlanan Isler
-
-#### 1. Transaction History (wallet/page.tsx)
-- Blockchain eventlerinden gercek islem gecmisi
-- PositionOpened, PositionClosed, LiquidityAdded, LiquidityRemoved, RewardsClaimed, Mint
-- Son 7 gunluk eventler (~50400 block)
-- Etherscan linkleri
-
-#### 2. Anonymous Mode (TradingPanel.tsx)
-- `useOpenAnonymousPosition` hook eklendi
-- Toggle acikken `openAnonymousPosition` cagiriliyor
-- eaddress ile encrypted owner
-
-#### 3. P&L Tracking (wallet/page.tsx)
-- FHE Protected badge
-- Position sayilari transaction history'den
-- Privacy bilgisi
-
-#### 4. Price Simulator (scripts/priceSimulator.ts)
-- %1-2 random fiyat degisimi
-- 30 saniyede bir guncelleme
-- Min/max limitler (base price'in %80-%120)
-
-#### 5. Keeper Bot (scripts/keeperBot.ts)
-- Limit orderlari kontrol eder
-- Liquidation'lari kontrol eder
-- 60 saniyede bir calisir
-
-#### 6. Add Liquidity (scripts/addLiquidity.ts)
-- LP'ye $100,000 test likidite ekler
-
-#### 7. Error Handling (TradingPanel.tsx)
-- Yuksek leverage uyarisi (8-9x sari, 10x kirmizi)
-- User-friendly error mesajlari
-- Retry butonu (network/timeout hatalari icin)
-- Error mesaji 8 saniye gorunur
-
----
-
-## TEKNIK NOTLAR
-
-### FHE Decryption Flow
-```typescript
-const handle = await contract.confidentialBalanceOf(address);
-const keypair = instance.generateKeypair();
-const eip712 = instance.createEIP712(keypair.publicKey, [contractAddr], startTime, "1");
-const signature = await signer.signTypedData(eip712.domain, eip712.types, eip712.message);
-const results = await instance.userDecrypt([{handle, contractAddress}], ...);
-```
-
-### FHE Encryption Flow
-```typescript
-const input = instance.createEncryptedInput(contractAddress, userAddress);
-input.add64(BigInt(amount));
-const encrypted = await input.encrypt();
-await contract.deposit(encrypted.handles[0], encrypted.inputProof);
-```
-
-### Webpack Polyfills
-```javascript
-config.plugins.push(
-  new webpack.DefinePlugin({ "global": "globalThis" })
-);
-fallback: {
-  events: require.resolve("events/"),
-  buffer: require.resolve("buffer/"),
-  process: require.resolve("process/browser"),
-}
+# Git push
+git add -A; git commit -m "message"; git push origin main
 ```
 
 ---
@@ -281,70 +266,65 @@ fallback: {
 
 ## UNIQUE FEATURES
 
-1. **Anonymous Trading (eaddress)** - Position owner encrypted
-2. **Encrypted Limit Orders** - Front-running IMKANSIZ
-3. **GMX-Style LP Pool** - Trader losses = LP gains
-4. **Leverage Trading (1x-10x)** - Encrypted P&L
-5. **FHE Random** - randEuint64/randEuint8
-6. **Professional Chart** - TradingView-style drawing tools
-7. **Live Order Book** - Real-time updates + trade ticker
-8. **FHE Encryption Animations** - Visual feedback
+1. **Invisible FHE** - Arka planda calisiyor, user fark etmiyor
+2. **Anonymous Trading (eaddress)** - Position owner encrypted
+3. **Encrypted Limit Orders** - Front-running IMKANSIZ
+4. **GMX-Style LP Pool** - Trader losses = LP gains
+5. **Leverage Trading (1x-10x)** - Encrypted P&L
+6. **Auto-decrypt** - Sayfa acilinca balance otomatik decrypt
+7. **Professional Chart** - TradingView-style drawing tools
+8. **Live Order Book** - Real-time updates + trade ticker
 
 ---
 
 ## SONUC
 
 Pendex hackathon icin hazir:
-- FHE encrypted trading
-- Anonymous mode
-- Real transaction history
-- Price simulation
-- Keeper bot
-- Error handling
+- GERCEK FHE calisiyor (mock degil!)
+- Clean UI (FHE gorunmuyor)
+- Auto-decrypt
+- Encrypted trading
 
-**Puan: 8/10** - Demo icin hazir!
+**Puan: 9/10** - FHE production-ready!
 
 ### Siradaki Adimlar:
-1. End-to-end test yap (deposit → trade → withdraw)
+1. End-to-end test (trade ac → kapat)
 2. Demo video cek (2-3 dk)
 3. README guncelle
-4. Vercel domain degistir (pendex.vercel.app)
 
 **Live URL:** https://shadow-protocol-nine.vercel.app/
 
 ---
 
-## YENI SESSION ICIN PROMPT
+## ONEMLI HATALAR VE COZUMLERI
 
-Yeni terminalde su promptu kullan:
-
+### 1. WASM Parse Error
 ```
-Pendex projesine devam ediyorum. Bu bir Zama FHE Hackathon projesi - Pre-IPO sirketlerde (SpaceX, OpenAI, Anthropic vb.) FHE encrypted kaldiracli trading platformu.
-
-Proje dizini: /Users/himess/Projects/private-preipo
-Frontend: /Users/himess/Projects/private-preipo/frontend
-
-Lutfen once claude.md dosyasini oku:
-cat /Users/himess/Projects/private-preipo/claude.md
-
-Sonra ne yapmami istedigimi soyle.
+Module parse failed: Internal failure: parseVec could not cast the value
 ```
+**Cozum:** `type: "asset/resource"` kullan
+
+### 2. __wbindgen_malloc undefined
+**Cozum:** `initSDK()` cagir ONCE
+
+### 3. Invalid primary type undefined
+**Cozum:** Viem object format + `primaryType` ekle
+
+### 4. DNS resolution failed (relayer.testnet.zama.cloud)
+**Cozum:** `.cloud` YANLIS, `.org` kullan
+
+### 5. wrong relayer url
+**Cozum:** `gatewayChainId: 55815` (10901 degil)
 
 ---
 
-## HIZLI BASLANGIÇ (Yeni Session)
+## YENI SESSION ICIN PROMPT
 
-```bash
-# 1. Dizine git
-cd /Users/himess/Projects/private-preipo
+```
+Pendex projesine devam ediyorum. Bu bir Zama FHE Hackathon projesi - Pre-IPO sirketlerde FHE encrypted kaldiracli trading platformu.
 
-# 2. Claude.md'yi oku
-cat claude.md
+Proje dizini: C:\Users\USER\shadow-protocol\frontend
+Live URL: https://shadow-protocol-nine.vercel.app/
 
-# 3. Git durumu kontrol
-git status
-git log --oneline -5
-
-# 4. Frontend calistir
-cd frontend && npm run dev
+Lutfen once CLAUDE.md dosyasini oku.
 ```
