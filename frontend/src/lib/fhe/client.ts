@@ -264,11 +264,13 @@ export async function requestUserDecryption(
   );
 
   // Sign the EIP-712 message
-  const signature = await signer.signTypedData(
-    eip712.domain,
-    eip712.types,
-    eip712.message
-  );
+  // Viem uses object format, not separate parameters like ethers.js
+  const signature = await signer.signTypedData({
+    domain: eip712.domain,
+    types: eip712.types,
+    primaryType: eip712.primaryType,
+    message: eip712.message,
+  });
 
   // Prepare handle-contract pairs for userDecrypt
   // HandleContractPair expects handle as string or Uint8Array
