@@ -352,25 +352,54 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
     return shortMsg.length < err.message.length ? shortMsg + "..." : shortMsg;
   };
 
-  // Initialize FHE instance on mount
+  // Initialize FHE instance on mount with timeout fallback
   useEffect(() => {
-    if (hasFHE && !isFheInitialized()) {
-      setFheInitializing(true);
-      initFheInstance()
-        .then(() => {
-          setFheReady(true);
-          setFheInitializing(false);
-        })
-        .catch((err) => {
-          console.error("FHE init failed:", err);
-          setFheInitializing(false);
-        });
-    } else if (!hasFHE) {
+    // If already initialized, mark as ready immediately
+    if (isFheInitialized()) {
+      setFheReady(true);
+      setFheInitializing(false);
+      return;
+    }
+
+    if (!hasFHE) {
       // Mock mode - no FHE needed
       setFheReady(true);
-    } else if (isFheInitialized()) {
-      setFheReady(true);
+      setFheInitializing(false);
+      return;
     }
+
+    // Start FHE initialization
+    setFheInitializing(true);
+    let timeoutId: NodeJS.Timeout;
+
+    const initWithTimeout = async () => {
+      try {
+        // Set a timeout to prevent infinite waiting
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error("FHE init timeout")), 15000);
+        });
+
+        // Race between init and timeout
+        await Promise.race([initFheInstance(), timeoutPromise]);
+        clearTimeout(timeoutId);
+        setFheReady(true);
+        setFheInitializing(false);
+      } catch (err) {
+        console.error("FHE init failed:", err);
+        clearTimeout(timeoutId);
+        setFheInitializing(false);
+        // Still allow trading in case FHE was initialized elsewhere
+        if (isFheInitialized()) {
+          setFheReady(true);
+        }
+      }
+    };
+
+    initWithTimeout();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [hasFHE]);
 
   // Update status based on transaction state (includes both regular and anonymous position hooks)
