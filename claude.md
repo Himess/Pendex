@@ -138,11 +138,13 @@ ShadowMarketMaker:       0xa779cB24c82307a19d4E4E01B3B0879fF635D02F
 Deployer:                0xad850C8eB45E80b99ad76A22fBDd0b04F4A1FD27
 ```
 
-### Sepolia FHE Adresleri
+### Sepolia FHE Adresleri (Aralık 2025 - Güncel)
 ```
-Coprocessor:  0x92C920834Ec8941d2C77D188936E1f7A6f49c127
-ACL:          0xf0Ffdc93b7E186bC2f8CB3dAA75D86d1930A433D
-KMS Verifier: 0xbE0E383937d564D7FF0BC3b46c51f0bF8d5C311A
+ACL:              0x687820221192C5B662b25367F70076A37bc79b6c
+KMS Verifier:     0x1364cBBf2cDF5032C47d8226a6f6FBD2AFCDacAC
+Input Verifier:   0xbc91f3daD1A5F19F8390c400196e58073B6a0BC4
+Relayer URL:      https://relayer.testnet.zama.cloud
+Gateway Chain ID: 55815
 ```
 
 ---
