@@ -11,9 +11,9 @@ const ORACLE_ABI = [
   "function getCurrentPrice(bytes32 assetId) public view returns (uint64)",
 ];
 
-// RPC endpoints - use public RPC to avoid rate limiting
+// RPC endpoints - use CORS-friendly public RPC
 const RPC_URLS: Record<SupportedNetwork, string> = {
-  sepolia: "https://rpc.sepolia.org",
+  sepolia: "https://ethereum-sepolia-rpc.publicnode.com",
   hardhat: "http://127.0.0.1:8545",
 };
 

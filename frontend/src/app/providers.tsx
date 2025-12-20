@@ -28,11 +28,11 @@ export function useTheme() {
 }
 
 // Configure chains - both Sepolia (with Zama FHE) and Hardhat (local dev)
-// Use public RPC to avoid rate limiting
+// Use CORS-friendly public RPC for browser requests
 const config = createConfig({
   chains: [sepolia, hardhat],
   transports: {
-    [sepolia.id]: http("https://rpc.sepolia.org"),
+    [sepolia.id]: http("https://ethereum-sepolia-rpc.publicnode.com"),
     [hardhat.id]: http("http://127.0.0.1:8545"),
   },
 });
