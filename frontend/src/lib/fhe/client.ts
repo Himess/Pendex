@@ -6,12 +6,11 @@
 // Uses @zama-fhe/relayer-sdk for real FHE operations on Sepolia
 // Documentation: https://docs.zama.org/protocol/relayer-sdk-guides/fhevm-relayer
 
-import {
-  createInstance,
-  SepoliaConfig,
-  type FhevmInstance,
-  type FhevmInstanceConfig,
-  type HandleContractPair,
+// Types are imported statically for TypeScript
+import type {
+  FhevmInstance,
+  FhevmInstanceConfig,
+  HandleContractPair,
 } from "@zama-fhe/relayer-sdk/web";
 
 // Re-export types
@@ -54,10 +53,14 @@ export async function initFheInstance(): Promise<FhevmInstance> {
     return initializationPromise;
   }
 
-  // Start initialization
+  // Start initialization with dynamic import
   initializationPromise = (async () => {
     try {
       console.log("🔐 Initializing FHEVM Relayer SDK instance...");
+
+      // Dynamic import to avoid SSR/WASM issues
+      const sdk = await import("@zama-fhe/relayer-sdk/web");
+      const { createInstance, SepoliaConfig } = sdk;
 
       // Try using SepoliaConfig first (simpler approach)
       let instance: FhevmInstance;
