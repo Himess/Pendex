@@ -522,8 +522,10 @@ export default function WalletPage() {
   }, []);
 
   // Auto-decrypt balance when FHE ready and wallet connected
+  // Note: Using `decryptedBalance === null` instead of `!decryptedBalance`
+  // because BigInt(0) is falsy, which would cause infinite loop
   useEffect(() => {
-    if (isFheReady && isConnected && walletClient && address && chainId === 11155111 && !decryptedBalance && !isDecrypting) {
+    if (isFheReady && isConnected && walletClient && address && chainId === 11155111 && decryptedBalance === null && !isDecrypting) {
       // Silently auto-decrypt in background
       handleDecryptBalance();
     }

@@ -643,10 +643,10 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
             </div>
           </div>
 
-          {/* No Balance Warning - Link to faucet */}
+          {/* No Balance Warning - Link to deposit tab (has faucet) */}
           {isConnected && sUsdBalance === 0 && (
             <Link
-              href="/wallet?tab=faucet"
+              href="/wallet?tab=deposit"
               className="flex items-center gap-2 p-2 bg-danger/10 border border-danger/30 rounded text-[10px] text-danger hover:bg-danger/20 transition-colors"
             >
               <AlertTriangle className="w-3 h-3" />
