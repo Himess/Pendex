@@ -445,8 +445,8 @@ export default function WalletPage() {
     isLoading: lpLoading || rewardsLoading,
   }), [lpBalance, pendingRewards, timeUntilUnlock, timeUntilNextEpoch, currentEpoch, lastClaimedEpoch, currentApy, totalLiquidity, poolStats, lpLoading, rewardsLoading]);
 
-  const [showBalance, setShowBalance] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "history" | "deposit" | "liquidity" | "transfer" | "decrypt" | "operators">("overview");
+  const [showBalance, setShowBalance] = useState(true); // Show by default - clean UI
+  const [activeTab, setActiveTab] = useState<"overview" | "history" | "deposit" | "liquidity" | "transfer" | "operators">("overview");
 
   // Operator state (ERC-7984)
   const [operators, setOperators] = useState<Operator[]>([]);
@@ -514,6 +514,14 @@ export default function WalletPage() {
     };
     init();
   }, []);
+
+  // Auto-decrypt balance when FHE ready and wallet connected
+  useEffect(() => {
+    if (isFheReady && isConnected && walletClient && address && chainId === 11155111 && !decryptedBalance && !isDecrypting) {
+      // Silently auto-decrypt in background
+      handleDecryptBalance();
+    }
+  }, [isFheReady, isConnected, walletClient, address, chainId, decryptedBalance, isDecrypting]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -635,11 +643,9 @@ export default function WalletPage() {
     ? `${address.slice(0, 6)}...${address.slice(-4)}`
     : "Not Connected";
 
+  // Clean UI - just show the value, no encryption indicators
   const EncryptedValue = ({ revealed, value }: { revealed: boolean; value: string }) => (
-    <span className="flex items-center gap-2">
-      {revealed ? value : "••••••••"}
-      <Lock className={cn("w-4 h-4", revealed ? "text-success" : "text-gold")} />
-    </span>
+    <span>{value || "$0.00"}</span>
   );
 
   const handleLpDeposit = async () => {
@@ -1145,59 +1151,20 @@ export default function WalletPage() {
               )}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            {/* FHE Status Indicator */}
-            <div className={cn(
-              "flex items-center gap-2 px-3 py-2 rounded-lg text-sm",
-              isFheReady
-                ? "bg-success/20 text-success"
-                : "bg-warning/20 text-warning"
-            )}>
-              <div className={cn(
-                "w-2 h-2 rounded-full",
-                isFheReady ? "bg-success animate-pulse" : "bg-warning"
-              )} />
-              {isFheReady ? "FHE Ready" : "FHE Loading..."}
+          {/* Clean UI - just show loading state subtly if needed */}
+          {isDecrypting && (
+            <div className="flex items-center gap-2 text-text-muted text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading...
             </div>
-
-            {/* Decrypt Button - Real FHE Decryption */}
-            <button
-              onClick={handleDecryptBalance}
-              disabled={!isConnected || !isFheReady || isDecrypting}
-              className="flex items-center gap-2 px-4 py-2 bg-gold text-background rounded-lg font-medium hover:bg-gold/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isDecrypting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Decrypting...
-                </>
-              ) : (
-                <>
-                  <Unlock className="w-4 h-4" />
-                  Decrypt Balance
-                </>
-              )}
-            </button>
-
-            {/* Toggle visibility (for already decrypted values) */}
-            <button
-              onClick={() => setShowBalance(!showBalance)}
-              className="flex items-center gap-2 px-4 py-2 bg-card border border-border text-text-muted rounded-lg font-medium hover:bg-card-hover transition-colors"
-            >
-              {showBalance ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              {showBalance ? "Hide" : "Show"}
-            </button>
-          </div>
+          )}
         </div>
 
-        {/* Decryption Error */}
+        {/* Show error only if decryption fails */}
         {decryptionError && (
-          <div className="mb-6 p-4 bg-danger/20 border border-danger/30 rounded-lg flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-danger" />
-            <div>
-              <p className="font-medium text-danger">Decryption Failed</p>
-              <p className="text-sm text-text-muted">{decryptionError}</p>
-            </div>
+          <div className="mb-6 p-3 bg-danger/10 border border-danger/20 rounded-lg flex items-center gap-2 text-sm">
+            <AlertTriangle className="w-4 h-4 text-danger" />
+            <span className="text-danger">{decryptionError}</span>
             <button
               onClick={() => setDecryptionError(null)}
               className="ml-auto text-danger hover:text-danger/70"
@@ -1207,8 +1174,8 @@ export default function WalletPage() {
           </div>
         )}
 
-        {/* Decrypted Balance Success */}
-        {decryptedBalance !== null && showBalance && (
+        {/* Removed: Success message - clean UI doesn't need this */}
+        {false && decryptedBalance !== null && showBalance && (
           <div className="mb-6 p-4 bg-success/20 border border-success/30 rounded-lg flex items-center gap-3">
             <CheckCircle className="w-5 h-5 text-success" />
             <div>
@@ -1309,7 +1276,6 @@ export default function WalletPage() {
         <div className="flex gap-2 mb-6 border-b border-border overflow-x-auto">
           {[
             { id: "overview", label: "Overview", icon: <PieChart className="w-4 h-4" /> },
-            { id: "decrypt", label: "Decrypt Balance", icon: <Key className="w-4 h-4" /> },
             { id: "transfer", label: "Transfer sUSD", icon: <Send className="w-4 h-4" /> },
             { id: "operators", label: "Operators", icon: <Users className="w-4 h-4" /> },
             { id: "liquidity", label: "Liquidity Pool", icon: <Coins className="w-4 h-4" /> },
@@ -1333,218 +1299,6 @@ export default function WalletPage() {
         </div>
 
         {/* Tab Content */}
-        {activeTab === "decrypt" && (
-          <div className="max-w-3xl mx-auto">
-            <div className="bg-card border border-border rounded-xl p-8">
-              {/* Header */}
-              <div className="flex items-center gap-4 mb-8">
-                <div className="w-14 h-14 rounded-full bg-gold/20 text-gold flex items-center justify-center">
-                  <Key className="w-7 h-7" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-text-primary">FHE User Decryption</h2>
-                  <p className="text-text-muted">Decrypt your encrypted balance with your wallet signature</p>
-                </div>
-              </div>
-
-              {/* Connection Status */}
-              {!isConnected ? (
-                <div className="p-6 bg-warning/10 border border-warning/30 rounded-lg text-center">
-                  <Wallet className="w-12 h-12 text-warning mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-text-primary mb-2">Wallet Not Connected</h3>
-                  <p className="text-text-muted mb-4">
-                    Please connect your wallet to decrypt your encrypted balance.
-                  </p>
-                </div>
-              ) : chainId !== 11155111 ? (
-                <div className="p-6 bg-warning/10 border border-warning/30 rounded-lg text-center">
-                  <AlertTriangle className="w-12 h-12 text-warning mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-text-primary mb-2">Wrong Network</h3>
-                  <p className="text-text-muted mb-4">
-                    Please switch to <strong>Sepolia testnet</strong> to use FHE decryption.
-                  </p>
-                  <p className="text-xs text-text-muted">
-                    Current chain ID: {chainId} | Required: 11155111 (Sepolia)
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* FHE Status */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className={cn(
-                      "p-4 rounded-lg border",
-                      isFheReady
-                        ? "bg-success/10 border-success/30"
-                        : "bg-warning/10 border-warning/30"
-                    )}>
-                      <div className="flex items-center gap-3">
-                        <div className={cn(
-                          "w-10 h-10 rounded-full flex items-center justify-center",
-                          isFheReady ? "bg-success/20" : "bg-warning/20"
-                        )}>
-                          {isFheReady ? (
-                            <CheckCircle className="w-5 h-5 text-success" />
-                          ) : (
-                            <Loader2 className="w-5 h-5 text-warning animate-spin" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-medium text-text-primary">FHE SDK Status</p>
-                          <p className={cn(
-                            "text-sm",
-                            isFheReady ? "text-success" : "text-warning"
-                          )}>
-                            {isFheReady ? "Ready" : "Initializing..."}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-4 rounded-lg border bg-card border-border">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gold/20 flex items-center justify-center">
-                          <Wallet className="w-5 h-5 text-gold" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-text-primary">Connected Wallet</p>
-                          <p className="text-sm text-text-muted font-mono">{displayAddress}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Decrypted Values */}
-                  {decryptedBalance !== null && (
-                    <div className="p-6 bg-success/10 border border-success/30 rounded-lg">
-                      <h3 className="text-lg font-semibold text-success mb-4 flex items-center gap-2">
-                        <CheckCircle className="w-5 h-5" />
-                        Decrypted Balance
-                      </h3>
-                      <div className="grid grid-cols-1 gap-4">
-                        <div className="flex justify-between items-center p-4 bg-background rounded-lg">
-                          <span className="text-text-muted">sUSD Balance</span>
-                          <span className="text-2xl font-bold text-text-primary font-mono">
-                            ${(Number(decryptedBalance) / 1e6).toFixed(2)}
-                          </span>
-                        </div>
-                        {decryptedValues.vaultBalance && (
-                          <div className="flex justify-between items-center p-4 bg-background rounded-lg">
-                            <span className="text-text-muted">Vault Collateral</span>
-                            <span className="text-xl font-bold text-text-primary font-mono">
-                              ${(Number(decryptedValues.vaultBalance) / 1e6).toFixed(2)}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Decrypt Button */}
-                  <button
-                    onClick={handleDecryptBalance}
-                    disabled={!isFheReady || isDecrypting}
-                    className="w-full py-4 bg-gold text-background rounded-lg font-bold text-lg hover:bg-gold/90 transition-colors flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isDecrypting ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Signing & Decrypting...
-                      </>
-                    ) : (
-                      <>
-                        <Unlock className="w-5 h-5" />
-                        {decryptedBalance !== null ? "Refresh Decryption" : "Decrypt My Balance"}
-                      </>
-                    )}
-                  </button>
-
-                  {/* Decryption Error */}
-                  {decryptionError && (
-                    <div className="p-4 bg-danger/10 border border-danger/30 rounded-lg">
-                      <div className="flex items-start gap-3">
-                        <AlertTriangle className="w-5 h-5 text-danger mt-0.5" />
-                        <div>
-                          <p className="font-medium text-danger">Decryption Failed</p>
-                          <p className="text-sm text-text-muted">{decryptionError}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* How FHE Decryption Works */}
-            <div className="mt-6 bg-card border border-border rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
-                <Shield className="w-5 h-5 text-gold" />
-                How FHE User Decryption Works
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold flex-shrink-0">
-                    1
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-text-primary mb-1">Generate Keypair</h4>
-                    <p className="text-sm text-text-muted">
-                      A temporary keypair is generated in your browser for re-encryption.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold flex-shrink-0">
-                    2
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-text-primary mb-1">Sign EIP-712</h4>
-                    <p className="text-sm text-text-muted">
-                      You sign an EIP-712 message to authorize decryption access.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold flex-shrink-0">
-                    3
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-text-primary mb-1">Re-Encrypt</h4>
-                    <p className="text-sm text-text-muted">
-                      The KMS re-encrypts your data under your temporary public key.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold flex-shrink-0">
-                    4
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-text-primary mb-1">Decrypt Locally</h4>
-                    <p className="text-sm text-text-muted">
-                      Your browser decrypts the value locally - only you can see it.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Security Notice */}
-            <div className="mt-4 p-4 bg-gold/5 border border-gold/20 rounded-lg">
-              <div className="flex items-start gap-3">
-                <Lock className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="font-medium text-gold mb-1">Privacy Guaranteed</p>
-                  <p className="text-sm text-text-muted">
-                    Your decrypted balance is <strong>never stored</strong> on any server or blockchain.
-                    The decryption happens entirely in your browser. Validators and other users
-                    cannot see your balance - only you can with your wallet signature.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {activeTab === "transfer" && (
           <div className="max-w-2xl mx-auto">
             <div className="bg-card border border-border rounded-xl p-8">
@@ -1554,8 +1308,8 @@ export default function WalletPage() {
                   <Send className="w-7 h-7" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-text-primary">Confidential Transfer</h2>
-                  <p className="text-text-muted">Send sUSD with FHE encryption - amount stays private</p>
+                  <h2 className="text-2xl font-bold text-text-primary">Transfer sUSD</h2>
+                  <p className="text-text-muted">Send sUSD to another wallet</p>
                 </div>
               </div>
 
@@ -1998,14 +1752,10 @@ export default function WalletPage() {
 
         {activeTab === "overview" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* P&L Chart - FHE Protected */}
+            {/* P&L Chart */}
             <div className="bg-card border border-border rounded-xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-text-primary">Trading Performance</h3>
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-gold/10 rounded text-xs text-gold">
-                  <Shield className="w-3 h-3" />
-                  FHE Protected
-                </div>
               </div>
 
               {/* Position Stats */}
