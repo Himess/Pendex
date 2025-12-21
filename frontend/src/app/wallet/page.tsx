@@ -213,7 +213,7 @@ export default function WalletPage() {
       try {
         const client = createPublicClient({
           chain: sepolia,
-          transport: http("https://ethereum-sepolia-rpc.publicnode.com"),
+          transport: http("https://rpc.ankr.com/eth_sepolia"),
         });
 
         const allTransactions: Transaction[] = [];

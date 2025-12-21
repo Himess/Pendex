@@ -36,10 +36,10 @@ export const SEPOLIA_CONFIG = {
   },
   rpcUrls: {
     default: {
-      http: ["https://ethereum-sepolia-rpc.publicnode.com"],
+      http: ["https://rpc.ankr.com/eth_sepolia"],
     },
     public: {
-      http: ["https://ethereum-sepolia-rpc.publicnode.com"],
+      http: ["https://rpc.ankr.com/eth_sepolia"],
     },
   },
   blockExplorers: {
