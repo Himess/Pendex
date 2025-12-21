@@ -28,11 +28,11 @@ export function useTheme() {
 }
 
 // Configure chains - both Sepolia (with Zama FHE) and Hardhat (local dev)
-// Use Ankr RPC (no rate limit)
+// Use DRPC (free, no API key required)
 const config = createConfig({
   chains: [sepolia, hardhat],
   transports: {
-    [sepolia.id]: http("https://rpc.ankr.com/eth_sepolia"),
+    [sepolia.id]: http("https://eth-sepolia.g.alchemy.com/v2/QSKgm3HkNCI9KzcjveL9a"),
     [hardhat.id]: http("http://127.0.0.1:8545"),
   },
 });

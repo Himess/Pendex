@@ -11,9 +11,9 @@ const ORACLE_ABI = [
   "function getCurrentPrice(bytes32 assetId) public view returns (uint64)",
 ];
 
-// RPC endpoints - use Ankr (no rate limit)
+// RPC endpoints - use DRPC (free, no API key)
 const RPC_URLS: Record<SupportedNetwork, string> = {
-  sepolia: "https://rpc.ankr.com/eth_sepolia",
+  sepolia: "https://eth-sepolia.g.alchemy.com/v2/QSKgm3HkNCI9KzcjveL9a",
   hardhat: "http://127.0.0.1:8545",
 };
 
