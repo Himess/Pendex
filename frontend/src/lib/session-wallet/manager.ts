@@ -345,39 +345,15 @@ export class SessionWalletManager {
   }
 
   /**
-   * Ensure FHE keypair exists for decryption
+   * Generate fresh FHE keypair for decryption
+   * NOTE: We don't cache keypairs anymore because the SDK's internal format
+   * is not serializable to JSON. Generating a new keypair is fast and reliable.
    */
   private async ensureFheKeyPair(): Promise<void> {
-    // Check localStorage first (keypair can be cached)
-    const storedKeyPair = localStorage.getItem("fhe_session_keypair");
-
-    if (storedKeyPair) {
-      try {
-        const parsed = JSON.parse(storedKeyPair);
-        this.fheKeyPair = {
-          publicKey: new Uint8Array(Object.values(parsed.publicKey)),
-          privateKey: new Uint8Array(Object.values(parsed.privateKey)),
-        };
-        return;
-      } catch {
-        // Invalid stored keypair, generate new one
-      }
-    }
-
-    // Generate new keypair
+    // Always generate a fresh keypair to ensure correct SDK format
     const fheInstance = getFheInstance();
-    const keyPair = fheInstance.generateKeypair();
-
-    // Store in localStorage (safe - only for decryption authorization)
-    localStorage.setItem(
-      "fhe_session_keypair",
-      JSON.stringify({
-        publicKey: Array.from(keyPair.publicKey),
-        privateKey: Array.from(keyPair.privateKey),
-      })
-    );
-
-    this.fheKeyPair = keyPair;
+    this.fheKeyPair = fheInstance.generateKeypair();
+    console.log("🔑 Generated fresh FHE keypair for decryption");
   }
 
   // ============ TRADING FUNCTIONS ============
@@ -430,7 +406,6 @@ export class SessionWalletManager {
   fullLogout(): void {
     this.sessionData = null;
     this.fheKeyPair = null;
-    localStorage.removeItem("fhe_session_keypair");
     console.log("🔓 Full logout - all session data cleared");
   }
 
