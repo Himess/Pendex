@@ -6,9 +6,11 @@ import { ethers } from "ethers";
 // Contract ABIs (minimal for reading)
 const ORACLE_ABI = [
   "function getAllAssetIds() external view returns (bytes32[])",
-  "function getAsset(bytes32 assetId) external view returns (tuple(string name, string symbol, uint64 basePrice, bool isActive, uint256 totalLongOI, uint256 totalShortOI))",
+  "function getAsset(bytes32 assetId) external view returns (tuple(string name, string symbol, uint64 basePrice, bool isActive))",
   "function getCurrentPrice(bytes32 assetId) public view returns (uint64)",
   "function getAssetId(string symbol) external pure returns (bytes32)",
+  "function getTotalOI(bytes32 assetId) external view returns (uint256)",
+  "function getMarketData(bytes32 assetId) external view returns (uint64 lastPrice, uint256 volume24h, uint256 totalOI, uint8 liquidityScore, string liquidityCategory)",
   "event PriceUpdated(bytes32 indexed assetId, uint64 newPrice)",
 ];
 
@@ -42,8 +44,10 @@ export interface OnChainAsset {
   price: number;
   basePrice: number;
   change24h: number;
-  totalLongOI: number;
-  totalShortOI: number;
+  totalOI: number;           // Total OI only - direction encrypted!
+  volume24h: number;
+  liquidityScore: number;
+  liquidityCategory: string;
   isActive: boolean;
 }
 
@@ -177,6 +181,27 @@ export function useOnChainOracle(preferredNetwork: "zama" | "sepolia" = "zama"):
         const basePriceNumber = Number(assetInfo.basePrice) / 1e6;
         const change24h = basePriceNumber > 0 ? ((priceNumber - basePriceNumber) / basePriceNumber) * 100 : 0;
 
+        // Get market data (totalOI, volume, liquidity score)
+        let totalOI = 0;
+        let volume24h = 0;
+        let liquidityScore = 50;
+        let liquidityCategory = "MEDIUM";
+
+        try {
+          const marketData = await oracleRef.current.getMarketData(assetId);
+          totalOI = Number(marketData.totalOI) / 1e6;
+          volume24h = Number(marketData.volume24h) / 1e6;
+          liquidityScore = Number(marketData.liquidityScore);
+          liquidityCategory = marketData.liquidityCategory;
+        } catch {
+          // Fallback for contracts without getMarketData
+          try {
+            totalOI = Number(await oracleRef.current.getTotalOI(assetId)) / 1e6;
+          } catch {
+            totalOI = priceNumber * 500000;
+          }
+        }
+
         loadedAssets.push({
           id: assetInfo.symbol.toLowerCase(),
           assetId: assetId,
@@ -185,8 +210,10 @@ export function useOnChainOracle(preferredNetwork: "zama" | "sepolia" = "zama"):
           price: priceNumber,
           basePrice: basePriceNumber,
           change24h,
-          totalLongOI: Number(assetInfo.totalLongOI) / 1e6,
-          totalShortOI: Number(assetInfo.totalShortOI) / 1e6,
+          totalOI,
+          volume24h,
+          liquidityScore,
+          liquidityCategory,
           isActive: assetInfo.isActive,
         });
       }

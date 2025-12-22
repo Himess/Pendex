@@ -27,7 +27,9 @@ import { cn } from "@/lib/utils";
 const ORACLE_ADMIN_ABI = [
   "function owner() view returns (address)",
   "function getAllAssetIds() view returns (bytes32[])",
-  "function getAsset(bytes32 assetId) view returns (tuple(string name, string symbol, uint64 basePrice, bool isActive, uint256 totalLongOI, uint256 totalShortOI))",
+  "function getAsset(bytes32 assetId) view returns (tuple(string name, string symbol, uint64 basePrice, bool isActive))",
+  "function getTotalOI(bytes32 assetId) view returns (uint256)",
+  "function getMarketData(bytes32 assetId) view returns (uint64 lastPrice, uint256 volume24h, uint256 totalOI, uint8 liquidityScore, string liquidityCategory)",
   "function updateBasePrice(bytes32 assetId, uint64 newPrice) external",
   "function setAssetActive(bytes32 assetId, bool active) external",
   "function addAssetWithCategory(string name, string symbol, uint64 basePrice, uint8 category) external",
@@ -68,8 +70,10 @@ interface AssetInfo {
   symbol: string;
   basePrice: number;
   isActive: boolean;
-  totalLongOI: number;
-  totalShortOI: number;
+  totalOI: number;           // Total OI only - direction encrypted!
+  volume24h: number;
+  liquidityScore: number;
+  liquidityCategory: string;
 }
 
 interface PoolStats {
@@ -150,14 +154,37 @@ export default function AdminPage() {
 
         for (const assetId of assetIds) {
           const asset = await oracle.getAsset(assetId);
+
+          // Get market data (totalOI, volume, liquidity)
+          let totalOI = 0;
+          let volume24h = 0;
+          let liquidityScore = 50;
+          let liquidityCategory = "MEDIUM";
+
+          try {
+            const marketData = await oracle.getMarketData(assetId);
+            totalOI = Number(marketData.totalOI) / 1e6;
+            volume24h = Number(marketData.volume24h) / 1e6;
+            liquidityScore = Number(marketData.liquidityScore);
+            liquidityCategory = marketData.liquidityCategory;
+          } catch {
+            try {
+              totalOI = Number(await oracle.getTotalOI(assetId)) / 1e6;
+            } catch {
+              totalOI = 0;
+            }
+          }
+
           loadedAssets.push({
             assetId: assetId,
             name: asset.name,
             symbol: asset.symbol,
             basePrice: Number(asset.basePrice) / 1e6,
             isActive: asset.isActive,
-            totalLongOI: Number(asset.totalLongOI) / 1e6,
-            totalShortOI: Number(asset.totalShortOI) / 1e6,
+            totalOI,
+            volume24h,
+            liquidityScore,
+            liquidityCategory,
           });
         }
         setAssets(loadedAssets);
@@ -189,7 +216,7 @@ export default function AdminPage() {
         }
 
         // Check bot status (simulated - based on recent OI changes)
-        const totalOI = loadedAssets.reduce((acc, a) => acc + a.totalLongOI + a.totalShortOI, 0);
+        const totalOI = loadedAssets.reduce((acc, a) => acc + a.totalOI, 0);
         if (totalOI > 0) {
           setBotStatus("running");
           setLastBotActivity(new Date());
@@ -749,8 +776,8 @@ export default function AdminPage() {
                       <th className="pb-3 pr-4">Symbol</th>
                       <th className="pb-3 pr-4">Name</th>
                       <th className="pb-3 pr-4 text-right">Base Price</th>
-                      <th className="pb-3 pr-4 text-right">Long OI</th>
-                      <th className="pb-3 pr-4 text-right">Short OI</th>
+                      <th className="pb-3 pr-4 text-right">Total OI</th>
+                      <th className="pb-3 pr-4 text-right">Liquidity</th>
                       <th className="pb-3 pr-4 text-center">Status</th>
                       <th className="pb-3 text-right">Actions</th>
                     </tr>
@@ -763,11 +790,18 @@ export default function AdminPage() {
                         <td className="py-4 pr-4 text-right font-mono text-text-primary">
                           ${asset.basePrice.toLocaleString()}
                         </td>
-                        <td className="py-4 pr-4 text-right font-mono text-success">
-                          ${asset.totalLongOI.toLocaleString()}
+                        <td className="py-4 pr-4 text-right font-mono text-gold">
+                          ${asset.totalOI.toLocaleString()}
                         </td>
-                        <td className="py-4 pr-4 text-right font-mono text-danger">
-                          ${asset.totalShortOI.toLocaleString()}
+                        <td className="py-4 pr-4 text-right">
+                          <span className={cn(
+                            "px-2 py-1 rounded text-xs font-medium",
+                            asset.liquidityScore >= 70 ? "bg-success/20 text-success" :
+                            asset.liquidityScore >= 50 ? "bg-yellow-500/20 text-yellow-500" :
+                            "bg-danger/20 text-danger"
+                          )}>
+                            {asset.liquidityScore}/100
+                          </span>
                         </td>
                         <td className="py-4 pr-4 text-center">
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
