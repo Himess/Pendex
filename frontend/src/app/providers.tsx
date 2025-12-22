@@ -7,6 +7,7 @@ import { RainbowKitProvider, darkTheme, lightTheme } from "@rainbow-me/rainbowki
 import "@rainbow-me/rainbowkit/styles.css";
 import { useState, createContext, useContext, useEffect } from "react";
 import { type SupportedNetwork } from "@/lib/contracts/config";
+import { OracleProvider } from "@/contexts/OracleContext";
 
 // Theme types and context
 type Theme = "dark" | "light";
@@ -109,7 +110,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <WagmiProvider config={config}>
           <QueryClientProvider client={queryClient}>
             <RainbowKitProvider theme={rainbowTheme}>
-              {mounted ? children : null}
+              <OracleProvider network={selectedNetwork}>
+                {mounted ? children : null}
+              </OracleProvider>
             </RainbowKitProvider>
           </QueryClientProvider>
         </WagmiProvider>
