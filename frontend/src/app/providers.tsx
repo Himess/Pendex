@@ -28,10 +28,11 @@ export function useTheme() {
 }
 
 // Configure chains - both Sepolia (with Zama FHE) and Hardhat (local dev)
+// Using Ankr public RPC - higher rate limits and CORS support
 const config = createConfig({
   chains: [sepolia, hardhat],
   transports: {
-    [sepolia.id]: http("https://eth-sepolia.g.alchemy.com/v2/QSKgm3HkNCI9KzcjveL9a"),
+    [sepolia.id]: http("https://rpc.ankr.com/eth_sepolia"),
     [hardhat.id]: http("http://127.0.0.1:8545"),
   },
 });
