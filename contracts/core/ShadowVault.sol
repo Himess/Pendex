@@ -9,6 +9,7 @@ import { IShadowTypes } from "../interfaces/IShadowTypes.sol";
 import { ShadowOracle } from "./ShadowOracle.sol";
 import { ShadowUSD } from "../tokens/ShadowUSD.sol";
 import { ShadowLiquidityPool } from "./ShadowLiquidityPool.sol";
+import { WalletManager } from "./WalletManager.sol";
 
 /**
  * @title ShadowVault
@@ -33,6 +34,9 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
     /// @notice Liquidity pool
     ShadowLiquidityPool public liquidityPool;
+
+    /// @notice Wallet manager for session wallets
+    WalletManager public walletManager;
 
     /// @notice User balances (encrypted)
     mapping(address => euint64) private _balances;
@@ -466,6 +470,10 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         externalEbool encryptedIsLong,
         bytes calldata inputProof
     ) external nonReentrant returns (uint256 positionId) {
+        // UPDATED: Resolve trader address (supports session wallets)
+        // If sender is a session wallet, get the main wallet address
+        address trader = _resolveTrader();
+
         // Verify asset is tradeable
         require(oracle.isAssetTradeable(assetId), "Asset not tradeable");
 
@@ -496,8 +504,9 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         // This uses the sUSD balance directly - like Hyperliquid!
         // CRITICAL: Grant ACL to ShadowUSD contract BEFORE calling vaultDeposit
         // ShadowUSD needs permission to use collateral in FHE.ge() operations
+        // NOTE: We use 'trader' (main wallet) for the transfer, not msg.sender (session wallet)
         FHE.allow(collateral, address(shadowUsd));
-        bool transferSuccess = shadowUsd.vaultDeposit(msg.sender, collateral);
+        bool transferSuccess = shadowUsd.vaultDeposit(trader, collateral);
         require(transferSuccess, "Insufficient sUSD balance");
 
         // Calculate position size: collateral * leverage
@@ -508,27 +517,28 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
         // Grant permissions BEFORE storing in position struct
         // This is critical for FHE ACL compliance
+        // Grant to trader (main wallet), not msg.sender (could be session wallet)
         FHE.allowThis(collateral);
-        FHE.allow(collateral, msg.sender);
+        FHE.allow(collateral, trader);
 
         FHE.allowThis(size);
-        FHE.allow(size, msg.sender);
+        FHE.allow(size, trader);
 
         FHE.allowThis(entryPrice);
-        FHE.allow(entryPrice, msg.sender);
+        FHE.allow(entryPrice, trader);
 
         FHE.allowThis(isLong);
-        FHE.allow(isLong, msg.sender);
+        FHE.allow(isLong, trader);
 
         FHE.allowThis(leverage);
-        FHE.allow(leverage, msg.sender);
+        FHE.allow(leverage, trader);
 
-        // Create position
+        // Create position - owned by trader (main wallet)
         positionId = nextPositionId++;
 
         _positions[positionId] = Position({
             id: positionId,
-            owner: msg.sender,
+            owner: trader,  // Main wallet owns the position
             assetId: assetId,
             collateral: collateral,
             size: size,
@@ -539,7 +549,7 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
             isOpen: true
         });
 
-        _userPositions[msg.sender].push(positionId);
+        _userPositions[trader].push(positionId);
 
         // Update OI in Oracle (encrypted direction, public totalOI)
         // Use position size for OI tracking
@@ -551,7 +561,7 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
             uint256(MIN_COLLATERAL) * uint256(MAX_LEVERAGE)  // approximate public amount
         );
 
-        emit PositionOpened(positionId, msg.sender, assetId, block.timestamp);
+        emit PositionOpened(positionId, trader, assetId, block.timestamp);
 
         return positionId;
     }
@@ -565,7 +575,8 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         Position storage position = _positions[positionId];
 
         require(position.isOpen, "Position not open");
-        require(position.owner == msg.sender, "Not position owner");
+        // UPDATED: Allow session wallet to close position on behalf of main wallet
+        require(_canTradeFor(msg.sender, position.owner), "Not authorized");
 
         // Get current price
         euint64 currentPrice = oracle.getEncryptedPrice(position.assetId);
@@ -576,11 +587,12 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         // Calculate final amount: collateral + pnl (can be negative)
         euint64 finalAmount = FHE.add(position.collateral, pnl);
 
-        // UPDATED: Transfer sUSD directly back to user's wallet
+        // UPDATED: Transfer sUSD directly back to main wallet (position owner)
         // This returns the collateral + P&L to user's sUSD balance
+        // NOTE: We use position.owner (main wallet) not msg.sender (could be session wallet)
         // CRITICAL: Grant ACL to ShadowUSD contract BEFORE calling vaultWithdraw
         FHE.allow(finalAmount, address(shadowUsd));
-        shadowUsd.vaultWithdraw(msg.sender, finalAmount);
+        shadowUsd.vaultWithdraw(position.owner, finalAmount);
 
         // Decrease OI in Oracle (encrypted direction, public totalOI)
         oracle.updateOpenInterest(
@@ -2031,5 +2043,64 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
     function setTreasury(address newTreasury) external onlyOwner {
         require(newTreasury != address(0), "Invalid treasury");
         treasury = newTreasury;
+    }
+
+    // ============================================
+    // SESSION WALLET SUPPORT
+    // ============================================
+
+    /**
+     * @notice Set wallet manager address for session wallet support
+     * @param newWalletManager Address of the WalletManager contract
+     */
+    function setWalletManager(address newWalletManager) external onlyOwner {
+        walletManager = WalletManager(newWalletManager);
+    }
+
+    /**
+     * @notice Resolve trader address - returns main wallet if sender is session wallet
+     * @dev If sender is a valid session wallet, returns the main wallet address
+     *      Otherwise returns the sender address
+     * @return trader The resolved trader address (main wallet)
+     */
+    function _resolveTrader() internal view returns (address trader) {
+        // If no wallet manager set, just use sender
+        if (address(walletManager) == address(0)) {
+            return msg.sender;
+        }
+
+        // Check if sender is a valid session wallet
+        if (walletManager.isValidSession(msg.sender)) {
+            // Return the main wallet address
+            trader = walletManager.getMainWallet(msg.sender);
+            require(trader != address(0), "Invalid session wallet");
+            return trader;
+        }
+
+        // Default to sender
+        return msg.sender;
+    }
+
+    /**
+     * @notice Check if an address can trade on behalf of a trader
+     * @param sender The address trying to trade
+     * @param trader The trader address (position owner)
+     * @return True if sender can trade for trader
+     */
+    function _canTradeFor(address sender, address trader) internal view returns (bool) {
+        // Direct match
+        if (sender == trader) {
+            return true;
+        }
+
+        // Check session wallet
+        if (address(walletManager) != address(0)) {
+            if (walletManager.isValidSession(sender)) {
+                address mainWallet = walletManager.getMainWallet(sender);
+                return mainWallet == trader;
+            }
+        }
+
+        return false;
     }
 }
