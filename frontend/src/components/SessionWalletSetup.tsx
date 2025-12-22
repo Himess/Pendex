@@ -194,8 +194,8 @@ export function SessionWalletSetup({ onComplete, className, compact = false }: S
 
       <div className="space-y-3 mb-6">
         <div className="flex items-start gap-3 p-3 bg-background rounded-lg">
-          <div className="w-6 h-6 rounded-full bg-gold/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <span className="text-xs font-bold text-gold">1</span>
+          <div className="w-8 h-8 rounded-full bg-gold/20 border-2 border-gold/70 shadow-[0_0_8px_rgba(0,212,170,0.3)] flex items-center justify-center flex-shrink-0">
+            <span className="text-sm font-bold text-gold">1</span>
           </div>
           <div>
             <p className="text-sm font-medium text-text-primary">Create Session Key</p>
@@ -204,8 +204,8 @@ export function SessionWalletSetup({ onComplete, className, compact = false }: S
         </div>
 
         <div className="flex items-start gap-3 p-3 bg-background rounded-lg">
-          <div className="w-6 h-6 rounded-full bg-gold/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <span className="text-xs font-bold text-gold">2</span>
+          <div className="w-8 h-8 rounded-full bg-gold/20 border-2 border-gold/70 shadow-[0_0_8px_rgba(0,212,170,0.3)] flex items-center justify-center flex-shrink-0">
+            <span className="text-sm font-bold text-gold">2</span>
           </div>
           <div>
             <p className="text-sm font-medium text-text-primary">Encrypt & Store On-Chain</p>
@@ -214,8 +214,8 @@ export function SessionWalletSetup({ onComplete, className, compact = false }: S
         </div>
 
         <div className="flex items-start gap-3 p-3 bg-background rounded-lg">
-          <div className="w-6 h-6 rounded-full bg-gold/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <span className="text-xs font-bold text-gold">3</span>
+          <div className="w-8 h-8 rounded-full bg-gold/20 border-2 border-gold/70 shadow-[0_0_8px_rgba(0,212,170,0.3)] flex items-center justify-center flex-shrink-0">
+            <span className="text-sm font-bold text-gold">3</span>
           </div>
           <div>
             <p className="text-sm font-medium text-text-primary">Fund for Gas</p>
@@ -227,13 +227,13 @@ export function SessionWalletSetup({ onComplete, className, compact = false }: S
       {/* Fund amount selector */}
       <div className="mb-4">
         <label className="text-sm text-text-muted mb-2 block">Gas Funding Amount</label>
-        <div className="flex gap-2">
+        <div className="flex gap-2.5">
           {["0.005", "0.01", "0.02", "0.05"].map((amount) => (
             <button
               key={amount}
               onClick={() => setFundAmount(amount)}
               className={cn(
-                "flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors",
+                "flex-1 min-w-[72px] py-3.5 px-3 rounded-lg text-sm font-medium transition-colors",
                 fundAmount === amount
                   ? "bg-gold/20 text-gold border border-gold/30"
                   : "bg-card-hover text-text-secondary hover:bg-card-hover/80"
@@ -256,18 +256,18 @@ export function SessionWalletSetup({ onComplete, className, compact = false }: S
         onClick={handleSetup}
         disabled={isLoading}
         className={cn(
-          "w-full py-3 px-4 rounded-lg font-bold transition-all flex items-center justify-center gap-2",
-          isLoading ? "bg-gray-600 cursor-not-allowed" : "bg-gold hover:bg-gold/90 text-black"
+          "w-full py-4 px-6 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(0,212,170,0.4)]",
+          isLoading ? "bg-gray-600 cursor-not-allowed shadow-none" : "bg-gold hover:bg-gold/90 text-black hover:shadow-[0_6px_20px_rgba(0,212,170,0.5)]"
         )}
       >
         {isLoading ? (
           <>
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Loader2 className="w-5 h-5 animate-spin" />
             Setting up...
           </>
         ) : (
           <>
-            <Shield className="w-4 h-4" />
+            <Shield className="w-5 h-5" />
             Setup Session Wallet
           </>
         )}
