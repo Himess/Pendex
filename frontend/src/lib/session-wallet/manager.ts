@@ -288,9 +288,15 @@ export class SessionWalletManager {
 
       // 6. Sign with main wallet (MetaMask popup for authorization)
       console.log("📝 Requesting signature for session key decryption...");
+
+      // ethers.js v6 requires removing EIP712Domain from types (handles it internally)
+      // and only passing the message types
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { EIP712Domain, ...typesWithoutDomain } = eip712.types;
+
       const signature = await mainWalletSigner.signTypedData(
         eip712.domain,
-        eip712.types,
+        typesWithoutDomain as Record<string, ethers.TypedDataField[]>,
         eip712.message
       );
 
