@@ -281,12 +281,12 @@ contract ShadowMarketMaker is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard 
         uint64 tradeSize = _estimateTradeSize();
         bool tradeSide = _estimateTradeSide();
 
-        // Update Oracle Open Interest
-        if (tradeSide) {
-            oracle.updateOpenInterest(assetId, tradeSize, 0, true);
-        } else {
-            oracle.updateOpenInterest(assetId, 0, tradeSize, true);
-        }
+        // Update Oracle Open Interest (using new encrypted interface)
+        euint64 encryptedTradeSize = FHE.asEuint64(tradeSize);
+        ebool encryptedIsLong = FHE.asEbool(tradeSide);
+        FHE.allowThis(encryptedTradeSize);
+        FHE.allowThis(encryptedIsLong);
+        oracle.updateOpenInterest(assetId, encryptedTradeSize, encryptedIsLong, true, uint256(tradeSize));
 
         // Get new price after OI update
         uint64 newPrice = oracle.getCurrentPrice(assetId);

@@ -41,8 +41,8 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   SOCIAL: <UsersIcon className="w-5 h-5" />,
 };
 
-// Sort types
-type SortField = "name" | "price" | "change" | "marketCap" | "volume" | "oi" | "funding" | "longRatio";
+// Sort types - longRatio removed (direction is encrypted!)
+type SortField = "name" | "price" | "change" | "marketCap" | "volume" | "oi" | "funding" | "liquidity";
 type SortDirection = "asc" | "desc" | null;
 
 // Items per page
@@ -57,11 +57,21 @@ function generateMarketData(asset: Asset) {
   };
 
   const baseVolume = asset.price * 1000000 * (0.5 + random(1));
+  const baseLiquidity = asset.price * 5000000 * (0.3 + random(4) * 0.7);
+
+  // Calculate Liquidity Score (0-100)
+  const lpScore = Math.min(40, (baseLiquidity / 10000000) * 40);
+  const volScore = Math.min(30, (baseVolume / 5000000) * 30);
+  const oiScore = Math.min(20, ((baseVolume * 0.4) / 20000000) * 20);
+  const activityScore = Math.min(10, (random(8) > 0.3 ? 10 : 5));
+  const liquidityScore = Math.round(lpScore + volScore + oiScore + activityScore);
+
   return {
     volume24h: baseVolume,
-    openInterest: baseVolume * 0.4,
+    totalOI: baseVolume * 0.4,  // Total OI only - direction encrypted!
     fundingRate: (random(2) - 0.5) * 0.02,
-    longRatio: 45 + random(3) * 20,
+    liquidityScore: Math.min(100, liquidityScore),
+    liquidityCategory: liquidityScore >= 70 ? "HIGH" : liquidityScore >= 50 ? "MEDIUM" : "LOW",
   };
 }
 
@@ -124,9 +134,10 @@ function SortableHeader({
 interface AssetWithLiveData extends Asset {
   livePrice?: number;
   liveChange24h?: number;
-  totalLongOI?: number;
-  totalShortOI?: number;
-  longRatio?: number;
+  totalOI?: number;           // Total OI only - direction encrypted!
+  volume24h?: number;
+  liquidityScore?: number;
+  liquidityCategory?: string;
   isLive?: boolean;
 }
 
@@ -160,9 +171,10 @@ export default function MarketsPage() {
           ...asset,
           livePrice: liveData.price,
           liveChange24h: liveData.change24h,
-          totalLongOI: liveData.totalLongOI,
-          totalShortOI: liveData.totalShortOI,
-          longRatio: liveData.longRatio,
+          totalOI: liveData.totalOI,
+          volume24h: liveData.volume24h,
+          liquidityScore: liveData.liquidityScore,
+          liquidityCategory: liveData.liquidityCategory,
           isLive: true,
         };
       }
@@ -266,13 +278,13 @@ export default function MarketsPage() {
             comparison = dataA.volume24h - dataB.volume24h;
             break;
           case "oi":
-            comparison = dataA.openInterest - dataB.openInterest;
+            comparison = dataA.totalOI - dataB.totalOI;
             break;
           case "funding":
             comparison = dataA.fundingRate - dataB.fundingRate;
             break;
-          case "longRatio":
-            comparison = dataA.longRatio - dataB.longRatio;
+          case "liquidity":
+            comparison = (dataA.liquidityScore ?? 0) - (dataB.liquidityScore ?? 0);
             break;
         }
 
@@ -520,8 +532,8 @@ export default function MarketsPage() {
                     className="min-w-[80px] hidden xl:table-cell"
                   />
                   <SortableHeader
-                    field="longRatio"
-                    label="L/S"
+                    field="liquidity"
+                    label="Liquidity"
                     currentSort={sortField}
                     currentDirection={sortDirection}
                     onSort={handleSort}
@@ -626,11 +638,11 @@ export default function MarketsPage() {
                         </span>
                       </td>
 
-                      {/* Open Interest - use live data if available */}
+                      {/* Total Open Interest - direction is encrypted! */}
                       <td className="px-3 py-3 hidden xl:table-cell">
                         <span className="flex items-center gap-1 text-text-primary text-sm">
-                          {formatCompactUSD(asset.isLive ? (asset.totalLongOI! + asset.totalShortOI!) : marketData.openInterest)}
-                          <Lock className="w-3 h-3 text-gold" />
+                          {formatCompactUSD(asset.isLive ? asset.totalOI! : marketData.totalOI)}
+                          <span title="Direction encrypted"><Lock className="w-3 h-3 text-gold" /></span>
                         </span>
                       </td>
 
@@ -647,24 +659,23 @@ export default function MarketsPage() {
                         </span>
                       </td>
 
-                      {/* Long/Short - use live data if available */}
+                      {/* Liquidity Score - replaces Long/Short (direction is now encrypted) */}
                       <td className="px-3 py-3 hidden md:table-cell">
                         {(() => {
-                          const ratio = asset.longRatio ?? marketData.longRatio;
+                          const score = asset.liquidityScore ?? marketData.liquidityScore;
+                          const category = asset.liquidityCategory ?? marketData.liquidityCategory;
+                          const color = score >= 70 ? "bg-success" : score >= 50 ? "bg-yellow-500" : score >= 30 ? "bg-orange-500" : "bg-danger";
+                          const textColor = score >= 70 ? "text-success" : score >= 50 ? "text-yellow-500" : score >= 30 ? "text-orange-500" : "text-danger";
                           return (
                             <div className="flex items-center gap-2">
-                              <div className="w-16 h-1.5 bg-background rounded-full overflow-hidden flex">
+                              <div className="w-16 h-1.5 bg-background rounded-full overflow-hidden">
                                 <div
-                                  className="h-full bg-success"
-                                  style={{ width: `${ratio}%` }}
-                                />
-                                <div
-                                  className="h-full bg-danger"
-                                  style={{ width: `${100 - ratio}%` }}
+                                  className={cn("h-full", color)}
+                                  style={{ width: `${score}%` }}
                                 />
                               </div>
-                              <span className="text-xs text-text-muted">
-                                {ratio.toFixed(0)}%
+                              <span className={cn("text-xs font-medium", textColor)}>
+                                {score}
                               </span>
                             </div>
                           );

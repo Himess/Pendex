@@ -98,6 +98,30 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
     /// @notice Total distributed to LPs
     uint256 public totalDistributedToLPs;
 
+    // ============================================
+    // GUARANTEED SLIPPAGE BANDS
+    // ============================================
+
+    /// @notice Slippage band definition
+    struct SlippageBand {
+        uint256 maxOrderSize;    // Max order size for this band
+        uint256 maxSlippageBps;  // Max slippage in basis points (100 = 1%)
+    }
+
+    /// @notice Slippage bands array
+    SlippageBand[] public slippageBands;
+
+    /// @notice LP compensation pool for slippage guarantees
+    uint256 public lpCompensationPool;
+
+    /// @notice Event for slippage compensation
+    event SlippageCompensation(
+        address indexed trader,
+        uint256 compensationAmount,
+        uint256 actualSlippageBps,
+        uint256 guaranteedSlippageBps
+    );
+
     /// @notice Total distributed to protocol
     uint256 public totalDistributedToProtocol;
 
@@ -219,6 +243,110 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         FHE.allowThis(ERROR_INVALID_LEVERAGE);
         FHE.allowThis(ERROR_POSITION_NOT_FOUND);
         FHE.allowThis(ERROR_UNAUTHORIZED);
+
+        // Initialize slippage bands
+        _initializeSlippageBands();
+    }
+
+    // ============================================
+    // SLIPPAGE BANDS FUNCTIONS
+    // ============================================
+
+    /**
+     * @notice Initialize default slippage bands
+     * @dev Called once in constructor
+     */
+    function _initializeSlippageBands() internal {
+        slippageBands.push(SlippageBand(1_000e6, 10));       // <$1K → max 0.1%
+        slippageBands.push(SlippageBand(10_000e6, 30));      // <$10K → max 0.3%
+        slippageBands.push(SlippageBand(100_000e6, 50));     // <$100K → max 0.5%
+        slippageBands.push(SlippageBand(1_000_000e6, 100));  // <$1M → max 1.0%
+    }
+
+    /**
+     * @notice Get maximum slippage for an order size
+     * @param orderSize Order size in USD (6 decimals)
+     * @return maxSlippageBps Maximum slippage in basis points (100 = 1%)
+     */
+    function getMaxSlippage(uint256 orderSize) public view returns (uint256 maxSlippageBps) {
+        for (uint256 i = 0; i < slippageBands.length; i++) {
+            if (orderSize <= slippageBands[i].maxOrderSize) {
+                return slippageBands[i].maxSlippageBps;
+            }
+        }
+        // For orders > $1M: return 2x the last band (best effort)
+        return slippageBands[slippageBands.length - 1].maxSlippageBps * 2;
+    }
+
+    /**
+     * @notice Get all slippage bands
+     * @return bands Array of slippage bands
+     */
+    function getSlippageBands() external view returns (SlippageBand[] memory) {
+        return slippageBands;
+    }
+
+    /**
+     * @notice Compensate trader for excess slippage from LP pool
+     * @param trader Trader address to compensate
+     * @param orderSize Order size in USD
+     * @param actualSlippageBps Actual slippage experienced
+     * @param guaranteedSlippageBps Guaranteed maximum slippage
+     */
+    function _compensateSlippage(
+        address trader,
+        uint256 orderSize,
+        uint256 actualSlippageBps,
+        uint256 guaranteedSlippageBps
+    ) internal {
+        if (actualSlippageBps <= guaranteedSlippageBps) {
+            return; // Slippage within guarantee, no compensation
+        }
+
+        // Calculate excess slippage
+        uint256 excessSlippageBps = actualSlippageBps - guaranteedSlippageBps;
+        uint256 compensationAmount = (orderSize * excessSlippageBps) / 10000;
+
+        // Check LP pool has enough funds
+        if (lpCompensationPool < compensationAmount) {
+            // Partial compensation if pool insufficient
+            compensationAmount = lpCompensationPool;
+        }
+
+        if (compensationAmount > 0) {
+            lpCompensationPool -= compensationAmount;
+
+            // Transfer compensation to trader via sUSD
+            euint64 compAmount = FHE.asEuint64(uint64(compensationAmount));
+            FHE.allow(compAmount, address(shadowUsd));
+            shadowUsd.vaultWithdraw(trader, compAmount);
+
+            emit SlippageCompensation(trader, compensationAmount, actualSlippageBps, guaranteedSlippageBps);
+        }
+    }
+
+    /**
+     * @notice Add funds to LP compensation pool
+     * @param amount Amount to add
+     */
+    function addToCompensationPool(uint256 amount) external onlyOwner {
+        lpCompensationPool += amount;
+    }
+
+    /**
+     * @notice Update slippage band (admin only)
+     * @param index Band index to update
+     * @param maxOrderSize New max order size
+     * @param maxSlippageBps New max slippage in basis points
+     */
+    function updateSlippageBand(
+        uint256 index,
+        uint256 maxOrderSize,
+        uint256 maxSlippageBps
+    ) external onlyOwner {
+        require(index < slippageBands.length, "Invalid index");
+        require(maxSlippageBps <= 1000, "Max slippage too high"); // Max 10%
+        slippageBands[index] = SlippageBand(maxOrderSize, maxSlippageBps);
     }
 
     // ============================================
@@ -413,6 +541,16 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
         _userPositions[msg.sender].push(positionId);
 
+        // Update OI in Oracle (encrypted direction, public totalOI)
+        // Use position size for OI tracking
+        oracle.updateOpenInterest(
+            assetId,
+            size,           // encrypted amount
+            isLong,         // encrypted direction
+            true,           // isIncrease
+            uint256(MIN_COLLATERAL) * uint256(MAX_LEVERAGE)  // approximate public amount
+        );
+
         emit PositionOpened(positionId, msg.sender, assetId, block.timestamp);
 
         return positionId;
@@ -443,6 +581,15 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         // CRITICAL: Grant ACL to ShadowUSD contract BEFORE calling vaultWithdraw
         FHE.allow(finalAmount, address(shadowUsd));
         shadowUsd.vaultWithdraw(msg.sender, finalAmount);
+
+        // Decrease OI in Oracle (encrypted direction, public totalOI)
+        oracle.updateOpenInterest(
+            position.assetId,
+            position.size,     // encrypted amount
+            position.isLong,   // encrypted direction
+            false,             // isIncrease = false (decreasing)
+            uint256(MIN_COLLATERAL) * uint256(MAX_LEVERAGE)  // approximate public amount
+        );
 
         // Mark position as closed
         position.isOpen = false;

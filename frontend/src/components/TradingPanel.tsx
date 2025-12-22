@@ -822,6 +822,15 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
                 <span className="text-text-muted">Fee</span>
                 <span className="text-text-secondary font-mono">{collateralNum > 0 ? `$${fees.toFixed(2)}` : "-"}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-text-muted">Max Slip</span>
+                <span className="text-gold font-mono">
+                  {positionSize <= 1000 ? "0.1%" :
+                   positionSize <= 10000 ? "0.3%" :
+                   positionSize <= 100000 ? "0.5%" :
+                   positionSize <= 1000000 ? "1.0%" : "2.0%"}
+                </span>
+              </div>
               {orderType === "limit" && limitPrice && (
                 <div className="flex justify-between">
                   <span className="text-text-muted">Limit</span>
@@ -830,6 +839,49 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
               )}
             </div>
           </div>
+
+          {/* Slippage Bands Info - Compact */}
+          <details className="group">
+            <summary className="flex items-center justify-between py-1 text-[10px] text-text-secondary cursor-pointer hover:text-text-primary">
+              <span className="font-medium">Slippage Guarantee</span>
+              <ChevronDown className="w-3 h-3 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="mt-1 bg-background rounded p-2 text-[9px]">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-text-muted">
+                    <th className="text-left font-medium pb-1">Order Size</th>
+                    <th className="text-right font-medium pb-1">Max Slippage</th>
+                  </tr>
+                </thead>
+                <tbody className="text-text-secondary">
+                  <tr className={positionSize <= 1000 && positionSize > 0 ? "text-gold" : ""}>
+                    <td>≤ $1,000</td>
+                    <td className="text-right">≤ 0.1%</td>
+                  </tr>
+                  <tr className={positionSize > 1000 && positionSize <= 10000 ? "text-gold" : ""}>
+                    <td>≤ $10,000</td>
+                    <td className="text-right">≤ 0.3%</td>
+                  </tr>
+                  <tr className={positionSize > 10000 && positionSize <= 100000 ? "text-gold" : ""}>
+                    <td>≤ $100,000</td>
+                    <td className="text-right">≤ 0.5%</td>
+                  </tr>
+                  <tr className={positionSize > 100000 && positionSize <= 1000000 ? "text-gold" : ""}>
+                    <td>≤ $1,000,000</td>
+                    <td className="text-right">≤ 1.0%</td>
+                  </tr>
+                  <tr className={positionSize > 1000000 ? "text-gold" : ""}>
+                    <td>&gt; $1,000,000</td>
+                    <td className="text-right text-text-muted">Best effort</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="mt-1.5 text-[8px] text-text-muted">
+                LP pool compensates excess slippage
+              </p>
+            </div>
+          </details>
 
           {/* Place Order Button */}
           <button

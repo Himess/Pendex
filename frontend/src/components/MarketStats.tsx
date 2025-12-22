@@ -33,8 +33,8 @@ export function MarketStats({ selectedAsset, onSelectAsset }: MarketStatsProps) 
 
   const price = oracleAsset?.price ?? selectedAsset?.price ?? 0;
   const change24h = oracleAsset?.change24h ?? selectedAsset?.change24h ?? 0;
-  const totalLongOI = oracleAsset?.totalLongOI ?? 0;
-  const totalShortOI = oracleAsset?.totalShortOI ?? 0;
+  // Total OI only - direction is encrypted on-chain!
+  const totalOI = oracleAsset?.totalOI ?? 0;
 
   // Stable simulated values based on asset (no random jumps)
   const stableValues = useMemo(() => {
@@ -55,7 +55,7 @@ export function MarketStats({ selectedAsset, onSelectAsset }: MarketStatsProps) 
   }, [selectedAsset?.id, price]);
 
   const { indexPrice, volume24h, fundingRate, nextFunding } = stableValues;
-  const openInterest = totalLongOI + totalShortOI || price * 500000;
+  const openInterest = totalOI || price * 500000;
 
   if (!selectedAsset) {
     return null;

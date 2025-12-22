@@ -116,13 +116,22 @@ contract ShadowOracle is ZamaEthereumConfig, Ownable2Step, IShadowTypes {
         require(assets[assetId].basePrice == 0, "Asset already exists");
         require(basePrice > 0, "Invalid base price");
 
+        // Initialize encrypted OI values to zero
+        euint64 zeroOI = FHE.asEuint64(0);
+        FHE.allowThis(zeroOI);
+
         assets[assetId] = Asset({
             name: name,
             symbol: symbol,
             basePrice: basePrice,
             isActive: true,
-            totalLongOI: 0,
-            totalShortOI: 0
+            encryptedLongOI: zeroOI,
+            encryptedShortOI: zeroOI,
+            totalOI: 0,
+            lastPrice: basePrice,
+            volume24h: 0,
+            lastTradeTime: block.timestamp,
+            lpPoolSize: 0
         });
 
         assetIds.push(assetId);
@@ -156,46 +165,85 @@ contract ShadowOracle is ZamaEthereumConfig, Ownable2Step, IShadowTypes {
         assets[assetId].isActive = isActive;
     }
 
+    /// @notice Delayed price modifier (updated by admin periodically)
+    /// @dev This is updated via delayed disclosure - prevents real-time manipulation
+    mapping(bytes32 => int8) public delayedPriceModifier;
+
+    /// @notice Last modifier update timestamp per asset
+    mapping(bytes32 => uint256) public lastModifierUpdate;
+
+    /// @notice Modifier update delay (2 hours for delayed disclosure)
+    uint256 public constant MODIFIER_UPDATE_DELAY = 2 hours;
+
     /**
-     * @notice Get current price for an asset (includes demand modifier)
+     * @notice Get current price for an asset (uses delayed modifier)
      * @param assetId Asset identifier
      * @return Current price with 6 decimals
-     * @dev Price formula: basePrice * (1 + demandModifier%)
-     *      demandModifier = (longOI - shortOI) / OI_IMBALANCE_THRESHOLD, capped at ±20%
-     *      Example: $200k more longs = +2% price, capped at 20%
+     * @dev Price formula: basePrice * (1 + delayedModifier%)
+     *      The modifier is updated periodically via delayed disclosure
+     *      This prevents real-time manipulation based on OI direction
      */
     function getCurrentPrice(bytes32 assetId) public view returns (uint64) {
         Asset storage asset = assets[assetId];
         require(asset.basePrice > 0, "Asset does not exist");
 
-        // Calculate demand modifier based on OI imbalance
-        // Each OI_IMBALANCE_THRESHOLD of imbalance = 1% price change
-        int256 oiDiff = int256(asset.totalLongOI) - int256(asset.totalShortOI);
-
-        // modifierPercent = oiDiff / OI_IMBALANCE_THRESHOLD (in whole percent)
-        int256 modifierPercent;
-        if (OI_IMBALANCE_THRESHOLD > 0) {
-            modifierPercent = (oiDiff * 100) / int256(OI_IMBALANCE_THRESHOLD);
-        }
-
-        // Cap at ±MAX_DEMAND_MODIFIER (20%)
-        if (modifierPercent > int256(uint256(MAX_DEMAND_MODIFIER))) {
-            modifierPercent = int256(uint256(MAX_DEMAND_MODIFIER));
-        } else if (modifierPercent < -int256(uint256(MAX_DEMAND_MODIFIER))) {
-            modifierPercent = -int256(uint256(MAX_DEMAND_MODIFIER));
-        }
+        // Use delayed price modifier (updated periodically, not real-time)
+        int8 priceModifier = delayedPriceModifier[assetId];
 
         // Apply modifier to base price
-        // adjustedPrice = basePrice * (100 + modifierPercent) / 100
         uint64 adjustedPrice;
-        if (modifierPercent >= 0) {
-            adjustedPrice = uint64((uint256(asset.basePrice) * (100 + uint256(modifierPercent))) / 100);
+        if (priceModifier >= 0) {
+            adjustedPrice = uint64((uint256(asset.basePrice) * (100 + uint256(int256(priceModifier)))) / 100);
         } else {
-            uint256 absModifier = uint256(-modifierPercent);
+            uint256 absModifier = uint256(int256(-priceModifier));
             adjustedPrice = uint64((uint256(asset.basePrice) * (100 - absModifier)) / 100);
         }
 
         return adjustedPrice;
+    }
+
+    /**
+     * @notice Update delayed price modifier (admin function)
+     * @dev Called periodically (e.g., every 2 hours) based on decrypted OI
+     *      This implements "delayed disclosure" - past modifier revealed, current hidden
+     * @param assetId Asset identifier
+     * @param newModifier New price modifier (-20 to +20)
+     */
+    function updateDelayedPriceModifier(
+        bytes32 assetId,
+        int8 newModifier
+    ) external onlyOwner {
+        require(newModifier >= -20 && newModifier <= 20, "Modifier out of range");
+        require(
+            block.timestamp >= lastModifierUpdate[assetId] + MODIFIER_UPDATE_DELAY,
+            "Update too frequent"
+        );
+
+        delayedPriceModifier[assetId] = newModifier;
+        lastModifierUpdate[assetId] = block.timestamp;
+
+        emit PriceModifierUpdated(assetId, newModifier);
+    }
+
+    /// @notice Event for price modifier updates
+    event PriceModifierUpdated(bytes32 indexed assetId, int8 newModifier);
+
+    /**
+     * @notice Get base price (without any modifier)
+     * @param assetId Asset identifier
+     * @return Base price with 6 decimals
+     */
+    function getBasePrice(bytes32 assetId) external view returns (uint64) {
+        return assets[assetId].basePrice;
+    }
+
+    /**
+     * @notice Get last trade price
+     * @param assetId Asset identifier
+     * @return Last execution price
+     */
+    function getLastPrice(bytes32 assetId) external view returns (uint64) {
+        return assets[assetId].lastPrice;
     }
 
     /**
@@ -215,13 +263,74 @@ contract ShadowOracle is ZamaEthereumConfig, Ownable2Step, IShadowTypes {
     }
 
     /**
-     * @notice Update open interest (called by vault or market maker)
+     * @notice Update open interest with ENCRYPTED values
+     * @dev Direction is now hidden - only totalOI (combined) is public
      * @param assetId Asset identifier
-     * @param longDelta Change in long OI
-     * @param shortDelta Change in short OI
+     * @param encryptedAmount Encrypted OI amount
+     * @param isLong Encrypted direction (hidden from observers)
      * @param isIncrease Whether to increase or decrease
+     * @param publicAmount The plaintext amount for totalOI tracking
      */
     function updateOpenInterest(
+        bytes32 assetId,
+        euint64 encryptedAmount,
+        ebool isLong,
+        bool isIncrease,
+        uint256 publicAmount
+    ) external onlyAuthorized {
+        Asset storage asset = assets[assetId];
+
+        if (isIncrease) {
+            // Update encrypted Long or Short OI based on encrypted direction
+            asset.encryptedLongOI = FHE.select(
+                isLong,
+                FHE.add(asset.encryptedLongOI, encryptedAmount),
+                asset.encryptedLongOI
+            );
+            asset.encryptedShortOI = FHE.select(
+                isLong,
+                asset.encryptedShortOI,
+                FHE.add(asset.encryptedShortOI, encryptedAmount)
+            );
+
+            // Update public totalOI (directionless)
+            asset.totalOI += publicAmount;
+        } else {
+            // Decrease encrypted OI
+            asset.encryptedLongOI = FHE.select(
+                isLong,
+                FHE.sub(asset.encryptedLongOI, encryptedAmount),
+                asset.encryptedLongOI
+            );
+            asset.encryptedShortOI = FHE.select(
+                isLong,
+                asset.encryptedShortOI,
+                FHE.sub(asset.encryptedShortOI, encryptedAmount)
+            );
+
+            // Update public totalOI
+            if (asset.totalOI >= publicAmount) {
+                asset.totalOI -= publicAmount;
+            } else {
+                asset.totalOI = 0;
+            }
+        }
+
+        // Grant permissions for updated values
+        FHE.allowThis(asset.encryptedLongOI);
+        FHE.allowThis(asset.encryptedShortOI);
+
+        emit OIUpdated(assetId, asset.totalOI, isIncrease);
+    }
+
+    /// @notice Event for OI updates (only shows directionless total)
+    event OIUpdated(bytes32 indexed assetId, uint256 totalOI, bool isIncrease);
+
+    /**
+     * @notice Legacy updateOpenInterest for backwards compatibility
+     * @dev DEPRECATED - Use the new encrypted version
+     */
+    function updateOpenInterestLegacy(
         bytes32 assetId,
         uint256 longDelta,
         uint256 shortDelta,
@@ -229,13 +338,23 @@ contract ShadowOracle is ZamaEthereumConfig, Ownable2Step, IShadowTypes {
     ) external onlyAuthorized {
         Asset storage asset = assets[assetId];
 
+        // Convert to encrypted and call new function internally
+        euint64 encLongDelta = FHE.asEuint64(uint64(longDelta / 1e12)); // Scale down for euint64
+        euint64 encShortDelta = FHE.asEuint64(uint64(shortDelta / 1e12));
+
         if (isIncrease) {
-            asset.totalLongOI += longDelta;
-            asset.totalShortOI += shortDelta;
+            asset.encryptedLongOI = FHE.add(asset.encryptedLongOI, encLongDelta);
+            asset.encryptedShortOI = FHE.add(asset.encryptedShortOI, encShortDelta);
+            asset.totalOI += longDelta + shortDelta;
         } else {
-            asset.totalLongOI -= longDelta;
-            asset.totalShortOI -= shortDelta;
+            asset.encryptedLongOI = FHE.sub(asset.encryptedLongOI, encLongDelta);
+            asset.encryptedShortOI = FHE.sub(asset.encryptedShortOI, encShortDelta);
+            uint256 delta = longDelta + shortDelta;
+            asset.totalOI = asset.totalOI >= delta ? asset.totalOI - delta : 0;
         }
+
+        FHE.allowThis(asset.encryptedLongOI);
+        FHE.allowThis(asset.encryptedShortOI);
     }
 
     /**
@@ -283,6 +402,160 @@ contract ShadowOracle is ZamaEthereumConfig, Ownable2Step, IShadowTypes {
      */
     function isAssetTradeable(bytes32 assetId) external view returns (bool) {
         return assets[assetId].basePrice > 0 && assets[assetId].isActive;
+    }
+
+    // ============================================
+    // PUBLIC OI GETTER (Directionless)
+    // ============================================
+
+    /**
+     * @notice Get total OI (Long + Short combined, no direction info)
+     * @param assetId Asset identifier
+     * @return Total open interest (directionless)
+     */
+    function getTotalOI(bytes32 assetId) external view returns (uint256) {
+        return assets[assetId].totalOI;
+    }
+
+    // ============================================
+    // LIQUIDITY SCORE SYSTEM
+    // ============================================
+
+    /// @notice Liquidity score benchmarks
+    uint256 public constant LP_BENCHMARK = 10_000_000 * 1e6;      // $10M LP = max score
+    uint256 public constant VOLUME_BENCHMARK = 5_000_000 * 1e6;   // $5M daily volume = max score
+    uint256 public constant OI_BENCHMARK = 20_000_000 * 1e6;      // $20M OI = max score
+
+    /// @notice Score weights (total = 100)
+    uint8 public constant LP_WEIGHT = 40;
+    uint8 public constant VOLUME_WEIGHT = 30;
+    uint8 public constant OI_WEIGHT = 20;
+    uint8 public constant ACTIVITY_WEIGHT = 10;
+
+    /**
+     * @notice Calculate liquidity score for an asset
+     * @param assetId Asset identifier
+     * @return score 0-100 score
+     */
+    function calculateLiquidityScore(bytes32 assetId) public view returns (uint8) {
+        Asset storage asset = assets[assetId];
+
+        uint256 score = 0;
+
+        // 1. LP Pool Depth (max 40 points)
+        if (LP_BENCHMARK > 0) {
+            uint256 lpScore = (asset.lpPoolSize * LP_WEIGHT) / LP_BENCHMARK;
+            score += lpScore > LP_WEIGHT ? LP_WEIGHT : lpScore;
+        }
+
+        // 2. 24h Volume (max 30 points)
+        if (VOLUME_BENCHMARK > 0) {
+            uint256 volScore = (asset.volume24h * VOLUME_WEIGHT) / VOLUME_BENCHMARK;
+            score += volScore > VOLUME_WEIGHT ? VOLUME_WEIGHT : volScore;
+        }
+
+        // 3. Total OI (max 20 points)
+        if (OI_BENCHMARK > 0) {
+            uint256 oiScore = (asset.totalOI * OI_WEIGHT) / OI_BENCHMARK;
+            score += oiScore > OI_WEIGHT ? OI_WEIGHT : oiScore;
+        }
+
+        // 4. Recent Activity (max 10 points)
+        if (block.timestamp - asset.lastTradeTime < 1 hours) {
+            score += ACTIVITY_WEIGHT;
+        } else if (block.timestamp - asset.lastTradeTime < 6 hours) {
+            score += ACTIVITY_WEIGHT / 2;
+        }
+
+        return uint8(score > 100 ? 100 : score);
+    }
+
+    /**
+     * @notice Get liquidity score with category
+     * @param assetId Asset identifier
+     * @return score 0-100 score
+     * @return category Category string (VERY_HIGH, HIGH, MEDIUM, LOW, VERY_LOW)
+     */
+    function getLiquidityScore(bytes32 assetId) external view returns (uint8 score, string memory category) {
+        score = calculateLiquidityScore(assetId);
+
+        if (score >= 90) category = "VERY_HIGH";
+        else if (score >= 70) category = "HIGH";
+        else if (score >= 50) category = "MEDIUM";
+        else if (score >= 30) category = "LOW";
+        else category = "VERY_LOW";
+    }
+
+    // ============================================
+    // MARKET DATA UPDATES
+    // ============================================
+
+    /// @notice Event for market data updates
+    event MarketDataUpdated(bytes32 indexed assetId, uint64 tradePrice, uint256 tradeSize);
+
+    /**
+     * @notice Update market data after a trade
+     * @dev Called by Vault after each trade execution
+     * @param assetId Asset identifier
+     * @param tradePrice Trade execution price
+     * @param tradeSize Trade size
+     */
+    function updateMarketData(
+        bytes32 assetId,
+        uint64 tradePrice,
+        uint256 tradeSize
+    ) external onlyAuthorized {
+        Asset storage asset = assets[assetId];
+
+        // Update last price
+        asset.lastPrice = tradePrice;
+        asset.lastTradeTime = block.timestamp;
+
+        // Update 24h volume (simplified - in production use rolling window)
+        asset.volume24h += tradeSize;
+
+        emit MarketDataUpdated(assetId, tradePrice, tradeSize);
+    }
+
+    /**
+     * @notice Update LP pool size for an asset
+     * @param assetId Asset identifier
+     * @param newSize New LP pool size
+     */
+    function updateLpPoolSize(bytes32 assetId, uint256 newSize) external onlyAuthorized {
+        assets[assetId].lpPoolSize = newSize;
+    }
+
+    /**
+     * @notice Reset 24h volume (called daily by keeper)
+     * @param assetId Asset identifier
+     */
+    function resetVolume24h(bytes32 assetId) external onlyOwner {
+        assets[assetId].volume24h = 0;
+    }
+
+    /**
+     * @notice Get comprehensive market data
+     * @param assetId Asset identifier
+     * @return lastPrice Last trade price
+     * @return volume24h 24h trading volume
+     * @return totalOI Total open interest (directionless)
+     * @return liquidityScore Liquidity score (0-100)
+     * @return liquidityCategory Category string
+     */
+    function getMarketData(bytes32 assetId) external view returns (
+        uint64 lastPrice,
+        uint256 volume24h,
+        uint256 totalOI,
+        uint8 liquidityScore,
+        string memory liquidityCategory
+    ) {
+        Asset storage asset = assets[assetId];
+
+        lastPrice = asset.lastPrice;
+        volume24h = asset.volume24h;
+        totalOI = asset.totalOI;
+        (liquidityScore, liquidityCategory) = this.getLiquidityScore(assetId);
     }
 
     // ============================================

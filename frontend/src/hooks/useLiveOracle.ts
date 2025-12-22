@@ -4,14 +4,16 @@ import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 import { NETWORK_CONTRACTS, type SupportedNetwork } from "@/lib/contracts/config";
 
-// Minimal Oracle ABI for reading prices
+// Minimal Oracle ABI for reading prices and market data
 const ORACLE_ABI = [
   "function getAllAssetIds() external view returns (bytes32[])",
-  "function getAsset(bytes32 assetId) external view returns (tuple(string name, string symbol, uint64 basePrice, bool isActive, uint256 totalLongOI, uint256 totalShortOI))",
+  "function getAsset(bytes32 assetId) external view returns (tuple(string name, string symbol, uint64 basePrice, bool isActive))",
   "function getCurrentPrice(bytes32 assetId) public view returns (uint64)",
+  "function getMarketData(bytes32 assetId) external view returns (uint64 lastPrice, uint256 volume24h, uint256 totalOI, uint8 liquidityScore, string liquidityCategory)",
+  "function getTotalOI(bytes32 assetId) external view returns (uint256)",
 ];
 
-// RPC endpoints - use DRPC (free, no API key)
+// RPC endpoints
 const RPC_URLS: Record<SupportedNetwork, string> = {
   sepolia: "https://eth-sepolia.g.alchemy.com/v2/QSKgm3HkNCI9KzcjveL9a",
   hardhat: "http://127.0.0.1:8545",
@@ -25,10 +27,12 @@ export interface LiveAsset {
   price: number;
   basePrice: number;
   change24h: number;
-  totalLongOI: number;
-  totalShortOI: number;
+  totalOI: number;           // Total OI only - direction is encrypted!
+  volume24h: number;         // 24h trading volume
+  liquidityScore: number;    // 0-100 liquidity score
+  liquidityCategory: string; // VERY_HIGH, HIGH, MEDIUM, LOW, VERY_LOW
   isActive: boolean;
-  longRatio: number;
+  // REMOVED: totalLongOI, totalShortOI, longRatio - direction is now encrypted!
 }
 
 interface UseLiveOracleReturn {
@@ -72,17 +76,33 @@ export function useLiveOracle(network: SupportedNetwork = "sepolia"): UseLiveOra
 
           const priceNumber = Number(currentPrice) / 1e6;
           const basePriceNumber = Number(assetInfo.basePrice) / 1e6;
-          const totalLongOI = Number(assetInfo.totalLongOI) / 1e6;
-          const totalShortOI = Number(assetInfo.totalShortOI) / 1e6;
 
           // Calculate change from base price
           const change24h = basePriceNumber > 0
             ? ((priceNumber - basePriceNumber) / basePriceNumber) * 100
             : 0;
 
-          // Calculate long ratio
-          const totalOI = totalLongOI + totalShortOI;
-          const longRatio = totalOI > 0 ? (totalLongOI / totalOI) * 100 : 50;
+          // Try to get market data (may fail on old contracts)
+          let totalOI = 0;
+          let volume24h = 0;
+          let liquidityScore = 50;
+          let liquidityCategory = "MEDIUM";
+
+          try {
+            const marketData = await oracle.getMarketData(assetId);
+            totalOI = Number(marketData.totalOI) / 1e6;
+            volume24h = Number(marketData.volume24h) / 1e6;
+            liquidityScore = Number(marketData.liquidityScore);
+            liquidityCategory = marketData.liquidityCategory;
+          } catch {
+            // Fallback for contracts without getMarketData
+            try {
+              totalOI = Number(await oracle.getTotalOI(assetId)) / 1e6;
+            } catch {
+              totalOI = priceNumber * 500000; // Fallback estimate
+            }
+            volume24h = priceNumber * 1000000 * 0.5; // Fallback estimate
+          }
 
           loadedAssets.push({
             id: assetInfo.symbol.toLowerCase(),
@@ -92,10 +112,11 @@ export function useLiveOracle(network: SupportedNetwork = "sepolia"): UseLiveOra
             price: priceNumber,
             basePrice: basePriceNumber,
             change24h,
-            totalLongOI,
-            totalShortOI,
+            totalOI,          // Total OI only - direction encrypted!
+            volume24h,
+            liquidityScore,
+            liquidityCategory,
             isActive: assetInfo.isActive,
-            longRatio,
           });
         } catch (assetError) {
           console.warn(`Failed to load asset ${assetId}:`, assetError);

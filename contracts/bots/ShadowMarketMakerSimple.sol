@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import { FHE, euint64, ebool } from "@fhevm/solidity/lib/FHE.sol";
+import { ZamaEthereumConfig } from "@fhevm/solidity/config/ZamaConfig.sol";
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import { ShadowOracle } from "../core/ShadowOracle.sol";
@@ -13,7 +15,7 @@ import { ShadowOracle } from "../core/ShadowOracle.sol";
  * NOTE: This is the Sepolia-compatible version. For Zama network,
  * use ShadowMarketMaker.sol which uses real FHE encryption.
  */
-contract ShadowMarketMakerSimple is Ownable2Step, ReentrancyGuard {
+contract ShadowMarketMakerSimple is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard {
 
     /// @notice Oracle contract
     ShadowOracle public oracle;
@@ -212,12 +214,12 @@ contract ShadowMarketMakerSimple is Ownable2Step, ReentrancyGuard {
     ) internal returns (uint256 tradeId) {
         tradeId = nextTradeId++;
 
-        // Update Oracle Open Interest
-        if (isLong) {
-            oracle.updateOpenInterest(assetId, tradeSize, 0, true);
-        } else {
-            oracle.updateOpenInterest(assetId, 0, tradeSize, true);
-        }
+        // Update Oracle Open Interest (using new encrypted interface)
+        euint64 encryptedTradeSize = FHE.asEuint64(tradeSize);
+        ebool encryptedDirection = FHE.asEbool(isLong);
+        FHE.allowThis(encryptedTradeSize);
+        FHE.allowThis(encryptedDirection);
+        oracle.updateOpenInterest(assetId, encryptedTradeSize, encryptedDirection, true, uint256(tradeSize));
 
         // Get new price
         uint64 newPrice = oracle.getCurrentPrice(assetId);

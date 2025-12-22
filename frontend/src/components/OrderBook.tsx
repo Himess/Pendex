@@ -127,16 +127,18 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
   );
 
   const livePrice = oracleAsset?.price ?? propPrice ?? selectedAsset?.price ?? 100;
-  const longOI = oracleAsset?.totalLongOI ?? 0;
-  const shortOI = oracleAsset?.totalShortOI ?? 0;
+  // Direction is encrypted - use totalOI and balanced 50/50 split for order book
+  const totalOI = oracleAsset?.totalOI ?? 0;
 
-  // Generate order book
+  // Generate order book with balanced weights (direction is encrypted!)
   const { asks, bids } = useMemo(() => {
     if (!selectedAsset) {
       return { asks: [], bids: [] };
     }
-    return generateOrderBook(livePrice, selectedAsset.symbol, longOI, shortOI, tick);
-  }, [selectedAsset, livePrice, longOI, shortOI, tick]);
+    // Use 50/50 split since direction is encrypted
+    const halfOI = totalOI / 2;
+    return generateOrderBook(livePrice, selectedAsset.symbol, halfOI, halfOI, tick);
+  }, [selectedAsset, livePrice, totalOI, tick]);
 
   // Flash effect on price change
   useEffect(() => {
@@ -280,21 +282,17 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
         </div>
       )}
 
-      {/* OI Indicator */}
-      <div className="px-3 py-1 border-b border-border/50 bg-background/30">
+      {/* Total OI Indicator - Direction is encrypted! */}
+      <div className="px-3 py-1.5 border-b border-border/50 bg-background/30">
         <div className="flex items-center justify-between text-[9px] text-text-muted">
-          <span>Long OI: ${longOI.toFixed(0)}</span>
-          <span>Short OI: ${shortOI.toFixed(0)}</span>
-        </div>
-        <div className="mt-1 h-1 bg-background rounded-full overflow-hidden flex">
-          <div
-            className="h-full bg-success transition-all duration-500"
-            style={{ width: `${longOI + shortOI > 0 ? (longOI / (longOI + shortOI)) * 100 : 50}%` }}
-          />
-          <div
-            className="h-full bg-danger transition-all duration-500"
-            style={{ width: `${longOI + shortOI > 0 ? (shortOI / (longOI + shortOI)) * 100 : 50}%` }}
-          />
+          <div className="flex items-center gap-1">
+            <span>Total OI:</span>
+            <span className="text-gold font-medium">${totalOI.toFixed(0)}</span>
+          </div>
+          <div className="flex items-center gap-1 text-gold">
+            <Lock className="w-2.5 h-2.5" />
+            <span className="text-[8px]">Direction encrypted</span>
+          </div>
         </div>
       </div>
 

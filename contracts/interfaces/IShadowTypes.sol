@@ -9,13 +9,25 @@ import { euint64, ebool, eaddress } from "@fhevm/solidity/lib/FHE.sol";
  */
 interface IShadowTypes {
     /// @notice Pre-IPO Asset information
+    /// @dev OI direction is now ENCRYPTED - prevents manipulation
     struct Asset {
         string name;           // e.g., "SpaceX", "Stripe"
         string symbol;         // e.g., "SPACEX", "STRIPE"
         uint64 basePrice;      // Base price from last funding round (6 decimals)
         bool isActive;         // Whether trading is enabled
-        uint256 totalLongOI;   // Total long open interest (public for price impact)
-        uint256 totalShortOI;  // Total short open interest (public for price impact)
+
+        // ENCRYPTED OI - Direction hidden from public
+        euint64 encryptedLongOI;   // Encrypted long open interest
+        euint64 encryptedShortOI;  // Encrypted short open interest
+
+        // PUBLIC - Only total OI (no direction info)
+        uint256 totalOI;           // Combined Long + Short (directionless)
+
+        // Market Data (PUBLIC)
+        uint64 lastPrice;          // Last trade price
+        uint256 volume24h;         // 24h trading volume
+        uint256 lastTradeTime;     // Timestamp of last trade
+        uint256 lpPoolSize;        // LP pool liquidity for this asset
     }
 
     /// @notice Encrypted position data
