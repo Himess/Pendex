@@ -1,26 +1,16 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { Asset, ASSETS, formatUSD, formatPercent } from "@/lib/constants";
 import { useLiveAssetPrice } from "@/hooks/useLiveOracle";
 import { useCurrentNetwork } from "@/lib/contracts/hooks";
-import { TrendingUp, TrendingDown, ChevronDown } from "lucide-react";
+import { TrendingUp, TrendingDown, ChevronDown, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LiquidityScoreCompact } from "./LiquidityScore";
 
 interface MarketStatsProps {
   selectedAsset: Asset | null;
   onSelectAsset?: (asset: Asset) => void;
-}
-
-// Deterministic pseudo-random based on asset id (stable across renders)
-function seededRandom(seed: string): number {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    const char = seed.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return Math.abs(hash % 1000) / 1000;
 }
 
 export function MarketStats({ selectedAsset, onSelectAsset }: MarketStatsProps) {
@@ -35,26 +25,11 @@ export function MarketStats({ selectedAsset, onSelectAsset }: MarketStatsProps) 
   const change24h = oracleAsset?.change24h ?? selectedAsset?.change24h ?? 0;
   // Total OI only - direction is encrypted on-chain!
   const totalOI = oracleAsset?.totalOI ?? 0;
+  const volume24h = oracleAsset?.volume24h ?? 0;
+  const liquidityScore = oracleAsset?.liquidityScore ?? 50;
 
-  // Stable simulated values based on asset (no random jumps)
-  const stableValues = useMemo(() => {
-    if (!selectedAsset) return { indexPrice: 0, volume24h: 0, fundingRate: 0, nextFunding: 0 };
-
-    const seed = selectedAsset.id;
-    const r1 = seededRandom(seed + "index");
-    const r2 = seededRandom(seed + "volume");
-    const r3 = seededRandom(seed + "funding");
-    const r4 = seededRandom(seed + "next");
-
-    return {
-      indexPrice: price * (1 + (r1 - 0.5) * 0.001),
-      volume24h: selectedAsset.price * 1000000 * (0.5 + r2),
-      fundingRate: 0.001 + (r3 - 0.5) * 0.002,
-      nextFunding: Math.floor(r4 * 60),
-    };
-  }, [selectedAsset?.id, price]);
-
-  const { indexPrice, volume24h, fundingRate, nextFunding } = stableValues;
+  // Calculate display values
+  const displayVolume = volume24h || price * 500000;
   const openInterest = totalOI || price * 500000;
 
   if (!selectedAsset) {
@@ -161,77 +136,62 @@ export function MarketStats({ selectedAsset, onSelectAsset }: MarketStatsProps) 
           )}
         </div>
 
-        {/* Mark Price */}
-        <div className="flex flex-col min-w-[100px]">
-          <span className="text-[10px] text-text-muted">Mark Price</span>
-          <span className="text-sm font-semibold text-text-primary font-mono">
-            {formatUSD(price)}
-          </span>
-        </div>
-
-        {/* Index Price */}
-        <div className="flex flex-col min-w-[100px]">
-          <span className="text-[10px] text-text-muted">Index Price</span>
-          <span className="text-sm font-mono text-text-secondary">
-            {formatUSD(indexPrice)}
-          </span>
-        </div>
-
-        {/* 24h Change */}
-        <div className="flex flex-col min-w-[80px]">
-          <span className="text-[10px] text-text-muted">24h Change</span>
-          <div className="flex items-center gap-1">
-            {change24h >= 0 ? (
-              <TrendingUp className="w-3 h-3 text-success" />
-            ) : (
-              <TrendingDown className="w-3 h-3 text-danger" />
-            )}
-            <span
-              className={cn(
-                "text-sm font-mono font-medium",
-                change24h >= 0 ? "text-success" : "text-danger"
-              )}
-            >
-              {formatPercent(change24h)}
+        {/* Price & Change */}
+        <div className="flex flex-col min-w-[120px]">
+          <div className="flex items-baseline gap-2">
+            <span className="text-lg font-bold text-text-primary font-mono">
+              {formatUSD(price)}
             </span>
+            <div className="flex items-center gap-1">
+              {change24h >= 0 ? (
+                <TrendingUp className="w-3 h-3 text-success" />
+              ) : (
+                <TrendingDown className="w-3 h-3 text-danger" />
+              )}
+              <span
+                className={cn(
+                  "text-sm font-mono font-medium",
+                  change24h >= 0 ? "text-success" : "text-danger"
+                )}
+              >
+                {formatPercent(change24h)}
+              </span>
+            </div>
           </div>
         </div>
 
+        {/* Divider */}
+        <div className="h-8 w-px bg-border" />
+
         {/* 24h Volume */}
-        <div className="flex flex-col min-w-[120px]">
+        <div className="flex flex-col min-w-[100px]">
           <span className="text-[10px] text-text-muted">24h Volume</span>
           <span className="text-sm font-mono text-text-secondary">
-            ${(volume24h / 1000000).toFixed(2)}M
+            ${(displayVolume / 1000000).toFixed(2)}M
           </span>
         </div>
 
         {/* Open Interest */}
-        <div className="flex flex-col min-w-[120px]">
+        <div className="flex flex-col min-w-[100px]">
           <span className="text-[10px] text-text-muted">Open Interest</span>
           <span className="text-sm font-mono text-text-secondary">
             ${(openInterest / 1000000).toFixed(2)}M
           </span>
         </div>
 
-        {/* Funding Rate */}
-        <div className="flex flex-col min-w-[80px]">
-          <span className="text-[10px] text-text-muted">1hr Funding</span>
-          <span
-            className={cn(
-              "text-sm font-mono",
-              fundingRate >= 0 ? "text-success" : "text-danger"
-            )}
-          >
-            {(fundingRate * 100).toFixed(4)}%
-          </span>
+        {/* Divider */}
+        <div className="h-8 w-px bg-border" />
+
+        {/* Liquidity Score */}
+        <div className="flex flex-col min-w-[100px]">
+          <span className="text-[10px] text-text-muted mb-0.5">Liquidity</span>
+          <LiquidityScoreCompact score={liquidityScore} />
         </div>
 
-        {/* Next Funding */}
-        <div className="flex flex-col min-w-[80px]">
-          <span className="text-[10px] text-text-muted">Next Funding</span>
-          <span className="text-sm font-mono text-text-secondary">
-            {nextFunding}:{String(Math.floor(seededRandom((selectedAsset?.id || "") + "seconds") * 60)).padStart(2, '0')}
-          </span>
+        {/* Encrypted Badge */}
+        <div className="ml-auto flex items-center gap-1.5 px-2.5 py-1 bg-gold/10 border border-gold/30 rounded-lg">
+          <Lock className="w-3.5 h-3.5 text-gold" />
+          <span className="text-xs text-gold font-medium">FHE Encrypted</span>
         </div>
       </div>
     </div>

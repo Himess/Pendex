@@ -6,6 +6,7 @@ import { Asset } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useLiveAssetPrice } from "@/hooks/useLiveOracle";
 import { useCurrentNetwork } from "@/lib/contracts/hooks";
+import { LiquidityScoreCompact } from "./LiquidityScore";
 
 interface OrderBookProps {
   selectedAsset: Asset | null;
@@ -41,8 +42,9 @@ function generateOrderBook(
   symbol: string,
   longOI: number,
   shortOI: number,
-  tick: number // Changes each update for variation
-): { asks: OrderLevel[]; bids: OrderLevel[] } {
+  tick: number, // Changes each update for variation
+  liquidityScore: number = 50 // Liquidity score 0-100
+): { asks: OrderLevel[]; bids: OrderLevel[]; spreadPercent: number } {
   let seed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + tick;
   const seededRandom = () => {
     seed = (seed * 9301 + 49297) % 233280;
@@ -52,7 +54,16 @@ function generateOrderBook(
   const asks: OrderLevel[] = [];
   const bids: OrderLevel[] = [];
 
-  const spread = basePrice * 0.001;
+  // Dynamic spread based on liquidity score
+  // High liquidity (100) = tight spread (0.05%)
+  // Low liquidity (0) = wide spread (0.2%)
+  const baseSpreadPercent = 0.002; // 0.2% base
+  const liquidityFactor = liquidityScore / 100; // 0-1
+  const spreadPercent = baseSpreadPercent - (liquidityFactor * 0.0015);
+  // Score 100 → 0.05% spread
+  // Score 50 → 0.125% spread
+  // Score 0 → 0.2% spread
+  const spread = basePrice * spreadPercent;
   const totalOI = longOI + shortOI;
   const longWeight = totalOI > 0 ? longOI / totalOI : 0.5;
   const shortWeight = totalOI > 0 ? shortOI / totalOI : 0.5;
@@ -97,7 +108,7 @@ function generateOrderBook(
     });
   }
 
-  return { asks: asks.reverse(), bids };
+  return { asks: asks.reverse(), bids, spreadPercent: spreadPercent * 100 };
 }
 
 // Recent trade type
@@ -128,17 +139,20 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
 
   const livePrice = oracleAsset?.price ?? propPrice ?? selectedAsset?.price ?? 100;
   // Direction is encrypted - use totalOI and balanced 50/50 split for order book
-  const totalOI = oracleAsset?.totalOI ?? 0;
+  const rawTotalOI = oracleAsset?.totalOI ?? 0;
+  // Fallback OI based on price if contract returns 0 (no positions yet)
+  const totalOI = rawTotalOI > 0 ? rawTotalOI : livePrice * 500000;
+  const liquidityScore = oracleAsset?.liquidityScore ?? 50;
 
   // Generate order book with balanced weights (direction is encrypted!)
-  const { asks, bids } = useMemo(() => {
+  const { asks, bids, spreadPercent } = useMemo(() => {
     if (!selectedAsset) {
-      return { asks: [], bids: [] };
+      return { asks: [], bids: [], spreadPercent: 0.1 };
     }
     // Use 50/50 split since direction is encrypted
     const halfOI = totalOI / 2;
-    return generateOrderBook(livePrice, selectedAsset.symbol, halfOI, halfOI, tick);
-  }, [selectedAsset, livePrice, totalOI, tick]);
+    return generateOrderBook(livePrice, selectedAsset.symbol, halfOI, halfOI, tick, liquidityScore);
+  }, [selectedAsset, livePrice, totalOI, tick, liquidityScore]);
 
   // Flash effect on price change
   useEffect(() => {
@@ -219,8 +233,7 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
     return p.toFixed(4);
   };
 
-  const spreadAmount = livePrice * 0.002;
-  const spreadPercent = 0.2;
+  const spreadAmount = livePrice * (spreadPercent / 100);
 
   return (
     <div className="h-full bg-card border border-border rounded flex flex-col overflow-hidden">
@@ -282,12 +295,19 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
         </div>
       )}
 
-      {/* Total OI Indicator - Direction is encrypted! */}
+      {/* Total OI & Liquidity Indicator - Direction is encrypted! */}
       <div className="px-3 py-1.5 border-b border-border/50 bg-background/30">
         <div className="flex items-center justify-between text-[9px] text-text-muted">
-          <div className="flex items-center gap-1">
-            <span>Total OI:</span>
-            <span className="text-gold font-medium">${totalOI.toFixed(0)}</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              <span>OI:</span>
+              <span className="text-gold font-medium">
+                ${totalOI >= 1000000 ? `${(totalOI / 1000000).toFixed(1)}M` :
+                  totalOI >= 1000 ? `${(totalOI / 1000).toFixed(0)}K` :
+                  totalOI.toFixed(0)}
+              </span>
+            </div>
+            <LiquidityScoreCompact score={liquidityScore} />
           </div>
           <div className="flex items-center gap-1 text-gold">
             <Lock className="w-2.5 h-2.5" />
@@ -426,6 +446,12 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
           Updated: {lastUpdate.toLocaleTimeString()}
         </div>
       )}
+
+      {/* Disclaimer */}
+      <div className="px-3 py-2 border-t border-border/50 bg-background/30 text-[10px] text-text-muted flex items-start gap-1.5">
+        <Lock className="w-3 h-3 mt-0.5 flex-shrink-0 text-gold" />
+        <span>Order sizes are encrypted. Displayed depths are approximate indicators based on oracle price.</span>
+      </div>
     </div>
   );
 }

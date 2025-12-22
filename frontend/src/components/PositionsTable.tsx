@@ -245,12 +245,21 @@ export function PositionsTable() {
 
       {/* Empty State */}
       {positions.length === 0 && (
-        <div className="p-4 text-center">
-          <Lock className="w-8 h-8 text-text-muted mx-auto mb-2" />
-          <p className="text-xs text-text-secondary">No open positions</p>
-          <p className="text-[10px] text-text-muted">
-            Your encrypted positions will appear here
+        <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+          <div className="w-16 h-16 rounded-full bg-gold/10 flex items-center justify-center mb-4">
+            <Lock className="w-8 h-8 text-gold" />
+          </div>
+          <h3 className="text-sm font-semibold text-text-secondary mb-2">No open positions</h3>
+          <p className="text-xs text-text-muted max-w-xs mb-6">
+            Your encrypted positions will appear here. All position details are protected with FHE encryption.
           </p>
+          <a
+            href="/"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-gold text-background font-semibold text-xs rounded-lg hover:opacity-90 transition-opacity"
+          >
+            <TrendingUp className="w-3.5 h-3.5" />
+            Open Your First Position
+          </a>
         </div>
       )}
     </div>
