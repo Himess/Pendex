@@ -465,8 +465,18 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
       // Simulate encryption delay for visual effect
       await new Promise(resolve => setTimeout(resolve, 1500));
 
+      // DEBUG: Log session wallet conditions
+      console.log("🔍 Session Wallet Check:", {
+        isSessionActive,
+        isAnonymous,
+        hasFHE,
+        fheReady,
+        willUseSession: isSessionActive && !isAnonymous,
+      });
+
       // Use session wallet for popup-free trading (only for non-anonymous mode)
-      if (isSessionActive && !isAnonymous && hasFHE && fheReady) {
+      // Session wallet now handles both FHE and mock mode internally
+      if (isSessionActive && !isAnonymous) {
         console.log("⚡ Using SESSION WALLET for popup-free trading...");
         setShowEncryptAnimation(false);
         await openSessionPosition({
