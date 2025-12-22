@@ -32,7 +32,7 @@ const SEPOLIA_MANUAL_CONFIG = {
   verifyingContractAddressInputVerification: "0x483b9dE06E4E4C7D35CCf5837A1668487406D955" as const,
   chainId: 11155111,
   gatewayChainId: 55815, // Updated gateway chain ID
-  network: "https://rpc.ankr.com/eth_sepolia",
+  network: "https://1rpc.io/sepolia",
   relayerUrl: "https://relayer.testnet.zama.org",
 };
 
