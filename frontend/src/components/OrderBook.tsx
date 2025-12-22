@@ -163,12 +163,12 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
     prevPriceRef.current = livePrice;
   }, [livePrice]);
 
-  // Simulate live order flow - updates every 500ms-2s randomly
+  // Simulate live order flow - updates every 3-7s randomly (slower for stability)
   useEffect(() => {
     if (!selectedAsset) return;
 
     const updateInterval = () => {
-      const delay = 500 + Math.random() * 1500; // 500ms to 2s
+      const delay = 3000 + Math.random() * 4000; // 3s to 7s (more stable)
       return setTimeout(() => {
         setTick(t => t + 1);
         setLastUpdate(new Date());
