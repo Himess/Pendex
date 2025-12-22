@@ -37,11 +37,10 @@ export const SEPOLIA_CONFIG = {
   },
   rpcUrls: {
     default: {
-      // Use public endpoints to avoid rate limits
-      http: ["https://eth-sepolia.public.blastapi.io", "https://rpc.sepolia.org"],
+      http: ["https://eth-sepolia.g.alchemy.com/v2/QSKgm3HkNCI9KzcjveL9a"],
     },
     public: {
-      http: ["https://eth-sepolia.public.blastapi.io", "https://rpc.sepolia.org"],
+      http: ["https://eth-sepolia.g.alchemy.com/v2/QSKgm3HkNCI9KzcjveL9a"],
     },
   },
   blockExplorers: {
