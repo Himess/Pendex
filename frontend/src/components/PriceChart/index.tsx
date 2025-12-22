@@ -60,9 +60,10 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
   });
 
   // Chart data (timeframe değişince güncellenir)
+  // Oracle fiyatını kullan - static price değil!
   const { data, loading } = useChartData({
     symbol: selectedAsset?.symbol || 'ASSET',
-    basePrice: selectedAsset?.price || 100,
+    basePrice: livePrice > 0 ? livePrice : (selectedAsset?.price || 100),
     timeframe,
   });
 
