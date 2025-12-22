@@ -16,6 +16,8 @@ import {
 } from "@/lib/fhe/client";
 import { useWalletClient, usePublicClient } from "wagmi";
 import { parseAbi } from "viem";
+import { useSessionWallet } from "@/lib/session-wallet/hooks";
+import { useTradeWithSession } from "@/lib/session-wallet/useTradeWithSession";
 
 interface TradingPanelProps {
   selectedAsset: Asset | null;
@@ -197,6 +199,16 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
     error: anonError,
     hash: anonHash
   } = useOpenAnonymousPosition();
+
+  // Session wallet hooks for popup-free trading
+  const { isSessionActive, getSessionSigner } = useSessionWallet();
+  const {
+    openPosition: openSessionPosition,
+    isTrading: isSessionTrading,
+    txHash: sessionTxHash,
+    error: sessionError,
+    isSuccess: isSessionSuccess,
+  } = useTradeWithSession();
 
   // Error handling state
   const [retryCount, setRetryCount] = useState(0);
@@ -402,12 +414,13 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
     };
   }, [hasFHE]);
 
-  // Update status based on transaction state (includes both regular and anonymous position hooks)
+  // Update status based on transaction state (includes regular, anonymous, and session wallet hooks)
   useEffect(() => {
-    const pending = isPending || isAnonPending;
+    const pending = isPending || isAnonPending || isSessionTrading;
     const confirming = isConfirming || isAnonConfirming;
-    const success = isSuccess || isAnonSuccess;
-    const txError = error || anonError;
+    const success = isSuccess || isAnonSuccess || isSessionSuccess;
+    const txError = error || anonError || (sessionError ? new Error(sessionError) : null);
+    const currentHash = hash || sessionTxHash;
 
     if (pending) {
       setTxStatus("pending");
@@ -432,7 +445,7 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
         setErrorMessage(null);
       }, 8000);
     }
-  }, [isPending, isConfirming, isSuccess, error, isAnonPending, isAnonConfirming, isAnonSuccess, anonError]);
+  }, [isPending, isConfirming, isSuccess, error, isAnonPending, isAnonConfirming, isAnonSuccess, anonError, isSessionTrading, isSessionSuccess, sessionError, hash, sessionTxHash]);
 
   const handlePlaceOrder = useCallback(async () => {
     if (!selectedAsset || !collateral || !address) return;
@@ -451,6 +464,19 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
 
       // Simulate encryption delay for visual effect
       await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Use session wallet for popup-free trading (only for non-anonymous mode)
+      if (isSessionActive && !isAnonymous && hasFHE && fheReady) {
+        console.log("⚡ Using SESSION WALLET for popup-free trading...");
+        setShowEncryptAnimation(false);
+        await openSessionPosition({
+          assetId,
+          collateral: collateralAmount,
+          leverage: leverageAmount,
+          isLong,
+        });
+        return;
+      }
 
       if (hasFHE && fheReady) {
         // Real FHE encryption for Zama network
@@ -502,7 +528,7 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
       setShowEncryptAnimation(false);
       setErrorMessage(err instanceof Error ? err.message : "Failed to place order");
     }
-  }, [selectedAsset, collateral, address, leverage, isLong, hasFHE, fheReady, shadowVault, openPosition, isAnonymous, openAnonymousPosition]);
+  }, [selectedAsset, collateral, address, leverage, isLong, hasFHE, fheReady, shadowVault, openPosition, isAnonymous, openAnonymousPosition, isSessionActive, openSessionPosition]);
 
   const getButtonText = () => {
     if (!isConnected) return "CONNECT WALLET";
@@ -511,14 +537,15 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
     if (orderType === "limit" && !limitPrice) return "ENTER LIMIT PRICE";
     if (fheInitializing) return "INITIALIZING FHE...";
     if (txStatus === "encrypting") return "ENCRYPTING...";
-    if (txStatus === "pending") return "CONFIRM IN WALLET...";
+    if (txStatus === "pending") return isSessionActive && !isAnonymous ? "SENDING..." : "CONFIRM IN WALLET...";
     if (txStatus === "confirming") return "CONFIRMING...";
     if (txStatus === "success") return "ORDER PLACED!";
     if (txStatus === "error") return "TRY AGAIN";
 
     const orderTypeLabel = orderType === "limit" ? "LIMIT" : "MARKET";
     const anonymousLabel = isAnonymous ? "ANONYMOUS " : "";
-    return hasFHE ? `PLACE ${anonymousLabel}${orderTypeLabel} ORDER` : `PLACE ${orderTypeLabel} ORDER`;
+    const sessionLabel = isSessionActive && !isAnonymous ? "⚡ " : "";
+    return hasFHE ? `${sessionLabel}PLACE ${anonymousLabel}${orderTypeLabel} ORDER` : `PLACE ${orderTypeLabel} ORDER`;
   };
 
   const isButtonDisabled = !isConnected || !selectedAsset || !collateral || fheInitializing ||
@@ -539,7 +566,7 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
     <>
       {/* Animations */}
       <EncryptionAnimation isActive={showEncryptAnimation} />
-      <SuccessAnimation isActive={showSuccessAnimation} hash={hash} />
+      <SuccessAnimation isActive={showSuccessAnimation} hash={hash || sessionTxHash || undefined} />
 
       <div className="w-64 bg-card border border-border rounded-lg overflow-y-auto flex-shrink-0">
         {/* Header */}
@@ -929,9 +956,9 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
           )}
 
           {/* Transaction Hash */}
-          {hash && txStatus !== "idle" && !showSuccessAnimation && (
+          {(hash || sessionTxHash) && txStatus !== "idle" && !showSuccessAnimation && (
             <a
-              href={`https://sepolia.etherscan.io/tx/${hash}`}
+              href={`https://sepolia.etherscan.io/tx/${hash || sessionTxHash}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[9px] text-gold hover:underline block text-center"

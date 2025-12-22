@@ -2,9 +2,10 @@
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { Header, TradingPanel, PositionsTable, PriceChart, OrderBook, MarketStats } from "@/components";
+import { Header, TradingPanel, PositionsTable, PriceChart, OrderBook, MarketStats, SessionWalletSetup } from "@/components";
 import { Asset, ASSETS } from "@/lib/constants";
-import { Lock, ChevronDown, X, BookOpen, GripHorizontal } from "lucide-react";
+import { Lock, ChevronDown, X, BookOpen, GripHorizontal, Zap } from "lucide-react";
+import { useSessionWallet } from "@/lib/session-wallet/hooks";
 import { cn } from "@/lib/utils";
 import { useLiveAssetPrice } from "@/hooks/useLiveOracle";
 import { useCurrentNetwork } from "@/lib/contracts/hooks";
@@ -195,12 +196,14 @@ function TradeContent() {
   const searchParams = useSearchParams();
   const assetId = searchParams.get("asset");
   const network = useCurrentNetwork();
+  const { isSessionActive, needsSetup, isLoading: sessionLoading } = useSessionWallet();
 
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [rightPanelTab, setRightPanelTab] = useState<"orderbook" | "trades">("orderbook");
   const [bottomTab, setBottomTab] = useState<"positions" | "orders" | "history">("positions");
   const [mobileTradeOpen, setMobileTradeOpen] = useState(false);
   const [mobileOrderBookOpen, setMobileOrderBookOpen] = useState(false);
+  const [showSessionSetup, setShowSessionSetup] = useState(false);
 
   // Resizable panels - percentage based (chart gets chartPercent, positions gets rest)
   const [chartPercent, setChartPercent] = useState(60); // Chart takes 60%, positions takes 40%
@@ -337,7 +340,35 @@ function TradeContent() {
           </div>
 
           {/* Trading Panel */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto flex flex-col">
+            {/* Session Wallet Status/Setup - Compact Banner */}
+            {needsSetup && !isSessionActive && (
+              <div className="p-2 border-b border-border">
+                <button
+                  onClick={() => setShowSessionSetup(!showSessionSetup)}
+                  className="w-full flex items-center justify-between p-2 bg-gold/10 border border-gold/30 rounded-lg hover:bg-gold/20 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-gold" />
+                    <span className="text-xs font-medium text-gold">Enable Popup-Free Trading</span>
+                  </div>
+                  <ChevronDown className={cn("w-4 h-4 text-gold transition-transform", showSessionSetup && "rotate-180")} />
+                </button>
+                {showSessionSetup && (
+                  <div className="mt-2">
+                    <SessionWalletSetup compact onComplete={() => setShowSessionSetup(false)} />
+                  </div>
+                )}
+              </div>
+            )}
+            {isSessionActive && (
+              <div className="p-2 border-b border-border">
+                <div className="flex items-center justify-center gap-2 p-2 bg-success/10 border border-success/30 rounded-lg">
+                  <Zap className="w-4 h-4 text-success" />
+                  <span className="text-xs font-medium text-success">Popup-Free Trading Active</span>
+                </div>
+              </div>
+            )}
             <TradingPanel selectedAsset={selectedAsset} />
           </div>
         </div>

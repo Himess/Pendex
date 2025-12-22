@@ -4,10 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { BarChart3, LineChart, Wallet, Menu, X, HelpCircle, Building2, Sun, Moon } from "lucide-react";
+import { BarChart3, LineChart, Wallet, Menu, X, HelpCircle, Building2, Sun, Moon, Zap, AlertCircle } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/app/providers";
+import { useSessionWallet } from "@/lib/session-wallet/hooks";
 
 const NAV_ITEMS = [
   { href: "/markets", label: "Markets", icon: <BarChart3 className="w-4 h-4" /> },
@@ -21,6 +22,7 @@ export function Header() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const { isSessionActive, needsSetup } = useSessionWallet();
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -58,8 +60,24 @@ export function Header() {
           ))}
         </nav>
 
-        {/* Right - Theme Toggle + Wallet */}
+        {/* Right - Session Badge + Theme Toggle + Wallet */}
         <div className="flex items-center gap-2 md:gap-4">
+          {/* Session Wallet Badge */}
+          {isSessionActive ? (
+            <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-success/20 border border-success/30 rounded-lg">
+              <Zap className="w-3 h-3 text-success" />
+              <span className="text-[10px] font-medium text-success">Popup-Free</span>
+            </div>
+          ) : needsSetup ? (
+            <Link
+              href="/trade"
+              className="hidden sm:flex items-center gap-1 px-2 py-1 bg-gold/20 border border-gold/30 rounded-lg hover:bg-gold/30 transition-colors"
+            >
+              <AlertCircle className="w-3 h-3 text-gold" />
+              <span className="text-[10px] font-medium text-gold">Setup Required</span>
+            </Link>
+          ) : null}
+
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
