@@ -73,7 +73,8 @@ export function useSessionWallet(): UseSessionWalletReturn {
     if (!address || !ethersProvider) return;
 
     // Skip if WalletManager is not deployed (address is zero)
-    if (WALLET_MANAGER_ADDRESS === "0x0000000000000000000000000000000000000000") {
+    const zeroAddress = "0x0000000000000000000000000000000000000000";
+    if (WALLET_MANAGER_ADDRESS.toLowerCase() === zeroAddress.toLowerCase()) {
       console.log("⚠️ WalletManager not deployed yet");
       setNeedsSetup(true);
       return;

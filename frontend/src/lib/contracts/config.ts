@@ -4,11 +4,12 @@ export type SupportedNetwork = "sepolia" | "hardhat";
 // Contract addresses per network
 export const NETWORK_CONTRACTS = {
   sepolia: {
-    // Session 8 Deployment v2 - FHE ACL Fix for vaultDeposit/vaultWithdraw
-    shadowVault: "0x8bD67c72b563A28C6B917Ad3dC09cF39FB58b292" as `0x${string}`,
+    // Session 9 - Session Wallet Support + FHE ACL Fix
+    shadowVault: "0x0EBC28B9e41474c015Aab15B9a2046F4d54FD3D6" as `0x${string}`,
     shadowOracle: "0xadee307469f5FEF36485aB0194Bc1C042b7Cd2FE" as `0x${string}`,
     shadowUsd: "0x6C365a341C2A7D94cb0204A3f22CC810A7357F18" as `0x${string}`,
     shadowLiquidityPool: "0xF15e759229dc61f7ece238503368B1a0BafF0773" as `0x${string}`,
+    walletManager: "0x547481AC8130e985288BD36Cb9ba81204656eB7A" as `0x${string}`,
     hasFHE: true, // Sepolia with Zama FHE encryption
   },
   hardhat: {

@@ -3,8 +3,8 @@
 import { ethers } from "ethers";
 import { getFheInstance, initFheInstance, isFheInitialized } from "../fhe/client";
 
-// WalletManager contract address (will be updated after deployment)
-export const WALLET_MANAGER_ADDRESS = "0x0000000000000000000000000000000000000000";
+// WalletManager contract address (deployed to Sepolia)
+export const WALLET_MANAGER_ADDRESS = "0x547481AC8130e985288BD36Cb9ba81204656eB7A";
 
 // WalletManager ABI (minimal for session wallet operations)
 export const WALLET_MANAGER_ABI = [
