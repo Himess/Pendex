@@ -37,10 +37,10 @@ export const SEPOLIA_CONFIG = {
   },
   rpcUrls: {
     default: {
-      http: ["https://1rpc.io/sepolia"],
+      http: ["https://eth-sepolia.g.alchemy.com/v2/QSKgm3HkNCI9KzcjveL9a"],
     },
     public: {
-      http: ["https://1rpc.io/sepolia"],
+      http: ["https://eth-sepolia.g.alchemy.com/v2/QSKgm3HkNCI9KzcjveL9a"],
     },
   },
   blockExplorers: {

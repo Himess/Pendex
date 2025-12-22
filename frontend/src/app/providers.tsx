@@ -28,11 +28,10 @@ export function useTheme() {
 }
 
 // Configure chains - both Sepolia (with Zama FHE) and Hardhat (local dev)
-// Using 1RPC public endpoint - no API key, CORS enabled
 const config = createConfig({
   chains: [sepolia, hardhat],
   transports: {
-    [sepolia.id]: http("https://1rpc.io/sepolia"),
+    [sepolia.id]: http("https://eth-sepolia.g.alchemy.com/v2/QSKgm3HkNCI9KzcjveL9a"),
     [hardhat.id]: http("http://127.0.0.1:8545"),
   },
 });
