@@ -68,6 +68,31 @@ export function useSessionWallet(): UseSessionWalletReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected, address]);
 
+  // Sync with singleton state periodically (handles cross-component updates)
+  useEffect(() => {
+    const syncWithSingleton = () => {
+      const singletonActive = sessionWalletManager.isSessionActive();
+      const singletonAddress = sessionWalletManager.getSessionAddress();
+      const singletonMain = sessionWalletManager.getMainWallet();
+
+      // Only update if singleton says session is active but local state doesn't match
+      if (singletonActive && !isSessionActive && singletonMain?.toLowerCase() === address?.toLowerCase()) {
+        console.log("🔄 Syncing session state from singleton...");
+        setIsSessionActive(true);
+        setSessionAddress(singletonAddress);
+        setMainWallet(singletonMain);
+        setNeedsSetup(false);
+      }
+    };
+
+    // Check immediately
+    syncWithSingleton();
+
+    // Then check every 500ms for changes from other components
+    const interval = setInterval(syncWithSingleton, 500);
+    return () => clearInterval(interval);
+  }, [isSessionActive, address]);
+
   // Check session status
   const checkSessionStatus = useCallback(async () => {
     if (!address || !ethersProvider) return;
