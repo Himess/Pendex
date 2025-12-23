@@ -29,7 +29,7 @@
 - `initSDK()` MUTLAKA `createInstance()` ONCE cagirilmali
 - WASM icin `type: "asset/resource"` kullan (webassembly/async DEGIL)
 - Viem signTypedData object format: `{domain, types, primaryType, message}`
-- gatewayChainId: 55815 (eski 10901 YANLIS)
+- gatewayChainId: 10901 (DOGRU - Zama docs & FHEIGHT projesi ile uyumlu)
 - Relayer URL: `https://relayer.testnet.zama.org` (.org DOGRU, .cloud DNS yok)
 - **sUSD direkt kullan** - vault deposit GEREKSIZ!
 
@@ -257,7 +257,7 @@ const SEPOLIA_CONFIG = {
   verifyingContractAddressDecryption: "0x5D8BD78e2ea6bbE41f26dFe9fdaEAa349e077478",
   verifyingContractAddressInputVerification: "0x483b9dE06E4E4C7D35CCf5837A1668487406D955",
   chainId: 11155111,
-  gatewayChainId: 55815,  // ONEMLI: 10901 YANLIS!
+  gatewayChainId: 10901,  // DOGRU: Zama docs & FHEIGHT ile uyumlu
   network: "https://eth-sepolia.public.blastapi.io",
   relayerUrl: "https://relayer.testnet.zama.org",  // .org DOGRU, .cloud YOK!
 };
@@ -376,7 +376,7 @@ Module parse failed: Internal failure: parseVec could not cast the value
 **Cozum:** `.cloud` YANLIS, `.org` kullan
 
 ### 5. wrong relayer url
-**Cozum:** `gatewayChainId: 55815` (10901 degil)
+**Cozum:** `gatewayChainId: 10901` (Zama docs & FHEIGHT ile uyumlu)
 
 ---
 

@@ -31,7 +31,7 @@ const SEPOLIA_MANUAL_CONFIG = {
   verifyingContractAddressDecryption: "0x5D8BD78e2ea6bbE41f26dFe9fdaEAa349e077478" as const,
   verifyingContractAddressInputVerification: "0x483b9dE06E4E4C7D35CCf5837A1668487406D955" as const,
   chainId: 11155111,
-  gatewayChainId: 55815, // Updated gateway chain ID
+  gatewayChainId: 10901, // Correct gateway chain ID (from Zama docs & FHEIGHT)
   network: "https://eth-sepolia.g.alchemy.com/v2/QSKgm3HkNCI9KzcjveL9a",
   relayerUrl: "https://relayer.testnet.zama.org",
 };
