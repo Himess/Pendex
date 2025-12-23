@@ -91,14 +91,14 @@ export function useTradeWithSession(): UseTradeWithSessionReturn {
           console.log("🔐 Encrypting position parameters with FHE...");
 
           // Encrypt position parameters using FHE
-          // Note: We use the MAIN wallet address for FHE encryption
-          // because the position will be owned by the main wallet
+          // Note: We use the SESSION wallet address for FHE encryption
+          // because msg.sender is the session wallet (FHE verifies msg.sender)
           const encrypted = await encryptPositionParams(
             params.collateral,
             params.leverage,
             params.isLong,
             CONTRACTS.shadowVault,
-            mainWallet // Main wallet address for position ownership
+            sessionAddress // Session wallet - this is msg.sender!
           );
 
           console.log("📝 Submitting FHE transaction with session wallet...");
