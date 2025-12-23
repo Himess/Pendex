@@ -62,7 +62,7 @@ export async function initFheInstance(): Promise<FhevmInstance> {
 
       // Dynamic import to avoid SSR/WASM issues
       const sdk = await import("@zama-fhe/relayer-sdk/web");
-      const { createInstance, SepoliaConfig, initSDK } = sdk;
+      const { createInstance, initSDK } = sdk;
 
       // CRITICAL: Initialize WASM modules first before createInstance
       if (!sdkInitialized) {
@@ -77,19 +77,13 @@ export async function initFheInstance(): Promise<FhevmInstance> {
         }
       }
 
-      // Try using SepoliaConfig first (simpler approach)
-      let instance: FhevmInstance;
-      try {
-        console.log("📡 Attempting createInstance with SepoliaConfig...");
-        instance = await createInstance(SepoliaConfig);
-        console.log("✅ FHEVM instance initialized with SepoliaConfig");
-      } catch (sepoliaError) {
-        console.warn("⚠️ SepoliaConfig failed, trying manual config:", sepoliaError);
-        // Fallback to manual configuration
-        console.log("📡 Attempting createInstance with manual config...");
-        instance = await createInstance(SEPOLIA_MANUAL_CONFIG);
-        console.log("✅ FHEVM instance initialized with manual config");
-      }
+      // Use manual config with correct gatewayChainId (10901)
+      // SepoliaConfig from SDK may have wrong values, so we use explicit config
+      console.log("📡 Creating instance with manual Sepolia config...");
+      console.log("   gatewayChainId:", SEPOLIA_MANUAL_CONFIG.gatewayChainId);
+      console.log("   relayerUrl:", SEPOLIA_MANUAL_CONFIG.relayerUrl);
+      const instance = await createInstance(SEPOLIA_MANUAL_CONFIG);
+      console.log("✅ FHEVM instance initialized with manual config");
 
       fhevmInstance = instance;
       console.log("🔐 FHEVM Relayer SDK ready for encryption operations");
