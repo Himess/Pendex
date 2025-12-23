@@ -362,8 +362,23 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
     : 0;
   const fees = positionSize * 0.001;
 
+  // Loading state - show spinner while checking session
+  if (sessionLoading) {
+    return (
+      <div className="w-64 bg-card border border-border rounded-lg overflow-y-auto flex-shrink-0">
+        <div className="px-2.5 py-1.5 border-b border-border">
+          <h2 className="text-xs font-semibold text-text-primary">TRADE</h2>
+        </div>
+        <div className="p-8 flex flex-col items-center justify-center">
+          <Loader2 className="w-8 h-8 text-gold animate-spin" />
+          <p className="text-xs text-text-muted mt-2">Loading session...</p>
+        </div>
+      </div>
+    );
+  }
+
   // If session not ready, show setup message
-  if (isConnected && !canTrade && !sessionLoading) {
+  if (isConnected && !isSessionActive) {
     return (
       <div className="w-64 bg-card border border-border rounded-lg overflow-y-auto flex-shrink-0">
         <div className="px-2.5 py-1.5 border-b border-border">
