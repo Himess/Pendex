@@ -42,7 +42,7 @@ export const useChartData = ({ symbol, basePrice, timeframe }: UseChartDataProps
     // Add timeframe to seed for different data per timeframe
     seed += timeframe.charCodeAt(0) * 100;
 
-    let currentPrice = basePrice * 0.85; // Start lower for uptrend
+    let currentPrice = basePrice * 0.98; // Start near current price
 
     for (let i = bars - 1; i >= 0; i--) {
       const barTime = new Date(now.getTime() - i * minutesPerBar * 60 * 1000);

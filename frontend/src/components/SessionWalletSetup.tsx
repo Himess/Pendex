@@ -30,7 +30,7 @@ export function SessionWalletSetup({ onComplete, className }: SessionWalletSetup
   } = useSessionWallet();
 
   const [isExpanded, setIsExpanded] = useState(false);
-  const [fundAmount, setFundAmount] = useState("0.01");
+  const [fundAmount, setFundAmount] = useState("0.5");
 
   // Handle setup
   const handleSetup = async () => {
@@ -50,28 +50,73 @@ export function SessionWalletSetup({ onComplete, className }: SessionWalletSetup
 
   // ===== ACTIVE SESSION: Minimal success indicator =====
   if (isSessionActive) {
+    const balanceNum = parseFloat(sessionBalance);
+    const isLowBalance = balanceNum < 0.1;
+
+    const copyAddress = () => {
+      if (sessionAddress) {
+        navigator.clipboard.writeText(sessionAddress);
+      }
+    };
+
     return (
-      <div className={cn(
-        "flex items-center justify-between px-4 py-3 bg-success/10 border border-success/30 rounded-xl",
-        className
-      )}>
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-success/20 border-2 border-success/70 shadow-[0_0_8px_rgba(16,185,129,0.3)] flex items-center justify-center">
-            <CheckCircle2 className="w-4 h-4 text-success" />
+      <div className={cn("rounded-xl overflow-hidden", className)}>
+        <div className={cn(
+          "flex items-center justify-between px-4 py-3",
+          isLowBalance
+            ? "bg-warning/10 border border-warning/30"
+            : "bg-success/10 border border-success/30"
+        )}>
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              "w-8 h-8 rounded-full border-2 flex items-center justify-center",
+              isLowBalance
+                ? "bg-warning/20 border-warning/70 shadow-[0_0_8px_rgba(245,158,11,0.3)]"
+                : "bg-success/20 border-success/70 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
+            )}>
+              {isLowBalance ? (
+                <AlertCircle className="w-4 h-4 text-warning" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 text-success" />
+              )}
+            </div>
+            <div>
+              <span className={cn("text-sm font-medium", isLowBalance ? "text-warning" : "text-success")}>
+                {isLowBalance ? "Low Gas Balance" : "Session Active"}
+              </span>
+              <span className="text-xs text-text-muted ml-2">
+                {balanceNum.toFixed(4)} ETH
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="text-sm font-medium text-success">Session Active</span>
-            <span className="text-xs text-text-muted ml-2">
-              {parseFloat(sessionBalance).toFixed(4)} ETH
-            </span>
+          <div className="flex items-center gap-2">
+            {isLowBalance && (
+              <button
+                onClick={copyAddress}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-warning/20 text-warning hover:bg-warning/30 transition-colors"
+                title="Copy session address to send ETH"
+              >
+                Top Up
+              </button>
+            )}
+            <button
+              onClick={clearSession}
+              className="text-xs text-text-muted hover:text-danger transition-colors"
+            >
+              End
+            </button>
           </div>
         </div>
-        <button
-          onClick={clearSession}
-          className="text-xs text-text-muted hover:text-danger transition-colors"
-        >
-          End
-        </button>
+        {isLowBalance && (
+          <div className="px-4 py-2 bg-warning/5 border-t border-warning/20">
+            <p className="text-xs text-text-muted">
+              FHE trades need ~0.15 ETH gas. Send ETH to:{" "}
+              <button onClick={copyAddress} className="text-warning hover:underline font-mono">
+                {sessionAddress?.slice(0, 6)}...{sessionAddress?.slice(-4)}
+              </button>
+            </p>
+          </div>
+        )}
       </div>
     );
   }
@@ -144,8 +189,8 @@ export function SessionWalletSetup({ onComplete, className }: SessionWalletSetup
           <div className="flex items-start gap-2 mt-3 p-3 bg-background rounded-lg">
             <Info className="w-4 h-4 text-text-muted mt-0.5 flex-shrink-0" />
             <p className="text-xs text-text-muted">
-              Creates a temporary trading key so you don't need to approve every transaction.
-              Your main wallet stays secure.
+              Creates a temporary trading key for popup-free trading.
+              FHE encrypted trades require ~0.15 ETH gas per transaction.
             </p>
           </div>
 
@@ -153,7 +198,7 @@ export function SessionWalletSetup({ onComplete, className }: SessionWalletSetup
           <div className="mt-4">
             <label className="text-xs text-text-muted mb-2 block">Gas funding</label>
             <div className="flex gap-2.5">
-              {["0.005", "0.01", "0.02", "0.05"].map((amount) => (
+              {["0.1", "0.5", "1"].map((amount) => (
                 <button
                   key={amount}
                   onClick={() => setFundAmount(amount)}
