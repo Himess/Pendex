@@ -322,7 +322,7 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
             // Transfer compensation to trader via sUSD
             euint64 compAmount = FHE.asEuint64(uint64(compensationAmount));
-            FHE.allow(compAmount, address(shadowUsd));
+            FHE.allowTransient(compAmount, address(shadowUsd));
             shadowUsd.vaultWithdraw(trader, compAmount);
 
             emit SlippageCompensation(trader, compensationAmount, actualSlippageBps, guaranteedSlippageBps);
@@ -502,10 +502,11 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
         // UPDATED: Transfer sUSD directly from user to vault (no separate deposit step!)
         // This uses the sUSD balance directly - like Hyperliquid!
-        // CRITICAL: Grant ACL to ShadowUSD contract BEFORE calling vaultDeposit
+        // CRITICAL: Grant TRANSIENT ACL to ShadowUSD contract BEFORE calling vaultDeposit
         // ShadowUSD needs permission to use collateral in FHE.ge() operations
         // NOTE: We use 'trader' (main wallet) for the transfer, not msg.sender (session wallet)
-        FHE.allow(collateral, address(shadowUsd));
+        // Using allowTransient for same-transaction cross-contract calls (per Zama docs)
+        FHE.allowTransient(collateral, address(shadowUsd));
         bool transferSuccess = shadowUsd.vaultDeposit(trader, collateral);
         require(transferSuccess, "Insufficient sUSD balance");
 
@@ -523,14 +524,14 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
         FHE.allowThis(size);
         FHE.allow(size, trader);
-        FHE.allow(size, address(oracle));  // Oracle needs ACL for updateOpenInterest
+        FHE.allowTransient(size, address(oracle));  // Oracle needs TRANSIENT ACL for updateOpenInterest
 
         FHE.allowThis(entryPrice);
         FHE.allow(entryPrice, trader);
 
         FHE.allowThis(isLong);
         FHE.allow(isLong, trader);
-        FHE.allow(isLong, address(oracle));  // Oracle needs ACL for updateOpenInterest
+        FHE.allowTransient(isLong, address(oracle));  // Oracle needs TRANSIENT ACL for updateOpenInterest
 
         FHE.allowThis(leverage);
         FHE.allow(leverage, trader);
@@ -592,14 +593,15 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         // UPDATED: Transfer sUSD directly back to main wallet (position owner)
         // This returns the collateral + P&L to user's sUSD balance
         // NOTE: We use position.owner (main wallet) not msg.sender (could be session wallet)
-        // CRITICAL: Grant ACL to ShadowUSD contract BEFORE calling vaultWithdraw
-        FHE.allow(finalAmount, address(shadowUsd));
+        // CRITICAL: Grant TRANSIENT ACL to ShadowUSD contract BEFORE calling vaultWithdraw
+        // Using allowTransient for same-transaction cross-contract calls (per Zama docs)
+        FHE.allowTransient(finalAmount, address(shadowUsd));
         shadowUsd.vaultWithdraw(position.owner, finalAmount);
 
         // Decrease OI in Oracle (encrypted direction, public totalOI)
-        // CRITICAL: Grant ACL to Oracle for encrypted values
-        FHE.allow(position.size, address(oracle));
-        FHE.allow(position.isLong, address(oracle));
+        // CRITICAL: Grant TRANSIENT ACL to Oracle for encrypted values
+        FHE.allowTransient(position.size, address(oracle));
+        FHE.allowTransient(position.isLong, address(oracle));
         oracle.updateOpenInterest(
             position.assetId,
             position.size,     // encrypted amount
@@ -1192,8 +1194,8 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         ebool isLong = FHE.fromExternal(encryptedIsLong, inputProof);
 
         // UPDATED: Transfer sUSD directly from user to vault (no separate deposit step!)
-        // CRITICAL: Grant ACL to ShadowUSD contract BEFORE calling vaultDeposit
-        FHE.allow(collateral, address(shadowUsd));
+        // CRITICAL: Grant TRANSIENT ACL to ShadowUSD contract BEFORE calling vaultDeposit
+        FHE.allowTransient(collateral, address(shadowUsd));
         bool transferSuccess = shadowUsd.vaultDeposit(msg.sender, collateral);
         require(transferSuccess, "Insufficient sUSD balance");
 
@@ -1279,8 +1281,8 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         euint64 finalAmount = FHE.add(position.collateral, pnl);
 
         // UPDATED: Transfer sUSD directly back to user's wallet
-        // CRITICAL: Grant ACL to ShadowUSD contract BEFORE calling vaultWithdraw
-        FHE.allow(finalAmount, address(shadowUsd));
+        // CRITICAL: Grant TRANSIENT ACL to ShadowUSD contract BEFORE calling vaultWithdraw
+        FHE.allowTransient(finalAmount, address(shadowUsd));
         shadowUsd.vaultWithdraw(msg.sender, finalAmount);
 
         // Mark position as closed
@@ -1838,8 +1840,8 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
         // UPDATED: Transfer sUSD directly back to user's wallet
         euint64 amountToReturn = FHE.asEuint64(finalAmount);
-        // CRITICAL: Grant ACL to ShadowUSD contract BEFORE calling vaultWithdraw
-        FHE.allow(amountToReturn, address(shadowUsd));
+        // CRITICAL: Grant TRANSIENT ACL to ShadowUSD contract BEFORE calling vaultWithdraw
+        FHE.allowTransient(amountToReturn, address(shadowUsd));
         shadowUsd.vaultWithdraw(pending.user, amountToReturn);
 
         // Close position and clear pending flag
