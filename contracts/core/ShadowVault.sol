@@ -523,12 +523,14 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
         FHE.allowThis(size);
         FHE.allow(size, trader);
+        FHE.allow(size, address(oracle));  // Oracle needs ACL for updateOpenInterest
 
         FHE.allowThis(entryPrice);
         FHE.allow(entryPrice, trader);
 
         FHE.allowThis(isLong);
         FHE.allow(isLong, trader);
+        FHE.allow(isLong, address(oracle));  // Oracle needs ACL for updateOpenInterest
 
         FHE.allowThis(leverage);
         FHE.allow(leverage, trader);
@@ -595,6 +597,9 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
         shadowUsd.vaultWithdraw(position.owner, finalAmount);
 
         // Decrease OI in Oracle (encrypted direction, public totalOI)
+        // CRITICAL: Grant ACL to Oracle for encrypted values
+        FHE.allow(position.size, address(oracle));
+        FHE.allow(position.isLong, address(oracle));
         oracle.updateOpenInterest(
             position.assetId,
             position.size,     // encrypted amount

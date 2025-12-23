@@ -5,7 +5,7 @@ export type SupportedNetwork = "sepolia" | "hardhat";
 export const NETWORK_CONTRACTS = {
   sepolia: {
     // Session 9 - Session Wallet Support + FHE ACL Fix
-    shadowVault: "0x0EBC28B9e41474c015Aab15B9a2046F4d54FD3D6" as `0x${string}`,
+    shadowVault: "0x7da7d59565cB7Bf38f96c895C3760549fF77F3fE" as `0x${string}`,
     shadowOracle: "0xadee307469f5FEF36485aB0194Bc1C042b7Cd2FE" as `0x${string}`,
     shadowUsd: "0x6C365a341C2A7D94cb0204A3f22CC810A7357F18" as `0x${string}`,
     shadowLiquidityPool: "0xF15e759229dc61f7ece238503368B1a0BafF0773" as `0x${string}`,
