@@ -362,6 +362,18 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
     : 0;
   const fees = positionSize * 0.001;
 
+  // DEBUG: Log session state
+  console.log("🎯 TradingPanel Session State:", {
+    isConnected,
+    isSessionActive,
+    sessionLoading,
+    needsSetup,
+    sessionAddress,
+    canTrade,
+    hasNoSession,
+    hasInactiveSession,
+  });
+
   // Loading state - show spinner while checking session
   if (sessionLoading) {
     return (
