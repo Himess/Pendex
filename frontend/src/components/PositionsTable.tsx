@@ -44,23 +44,13 @@ interface Position {
   isRevealed: boolean;
   isEncrypted: boolean;
   isDecrypting: boolean;
-  // Raw encrypted handles
-  encryptedCollateral?: string;
-  encryptedLeverage?: string;
-  encryptedIsLong?: string;
-  encryptedEntryPrice?: string;
 }
 
-interface RawPosition {
-  owner: string;
-  assetId: string;
-  collateral: string;
-  leverage: string;
-  isLong: string;
-  entryPrice: string;
-  isOpen: boolean;
-  openTimestamp: bigint;
-}
+// getPosition returns flat tuple: [owner, assetId, isOpen, openTimestamp]
+type RawPositionBasic = [string, string, boolean, bigint];
+
+// getPositionEncryptedData returns: [collateral, size, entryPrice, isLong, leverage]
+type RawPositionEncrypted = [bigint, bigint, bigint, bigint, bigint];
 
 export function PositionsTable() {
   const { address, isConnected } = useAccount();
@@ -117,17 +107,19 @@ export function PositionsTable() {
     try {
       for (const posId of positionIds as bigint[]) {
         try {
-          // Get position data from contract
+          // Get basic position data (returns flat tuple: [owner, assetId, isOpen, openTimestamp])
           const rawPosition = await publicClient.readContract({
             address: CONTRACTS.shadowVault as `0x${string}`,
             abi: SHADOW_VAULT_ABI,
             functionName: "getPosition",
             args: [posId],
-          }) as RawPosition;
+          }) as RawPositionBasic;
 
-          if (!rawPosition.isOpen) continue;
+          // Destructure flat tuple
+          const [owner, assetId, isOpen, openTimestamp] = rawPosition;
 
-          const assetId = rawPosition.assetId as string;
+          if (!isOpen) continue;
+
           const assetInfo = ASSET_ID_TO_NAME[assetId.toLowerCase()] || { name: "Unknown", symbol: "???" };
 
           // Get current price from Oracle
@@ -144,27 +136,26 @@ export function PositionsTable() {
             console.error("Error fetching price:", e);
           }
 
+          // Note: Encrypted data (collateral, leverage, isLong, entryPrice)
+          // will be fetched via getPositionEncryptedData when REVEAL is clicked
           fetchedPositions.push({
             id: `pos-${posId.toString()}`,
             positionId: posId,
             asset: assetInfo.name,
             symbol: assetInfo.symbol,
             assetId: assetId,
-            side: "LONG", // Will be decrypted
+            side: "LONG", // Will be decrypted on REVEAL
             size: 0, // Will be calculated after decrypt
-            entryPrice: 0, // Will be decrypted
+            entryPrice: 0, // Will be decrypted on REVEAL
             currentPrice,
-            leverage: 0, // Will be decrypted
-            collateral: 0, // Will be decrypted
-            pnl: 0, // Will be calculated
+            leverage: 0, // Will be decrypted on REVEAL
+            collateral: 0, // Will be decrypted on REVEAL
+            pnl: 0, // Will be calculated after decrypt
             pnlPercent: 0,
             isRevealed: false,
             isEncrypted: true,
             isDecrypting: false,
-            encryptedCollateral: rawPosition.collateral,
-            encryptedLeverage: rawPosition.leverage,
-            encryptedIsLong: rawPosition.isLong,
-            encryptedEntryPrice: rawPosition.entryPrice,
+            // Encrypted handles will be fetched on REVEAL click
           });
         } catch (e) {
           console.error(`Error fetching position ${posId}:`, e);
@@ -215,8 +206,8 @@ export function PositionsTable() {
 
   // Decrypt position data using SESSION WALLET
   const decryptPosition = useCallback(async (positionId: string) => {
-    if (!isSessionActive || !sessionAddress || !fheReady) {
-      console.error("Session wallet or FHE not ready");
+    if (!isSessionActive || !sessionAddress || !fheReady || !publicClient) {
+      console.error("Session wallet, FHE, or publicClient not ready");
       return;
     }
 
@@ -236,68 +227,58 @@ export function PositionsTable() {
     ));
 
     try {
-      // Decrypt collateral using SESSION WALLET
+      // First, fetch encrypted handles via getPositionEncryptedData
+      // This returns: [collateral, size, entryPrice, isLong, leverage]
+      const encryptedData = await publicClient.readContract({
+        address: CONTRACTS.shadowVault as `0x${string}`,
+        abi: SHADOW_VAULT_ABI,
+        functionName: "getPositionEncryptedData",
+        args: [position.positionId],
+        account: sessionAddress as `0x${string}`, // Must be owner
+      }) as RawPositionEncrypted;
+
+      const [encCollateral, encSize, encEntryPrice, encIsLong, encLeverage] = encryptedData;
+
+      // Convert handles to hex strings for decryption
+      const collateralHandle = ("0x" + encCollateral.toString(16).padStart(64, "0")) as `0x${string}`;
+      const leverageHandle = ("0x" + encLeverage.toString(16).padStart(64, "0")) as `0x${string}`;
+      const isLongHandle = ("0x" + encIsLong.toString(16).padStart(64, "0")) as `0x${string}`;
+      const entryPriceHandle = ("0x" + encEntryPrice.toString(16).padStart(64, "0")) as `0x${string}`;
+
+      // Decrypt collateral
       let collateral = 0;
-      if (position.encryptedCollateral && position.encryptedCollateral !== "0x" + "0".repeat(64)) {
-        try {
-          const decrypted = await decryptValue(
-            position.encryptedCollateral as `0x${string}`,
-            CONTRACTS.shadowVault,
-            sessionAddress, // Use session wallet address!
-            viemSigner // Use wrapped session signer!
-          );
-          collateral = Number(decrypted) / 1e6;
-        } catch (e) {
-          console.error("Error decrypting collateral:", e);
-        }
+      try {
+        const decrypted = await decryptValue(collateralHandle, CONTRACTS.shadowVault, sessionAddress, viemSigner);
+        collateral = Number(decrypted) / 1e6;
+      } catch (e) {
+        console.error("Error decrypting collateral:", e);
       }
 
       // Decrypt leverage
       let leverage = 1;
-      if (position.encryptedLeverage && position.encryptedLeverage !== "0x" + "0".repeat(64)) {
-        try {
-          const decrypted = await decryptValue(
-            position.encryptedLeverage as `0x${string}`,
-            CONTRACTS.shadowVault,
-            sessionAddress,
-            viemSigner
-          );
-          leverage = Number(decrypted);
-        } catch (e) {
-          console.error("Error decrypting leverage:", e);
-        }
+      try {
+        const decrypted = await decryptValue(leverageHandle, CONTRACTS.shadowVault, sessionAddress, viemSigner);
+        leverage = Number(decrypted);
+      } catch (e) {
+        console.error("Error decrypting leverage:", e);
       }
 
       // Decrypt isLong
       let isLong = true;
-      if (position.encryptedIsLong && position.encryptedIsLong !== "0x" + "0".repeat(64)) {
-        try {
-          const decrypted = await decryptValue(
-            position.encryptedIsLong as `0x${string}`,
-            CONTRACTS.shadowVault,
-            sessionAddress,
-            viemSigner
-          );
-          isLong = Number(decrypted) === 1;
-        } catch (e) {
-          console.error("Error decrypting isLong:", e);
-        }
+      try {
+        const decrypted = await decryptValue(isLongHandle, CONTRACTS.shadowVault, sessionAddress, viemSigner);
+        isLong = Number(decrypted) === 1;
+      } catch (e) {
+        console.error("Error decrypting isLong:", e);
       }
 
       // Decrypt entry price
       let entryPrice = 0;
-      if (position.encryptedEntryPrice && position.encryptedEntryPrice !== "0x" + "0".repeat(64)) {
-        try {
-          const decrypted = await decryptValue(
-            position.encryptedEntryPrice as `0x${string}`,
-            CONTRACTS.shadowVault,
-            sessionAddress,
-            viemSigner
-          );
-          entryPrice = Number(decrypted) / 1e6;
-        } catch (e) {
-          console.error("Error decrypting entry price:", e);
-        }
+      try {
+        const decrypted = await decryptValue(entryPriceHandle, CONTRACTS.shadowVault, sessionAddress, viemSigner);
+        entryPrice = Number(decrypted) / 1e6;
+      } catch (e) {
+        console.error("Error decrypting entry price:", e);
       }
 
       // Calculate size and P&L
@@ -329,7 +310,7 @@ export function PositionsTable() {
         p.id === positionId ? { ...p, isDecrypting: false } : p
       ));
     }
-  }, [positions, isSessionActive, sessionAddress, fheReady, createViemCompatibleSigner]);
+  }, [positions, isSessionActive, sessionAddress, fheReady, publicClient, createViemCompatibleSigner]);
 
   const toggleReveal = (positionId: string) => {
     const position = positions.find(p => p.id === positionId);

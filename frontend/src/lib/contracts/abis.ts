@@ -18,24 +18,29 @@ export const SHADOW_VAULT_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
+  // getPosition returns basic info (no encrypted data)
   {
     inputs: [{ name: "positionId", type: "uint256" }],
     name: "getPosition",
     outputs: [
-      {
-        components: [
-          { name: "owner", type: "address" },
-          { name: "assetId", type: "bytes32" },
-          { name: "collateral", type: "bytes32" },
-          { name: "leverage", type: "bytes32" },
-          { name: "isLong", type: "bytes32" },
-          { name: "entryPrice", type: "bytes32" },
-          { name: "isOpen", type: "bool" },
-          { name: "openTimestamp", type: "uint256" },
-        ],
-        name: "",
-        type: "tuple",
-      },
+      { name: "owner", type: "address" },
+      { name: "assetId", type: "bytes32" },
+      { name: "isOpen", type: "bool" },
+      { name: "openTimestamp", type: "uint256" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  // getPositionEncryptedData returns FHE encrypted values (requires owner)
+  {
+    inputs: [{ name: "positionId", type: "uint256" }],
+    name: "getPositionEncryptedData",
+    outputs: [
+      { name: "collateral", type: "uint256" },
+      { name: "size", type: "uint256" },
+      { name: "entryPrice", type: "uint256" },
+      { name: "isLong", type: "uint256" },
+      { name: "leverage", type: "uint256" },
     ],
     stateMutability: "view",
     type: "function",
