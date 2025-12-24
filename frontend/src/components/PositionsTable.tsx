@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Lock, TrendingUp, TrendingDown, RefreshCw, Shield, Loader2, X } from "lucide-react";
+import { Lock, TrendingUp, TrendingDown, RefreshCw, Shield, Loader2, X, Eye } from "lucide-react";
 import { formatUSD, formatPercent } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { useAccount, usePublicClient } from "wagmi";
+import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { useUserPositions } from "@/lib/contracts/hooks";
 import { CONTRACTS } from "@/lib/contracts/config";
 import { SHADOW_VAULT_ABI, SHADOW_ORACLE_ABI } from "@/lib/contracts/abis";
@@ -53,10 +53,11 @@ type RawPositionEncrypted = [bigint, bigint, bigint, bigint, bigint];
 export function PositionsTable() {
   const { address, isConnected } = useAccount();
   const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient(); // Main wallet for FHE decrypt
 
   // Session wallet for signing, but positions are stored under MAIN WALLET
   // Contract's _resolveTrader() converts session wallet → main wallet
-  const { sessionAddress, isSessionActive, getSessionSigner, mainWallet } = useSessionWallet();
+  const { mainWallet, isSessionActive } = useSessionWallet();
   const { closePosition: closePositionWithSession, isTrading: isClosing, isSuccess: closeSuccess } = useTradeWithSession();
 
   // The owner address is mainWallet if session is active, otherwise connected wallet
@@ -70,6 +71,8 @@ export function PositionsTable() {
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [fheReady, setFheReady] = useState(false);
   const [closingPositionId, setClosingPositionId] = useState<bigint | null>(null);
+  const [isDecryptingAll, setIsDecryptingAll] = useState(false);
+  const [hasDecrypted, setHasDecrypted] = useState(false);
 
   // Initialize FHE
   useEffect(() => {
@@ -91,7 +94,7 @@ export function PositionsTable() {
     }
   }, [closeSuccess, refetchPositions]);
 
-  // Fetch position data from contract - auto decrypts!
+  // Fetch position data from contract (without decrypting - that requires user action)
   const fetchPositionData = useCallback(async () => {
     if (!isConnected || !positionIds || !publicClient || !ownerAddress || (positionIds as bigint[]).length === 0) {
       setPositions([]);
@@ -148,14 +151,14 @@ export function PositionsTable() {
             console.error("Error fetching price:", e);
           }
 
-          // Add position with loading state - will decrypt automatically
+          // Add position - values are encrypted until user clicks "Decrypt"
           fetchedPositions.push({
             id: `pos-${posId.toString()}`,
             positionId: posId,
             asset: assetInfo.name,
             symbol: assetInfo.symbol,
             assetId: assetId,
-            side: "LONG", // Will be decrypted
+            side: "LONG", // Default, will be decrypted
             size: 0,
             entryPrice: 0,
             currentPrice,
@@ -164,7 +167,7 @@ export function PositionsTable() {
             pnl: 0,
             pnlPercent: 0,
             isDecrypted: false,
-            isDecrypting: true, // Start decrypting immediately
+            isDecrypting: false,
           });
         } catch (e) {
           console.error(`Error fetching position ${posId}:`, e);
@@ -172,175 +175,135 @@ export function PositionsTable() {
       }
 
       setPositions(fetchedPositions);
-
-      // Auto-decrypt all positions
-      if (fetchedPositions.length > 0 && fheReady) {
-        for (const pos of fetchedPositions) {
-          decryptPositionData(pos.id, pos.positionId);
-        }
-      }
     } catch (e) {
       console.error("Error fetching positions:", e);
     } finally {
       setIsLoadingData(false);
     }
-  }, [isConnected, positionIds, publicClient, ownerAddress, fheReady]);
+  }, [isConnected, positionIds, publicClient, ownerAddress]);
 
   // Fetch positions when IDs change
   useEffect(() => {
     fetchPositionData();
   }, [fetchPositionData]);
 
-  // Create a viem-compatible signer wrapper from ethers.js session wallet
-  const createViemCompatibleSigner = useCallback(() => {
-    if (!isSessionActive || !sessionAddress) return null;
-
-    const ethersSigner = getSessionSigner();
-    if (!ethersSigner) return null;
-
-    // Wrap ethers.js signer to use viem-style signTypedData API
-    return {
-      signTypedData: async (params: {
-        domain: Record<string, unknown>;
-        types: Record<string, Array<{ name: string; type: string }>>;
-        primaryType: string;
-        message: Record<string, unknown>;
-      }) => {
-        // ethers.js uses separate parameters, not object
-        // Also need to remove EIP712Domain from types (ethers handles it internally)
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { EIP712Domain, ...typesWithoutDomain } = params.types;
-        const signature = await ethersSigner.signTypedData(
-          params.domain,
-          typesWithoutDomain,
-          params.message
-        );
-        return signature;
-      },
-    };
-  }, [isSessionActive, sessionAddress, getSessionSigner]);
-
-  // Decrypt position data - called automatically on load
-  const decryptPositionData = useCallback(async (positionId: string, positionBigInt: bigint) => {
-    if (!fheReady || !publicClient || !ownerAddress) {
-      console.log("⏳ Waiting for FHE/publicClient/ownerAddress...");
+  // Decrypt ALL positions using MAIN WALLET (requires MetaMask popup once)
+  const decryptAllPositions = useCallback(async () => {
+    if (!fheReady || !publicClient || !ownerAddress || !walletClient || positions.length === 0) {
+      console.log("⏳ Cannot decrypt: missing FHE/publicClient/ownerAddress/walletClient");
       return;
     }
 
-    // Create viem-compatible signer from session wallet (needed for FHE decrypt)
-    const viemSigner = createViemCompatibleSigner();
-    const signerAddress = isSessionActive ? sessionAddress : ownerAddress;
+    setIsDecryptingAll(true);
 
-    console.log(`🔓 Decrypting position ${positionId}...`);
-    console.log(`   Owner: ${ownerAddress}, Signer: ${signerAddress}`);
+    // Mark all as decrypting
+    setPositions(prev => prev.map(p => ({ ...p, isDecrypting: true })));
+
+    console.log(`🔓 Decrypting ${positions.length} positions with main wallet...`);
+    console.log(`   Owner/Signer: ${ownerAddress}`);
 
     try {
-      // Fetch encrypted handles via getPositionEncryptedData
-      // CRITICAL: Use ownerAddress as account (position owner), not sessionAddress
-      const encryptedData = await publicClient.readContract({
-        address: CONTRACTS.shadowVault as `0x${string}`,
-        abi: SHADOW_VAULT_ABI,
-        functionName: "getPositionEncryptedData",
-        args: [positionBigInt],
-        account: ownerAddress, // Must be position owner!
-      }) as RawPositionEncrypted;
+      for (const position of positions) {
+        if (position.isDecrypted) continue;
 
-      console.log(`📦 Encrypted data for position ${positionId}:`, encryptedData);
-
-      const [encCollateral, , encEntryPrice, encIsLong, encLeverage] = encryptedData;
-
-      // For now, show raw encrypted values as placeholders
-      // Real FHE decrypt requires signature which needs wallet popup
-      // We'll show the encrypted handles converted to rough estimates
-
-      // These are FHE handles, not actual values
-      // Without proper FHE decrypt, we show loading state
-      let collateral = 0;
-      let leverage = 1;
-      let isLong = true;
-      let entryPrice = 0;
-
-      // Try FHE decrypt if we have a signer
-      if (viemSigner && signerAddress) {
         try {
+          // Fetch encrypted handles via getPositionEncryptedData
+          const encryptedData = await publicClient.readContract({
+            address: CONTRACTS.shadowVault as `0x${string}`,
+            abi: SHADOW_VAULT_ABI,
+            functionName: "getPositionEncryptedData",
+            args: [position.positionId],
+            account: ownerAddress,
+          }) as RawPositionEncrypted;
+
+          console.log(`📦 Encrypted data for ${position.id}:`, encryptedData);
+
+          const [encCollateral, , encEntryPrice, encIsLong, encLeverage] = encryptedData;
+
+          // Convert to hex handles
           const collateralHandle = ("0x" + encCollateral.toString(16).padStart(64, "0")) as `0x${string}`;
           const leverageHandle = ("0x" + encLeverage.toString(16).padStart(64, "0")) as `0x${string}`;
           const isLongHandle = ("0x" + encIsLong.toString(16).padStart(64, "0")) as `0x${string}`;
           const entryPriceHandle = ("0x" + encEntryPrice.toString(16).padStart(64, "0")) as `0x${string}`;
 
-          // Decrypt each value
+          let collateral = 0;
+          let leverage = 1;
+          let isLong = true;
+          let entryPrice = 0;
+
+          // Decrypt using MAIN WALLET (walletClient)
           try {
-            const decrypted = await decryptValue(collateralHandle, CONTRACTS.shadowVault, signerAddress, viemSigner);
+            const decrypted = await decryptValue(collateralHandle, CONTRACTS.shadowVault, ownerAddress, walletClient);
             collateral = Number(decrypted) / 1e6;
-            console.log(`   Collateral: ${collateral}`);
+            console.log(`   ✅ Collateral: ${collateral}`);
           } catch (e) {
-            console.log("   Collateral decrypt failed:", e);
+            console.log("   ❌ Collateral decrypt failed:", e);
           }
 
           try {
-            const decrypted = await decryptValue(leverageHandle, CONTRACTS.shadowVault, signerAddress, viemSigner);
+            const decrypted = await decryptValue(leverageHandle, CONTRACTS.shadowVault, ownerAddress, walletClient);
             leverage = Number(decrypted);
-            console.log(`   Leverage: ${leverage}x`);
+            console.log(`   ✅ Leverage: ${leverage}x`);
           } catch (e) {
-            console.log("   Leverage decrypt failed:", e);
+            console.log("   ❌ Leverage decrypt failed:", e);
           }
 
           try {
-            const decrypted = await decryptValue(isLongHandle, CONTRACTS.shadowVault, signerAddress, viemSigner);
+            const decrypted = await decryptValue(isLongHandle, CONTRACTS.shadowVault, ownerAddress, walletClient);
             isLong = Number(decrypted) === 1;
-            console.log(`   IsLong: ${isLong}`);
+            console.log(`   ✅ IsLong: ${isLong}`);
           } catch (e) {
-            console.log("   IsLong decrypt failed:", e);
+            console.log("   ❌ IsLong decrypt failed:", e);
           }
 
           try {
-            const decrypted = await decryptValue(entryPriceHandle, CONTRACTS.shadowVault, signerAddress, viemSigner);
+            const decrypted = await decryptValue(entryPriceHandle, CONTRACTS.shadowVault, ownerAddress, walletClient);
             entryPrice = Number(decrypted) / 1e6;
-            console.log(`   Entry Price: ${entryPrice}`);
+            console.log(`   ✅ Entry Price: ${entryPrice}`);
           } catch (e) {
-            console.log("   Entry Price decrypt failed:", e);
+            console.log("   ❌ Entry Price decrypt failed:", e);
           }
+
+          // Calculate size and P&L
+          const size = collateral * leverage;
+          const priceDiff = position.currentPrice - entryPrice;
+          const pnl = entryPrice > 0
+            ? (isLong ? (priceDiff / entryPrice) * size : (-priceDiff / entryPrice) * size)
+            : 0;
+          const pnlPercent = collateral > 0 && entryPrice > 0 ? (pnl / collateral) * 100 : 0;
+
+          // Update this position
+          setPositions(prev => prev.map(p =>
+            p.id === position.id ? {
+              ...p,
+              collateral,
+              leverage,
+              side: isLong ? "LONG" : "SHORT",
+              entryPrice,
+              size,
+              pnl,
+              pnlPercent,
+              isDecrypted: true,
+              isDecrypting: false,
+            } : p
+          ));
+
+          console.log(`✅ Position ${position.id} decrypted!`);
         } catch (e) {
-          console.error("FHE decrypt error:", e);
+          console.error(`❌ Error decrypting ${position.id}:`, e);
+          setPositions(prev => prev.map(p =>
+            p.id === position.id ? { ...p, isDecrypting: false } : p
+          ));
         }
       }
 
-      // Get current price for P&L calculation
-      const position = positions.find(p => p.id === positionId);
-      const currentPrice = position?.currentPrice || 0;
-
-      // Calculate size and P&L
-      const size = collateral * leverage;
-      const priceDiff = currentPrice - entryPrice;
-      const pnl = entryPrice > 0
-        ? (isLong ? (priceDiff / entryPrice) * size : (-priceDiff / entryPrice) * size)
-        : 0;
-      const pnlPercent = collateral > 0 && entryPrice > 0 ? (pnl / collateral) * 100 : 0;
-
-      // Update position with decrypted data
-      setPositions(prev => prev.map(p =>
-        p.id === positionId ? {
-          ...p,
-          collateral,
-          leverage,
-          side: isLong ? "LONG" : "SHORT",
-          entryPrice,
-          size,
-          pnl,
-          pnlPercent,
-          isDecrypted: true,
-          isDecrypting: false,
-        } : p
-      ));
-
-      console.log(`✅ Position ${positionId} decrypted!`);
+      setHasDecrypted(true);
     } catch (e) {
-      console.error(`❌ Error decrypting position ${positionId}:`, e);
-      setPositions(prev => prev.map(p =>
-        p.id === positionId ? { ...p, isDecrypting: false } : p
-      ));
+      console.error("❌ Decrypt all failed:", e);
+    } finally {
+      setIsDecryptingAll(false);
     }
-  }, [fheReady, publicClient, ownerAddress, isSessionActive, sessionAddress, createViemCompatibleSigner, positions]);
+  }, [fheReady, publicClient, ownerAddress, walletClient, positions]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -358,16 +321,6 @@ export function PositionsTable() {
     await closePositionWithSession(positionId);
   };
 
-  const DecryptedValue = ({ value, isLoading }: { value: string; isLoading?: boolean }) => (
-    <span className="flex items-center gap-1 text-xs text-text-primary">
-      {isLoading ? (
-        <Loader2 className="w-3 h-3 animate-spin text-gold" />
-      ) : (
-        value
-      )}
-    </span>
-  );
-
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden h-full flex flex-col">
       {/* Header */}
@@ -377,20 +330,41 @@ export function PositionsTable() {
           <h2 className="text-xs font-semibold text-text-primary uppercase tracking-wide">Open Positions</h2>
           {positions.length > 0 && (
             <span className="text-[10px] text-gold bg-gold/10 px-1.5 py-0.5 rounded">
-              {positions.length} FHE Encrypted
+              {positions.length} {hasDecrypted ? "Decrypted" : "Encrypted"}
             </span>
           )}
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={isRefreshing || isLoadingPositions || isLoadingData}
-          className="p-1 rounded hover:bg-card-hover transition-colors"
-        >
-          <RefreshCw className={cn(
-            "w-3.5 h-3.5 text-text-muted",
-            (isRefreshing || isLoadingPositions || isLoadingData) && "animate-spin"
-          )} />
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Decrypt All Button - only show if positions exist and not decrypted */}
+          {positions.length > 0 && !hasDecrypted && (
+            <button
+              onClick={decryptAllPositions}
+              disabled={isDecryptingAll || !fheReady}
+              className={cn(
+                "flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-all",
+                "bg-gold/20 text-gold border border-gold/30 hover:bg-gold/30",
+                (isDecryptingAll || !fheReady) && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              {isDecryptingAll ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Eye className="w-3 h-3" />
+              )}
+              {isDecryptingAll ? "Decrypting..." : "Decrypt All"}
+            </button>
+          )}
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing || isLoadingPositions || isLoadingData}
+            className="p-1 rounded hover:bg-card-hover transition-colors"
+          >
+            <RefreshCw className={cn(
+              "w-3.5 h-3.5 text-text-muted",
+              (isRefreshing || isLoadingPositions || isLoadingData) && "animate-spin"
+            )} />
+          </button>
+        </div>
       </div>
 
       {/* Loading State */}
@@ -437,7 +411,7 @@ export function PositionsTable() {
                   <td className="px-3 py-2">
                     {position.isDecrypting ? (
                       <Loader2 className="w-3 h-3 animate-spin text-gold" />
-                    ) : (
+                    ) : position.isDecrypted ? (
                       <span
                         className={cn(
                           "px-1.5 py-0.5 rounded text-[10px] font-medium",
@@ -446,6 +420,10 @@ export function PositionsTable() {
                       >
                         {position.side}
                       </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-text-muted">
+                        <Lock className="w-3 h-3 text-gold" />
+                      </span>
                     )}
                   </td>
 
@@ -453,28 +431,42 @@ export function PositionsTable() {
                   <td className="px-3 py-2">
                     {position.isDecrypting ? (
                       <Loader2 className="w-3 h-3 animate-spin text-gold" />
-                    ) : (
+                    ) : position.isDecrypted ? (
                       <span className="text-gold font-medium">{position.leverage}x</span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-text-muted">
+                        <Lock className="w-3 h-3 text-gold" />
+                      </span>
                     )}
                   </td>
 
                   {/* Size */}
                   <td className="px-3 py-2">
-                    <DecryptedValue
-                      value={formatUSD(position.size)}
-                      isLoading={position.isDecrypting}
-                    />
+                    {position.isDecrypting ? (
+                      <Loader2 className="w-3 h-3 animate-spin text-gold" />
+                    ) : position.isDecrypted ? (
+                      <span className="text-text-primary">{formatUSD(position.size)}</span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-text-muted text-xs">
+                        <Lock className="w-3 h-3 text-gold" />
+                      </span>
+                    )}
                   </td>
 
                   {/* Entry Price */}
                   <td className="px-3 py-2">
-                    <DecryptedValue
-                      value={formatUSD(position.entryPrice)}
-                      isLoading={position.isDecrypting}
-                    />
+                    {position.isDecrypting ? (
+                      <Loader2 className="w-3 h-3 animate-spin text-gold" />
+                    ) : position.isDecrypted ? (
+                      <span className="text-text-primary">{formatUSD(position.entryPrice)}</span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-text-muted text-xs">
+                        <Lock className="w-3 h-3 text-gold" />
+                      </span>
+                    )}
                   </td>
 
-                  {/* Current Price */}
+                  {/* Current Price - always visible */}
                   <td className="px-3 py-2">
                     <span className="text-text-primary font-medium">
                       {position.currentPrice > 0 ? formatUSD(position.currentPrice) : "-"}
@@ -485,7 +477,7 @@ export function PositionsTable() {
                   <td className="px-3 py-2">
                     {position.isDecrypting ? (
                       <Loader2 className="w-3 h-3 animate-spin text-gold" />
-                    ) : (
+                    ) : position.isDecrypted ? (
                       <div className="flex items-center gap-1.5">
                         {position.pnl >= 0 ? (
                           <TrendingUp className="w-3 h-3 text-success" />
@@ -500,6 +492,10 @@ export function PositionsTable() {
                           <span className="text-[10px] ml-1">({formatPercent(position.pnlPercent)})</span>
                         </div>
                       </div>
+                    ) : (
+                      <span className="flex items-center gap-1 text-text-muted text-xs">
+                        <Lock className="w-3 h-3 text-gold" />
+                      </span>
                     )}
                   </td>
 
