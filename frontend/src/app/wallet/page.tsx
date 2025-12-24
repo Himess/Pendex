@@ -71,9 +71,9 @@ import {
 import { createPublicClient, createWalletClient, custom, http, parseAbi } from "viem";
 import { sepolia } from "viem/chains";
 
-// Contract addresses (from config)
+// Contract addresses (from config) - use lowercase for consistency with TradingPanel
 const CONTRACT_ADDRESSES = {
-  shadowUSD: CONTRACTS.shadowUsd,
+  shadowUsd: CONTRACTS.shadowUsd,
   shadowVault: CONTRACTS.shadowVault,
   shadowLiquidityPool: CONTRACTS.shadowLiquidityPool,
 };
@@ -188,12 +188,12 @@ export default function WalletPage() {
   useEffect(() => {
     if (address) {
       // Load sUSD balance from localStorage (versioned with contract address)
-      const storedSUsd = localStorage.getItem(`susd_balance_${CONTRACT_ADDRESSES.shadowUSD}_${address}`);
+      const storedSUsd = localStorage.getItem(`susd_balance_${CONTRACT_ADDRESSES.shadowUsd}_${address}`);
       if (storedSUsd) {
         setClaimedAmount(parseFloat(storedSUsd));
       }
       // Also check faucet claimed key (versioned)
-      const storedClaimed = localStorage.getItem(`faucet_claimed_${CONTRACT_ADDRESSES.shadowUSD}_${address}`);
+      const storedClaimed = localStorage.getItem(`faucet_claimed_${CONTRACT_ADDRESSES.shadowUsd}_${address}`);
       if (storedClaimed && !storedSUsd) {
         setClaimedAmount(parseFloat(storedClaimed));
       }
@@ -266,7 +266,7 @@ export default function WalletPage() {
 
         // Fetch Mint events from ShadowUSD (faucet claims)
         const mintLogs = await client.getLogs({
-          address: CONTRACT_ADDRESSES.shadowUSD as `0x${string}`,
+          address: CONTRACT_ADDRESSES.shadowUsd as `0x${string}`,
           event: USD_EVENTS_ABI[0],
           args: { to: address },
           fromBlock,
@@ -391,7 +391,7 @@ export default function WalletPage() {
     if (isFaucetSuccess && address) {
       const newClaimed = claimedAmount + 10000; // Faucet gives 10,000 sUSD
       setClaimedAmount(newClaimed);
-      localStorage.setItem(`faucet_claimed_${CONTRACT_ADDRESSES.shadowUSD}_${address}`, newClaimed.toString());
+      localStorage.setItem(`faucet_claimed_${CONTRACT_ADDRESSES.shadowUsd}_${address}`, newClaimed.toString());
       // Refetch balance check
       setTimeout(() => refetchUsdBalance(), 2000);
     }
@@ -406,7 +406,7 @@ export default function WalletPage() {
         // Update wallet balance (claimed from faucet)
         const newClaimed = Math.max(0, claimedAmount - depositedAmount);
         setClaimedAmount(newClaimed);
-        localStorage.setItem(`faucet_claimed_${CONTRACT_ADDRESSES.shadowUSD}_${address}`, newClaimed.toString());
+        localStorage.setItem(`faucet_claimed_${CONTRACT_ADDRESSES.shadowUsd}_${address}`, newClaimed.toString());
 
         // Update vault balance
         const newVaultBalance = localVaultBalance + depositedAmount;
@@ -573,7 +573,7 @@ export default function WalletPage() {
       // Call confidentialBalanceOf - this is a state-changing call that grants ACL
       // We need to simulate the call first to get the handle
       const balanceHandle = await publicClient.simulateContract({
-        address: CONTRACT_ADDRESSES.shadowUSD as `0x${string}`,
+        address: CONTRACT_ADDRESSES.shadowUsd as `0x${string}`,
         abi: SHADOW_USD_ABI,
         functionName: "confidentialBalanceOf",
         args: [address],
@@ -599,7 +599,7 @@ export default function WalletPage() {
 
       // Step 2: Actually execute the call to grant ACL (simulate doesn't change state)
       const hash = await walletClient.writeContract({
-        address: CONTRACT_ADDRESSES.shadowUSD as `0x${string}`,
+        address: CONTRACT_ADDRESSES.shadowUsd as `0x${string}`,
         abi: SHADOW_USD_ABI,
         functionName: "confidentialBalanceOf",
         args: [address],
@@ -611,7 +611,7 @@ export default function WalletPage() {
       console.log("🔐 Requesting user decryption...");
       const results = await requestUserDecryption(
         [
-          { handle: handleHex, contractAddress: CONTRACT_ADDRESSES.shadowUSD },
+          { handle: handleHex, contractAddress: CONTRACT_ADDRESSES.shadowUsd },
         ],
         address,
         walletClient
@@ -635,7 +635,7 @@ export default function WalletPage() {
         // Update localStorage with real decrypted balance (for TradingPanel sync)
         const balanceNumber = Number(balance) / 1e6; // 6 decimals
         setClaimedAmount(balanceNumber);
-        localStorage.setItem(`susd_balance_${CONTRACT_ADDRESSES.shadowUSD}_${address}`, balanceNumber.toString());
+        localStorage.setItem(`susd_balance_${CONTRACT_ADDRESSES.shadowUsd}_${address}`, balanceNumber.toString());
         console.log("✅ Updated sUSD balance from FHE decryption:", balanceNumber);
       }
     } catch (error) {
@@ -1034,7 +1034,7 @@ export default function WalletPage() {
 
       // Call setOperator(address, true)
       const hash = await client.writeContract({
-        address: CONTRACT_ADDRESSES.shadowUSD,
+        address: CONTRACT_ADDRESSES.shadowUsd,
         abi: SHADOW_USD_ABI,
         functionName: "setOperator",
         args: [newOperatorAddress as `0x${string}`, true],
@@ -1078,7 +1078,7 @@ export default function WalletPage() {
 
       // Call setOperator(address, false)
       const hash = await client.writeContract({
-        address: CONTRACT_ADDRESSES.shadowUSD,
+        address: CONTRACT_ADDRESSES.shadowUsd,
         abi: SHADOW_USD_ABI,
         functionName: "setOperator",
         args: [operatorAddress as `0x${string}`, false],
@@ -1120,7 +1120,7 @@ export default function WalletPage() {
 
       // Call isOperator(owner, operator)
       const isOp = await publicClient.readContract({
-        address: CONTRACT_ADDRESSES.shadowUSD,
+        address: CONTRACT_ADDRESSES.shadowUsd,
         abi: SHADOW_USD_ABI,
         functionName: "isOperator",
         args: [address, checkOperatorAddress as `0x${string}`],

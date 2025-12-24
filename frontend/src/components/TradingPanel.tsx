@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 import { keccak256, toHex } from "viem";
 import { useContractAddresses, useUserPositions } from "@/lib/contracts/hooks";
+import { CONTRACTS } from "@/lib/contracts/config";
 import Link from "next/link";
 import {
   initFheInstance,
@@ -134,7 +135,7 @@ const SHADOW_USD_ABI = parseAbi([
 ]);
 
 const CONTRACT_ADDRESSES = {
-  shadowUsd: "0x6C365a341C2A7D94cb0204A3f22CC810A7357F18" as `0x${string}`,
+  shadowUsd: CONTRACTS.shadowUsd,
 };
 
 export function TradingPanel({ selectedAsset }: TradingPanelProps) {
