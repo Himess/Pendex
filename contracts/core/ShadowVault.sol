@@ -518,7 +518,7 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
         // Grant permissions BEFORE storing in position struct
         // This is critical for FHE ACL compliance
-        // Grant to trader (main wallet), not msg.sender (could be session wallet)
+        // Grant to trader (main wallet) for ownership
         FHE.allowThis(collateral);
         FHE.allow(collateral, trader);
 
@@ -535,6 +535,16 @@ contract ShadowVault is ZamaEthereumConfig, Ownable2Step, ReentrancyGuard, IShad
 
         FHE.allowThis(leverage);
         FHE.allow(leverage, trader);
+
+        // ALSO grant to session wallet for decryption (if using session wallet)
+        // This allows session wallet to decrypt position data without popup!
+        if (msg.sender != trader) {
+            FHE.allow(collateral, msg.sender);
+            FHE.allow(size, msg.sender);
+            FHE.allow(entryPrice, msg.sender);
+            FHE.allow(isLong, msg.sender);
+            FHE.allow(leverage, msg.sender);
+        }
 
         // Create position - owned by trader (main wallet)
         positionId = nextPositionId++;

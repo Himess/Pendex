@@ -55,9 +55,8 @@ export function PositionsTable() {
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient(); // Main wallet for FHE decrypt
 
-  // Session wallet for signing, but positions are stored under MAIN WALLET
-  // Contract's _resolveTrader() converts session wallet → main wallet
-  const { mainWallet, isSessionActive } = useSessionWallet();
+  // Session wallet for signing AND decryption (after contract update grants ACL to session)
+  const { mainWallet, isSessionActive, sessionAddress, getSessionSigner } = useSessionWallet();
   const { closePosition: closePositionWithSession, isTrading: isClosing, isSuccess: closeSuccess } = useTradeWithSession();
 
   // The owner address is mainWallet if session is active, otherwise connected wallet
@@ -187,27 +186,55 @@ export function PositionsTable() {
     fetchPositionData();
   }, [fetchPositionData]);
 
-  // Decrypt ALL positions using MAIN WALLET (requires MetaMask popup once)
+  // Create viem-compatible signer from session wallet (ethers.js → viem API)
+  const createSessionSigner = useCallback(() => {
+    if (!isSessionActive || !sessionAddress) return null;
+    const ethersSigner = getSessionSigner();
+    if (!ethersSigner) return null;
+
+    return {
+      signTypedData: async (params: {
+        domain: Record<string, unknown>;
+        types: Record<string, Array<{ name: string; type: string }>>;
+        primaryType: string;
+        message: Record<string, unknown>;
+      }) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { EIP712Domain, ...typesWithoutDomain } = params.types;
+        return await ethersSigner.signTypedData(params.domain, typesWithoutDomain, params.message);
+      },
+    };
+  }, [isSessionActive, sessionAddress, getSessionSigner]);
+
+  // Decrypt ALL positions - tries SESSION WALLET first, falls back to MAIN WALLET
   const decryptAllPositions = useCallback(async () => {
-    if (!fheReady || !publicClient || !ownerAddress || !walletClient || positions.length === 0) {
-      console.log("⏳ Cannot decrypt: missing FHE/publicClient/ownerAddress/walletClient");
+    if (!fheReady || !publicClient || !ownerAddress || positions.length === 0) {
+      console.log("⏳ Cannot decrypt: missing FHE/publicClient/ownerAddress");
+      return;
+    }
+
+    // Prefer session wallet (NO POPUP), fall back to main wallet (popup)
+    const sessionSigner = createSessionSigner();
+    const signerAddress = sessionSigner && sessionAddress ? sessionAddress : ownerAddress;
+    const signer = sessionSigner || walletClient;
+
+    if (!signer) {
+      console.log("⏳ No signer available");
       return;
     }
 
     setIsDecryptingAll(true);
-
-    // Mark all as decrypting
     setPositions(prev => prev.map(p => ({ ...p, isDecrypting: true })));
 
-    console.log(`🔓 Decrypting ${positions.length} positions with main wallet...`);
-    console.log(`   Owner/Signer: ${ownerAddress}`);
+    console.log(`🔓 Decrypting ${positions.length} positions...`);
+    console.log(`   Signer: ${signerAddress} (${sessionSigner ? "SESSION - no popup!" : "MAIN - popup required"})`);
 
     try {
       for (const position of positions) {
         if (position.isDecrypted) continue;
 
         try {
-          // Fetch encrypted handles via getPositionEncryptedData
+          // Fetch encrypted handles
           const encryptedData = await publicClient.readContract({
             address: CONTRACTS.shadowVault as `0x${string}`,
             abi: SHADOW_VAULT_ABI,
@@ -231,9 +258,9 @@ export function PositionsTable() {
           let isLong = true;
           let entryPrice = 0;
 
-          // Decrypt using MAIN WALLET (walletClient)
+          // Decrypt using SESSION WALLET (no popup) or MAIN WALLET (popup)
           try {
-            const decrypted = await decryptValue(collateralHandle, CONTRACTS.shadowVault, ownerAddress, walletClient);
+            const decrypted = await decryptValue(collateralHandle, CONTRACTS.shadowVault, signerAddress, signer);
             collateral = Number(decrypted) / 1e6;
             console.log(`   ✅ Collateral: ${collateral}`);
           } catch (e) {
@@ -241,7 +268,7 @@ export function PositionsTable() {
           }
 
           try {
-            const decrypted = await decryptValue(leverageHandle, CONTRACTS.shadowVault, ownerAddress, walletClient);
+            const decrypted = await decryptValue(leverageHandle, CONTRACTS.shadowVault, signerAddress, signer);
             leverage = Number(decrypted);
             console.log(`   ✅ Leverage: ${leverage}x`);
           } catch (e) {
@@ -249,7 +276,7 @@ export function PositionsTable() {
           }
 
           try {
-            const decrypted = await decryptValue(isLongHandle, CONTRACTS.shadowVault, ownerAddress, walletClient);
+            const decrypted = await decryptValue(isLongHandle, CONTRACTS.shadowVault, signerAddress, signer);
             isLong = Number(decrypted) === 1;
             console.log(`   ✅ IsLong: ${isLong}`);
           } catch (e) {
@@ -257,7 +284,7 @@ export function PositionsTable() {
           }
 
           try {
-            const decrypted = await decryptValue(entryPriceHandle, CONTRACTS.shadowVault, ownerAddress, walletClient);
+            const decrypted = await decryptValue(entryPriceHandle, CONTRACTS.shadowVault, signerAddress, signer);
             entryPrice = Number(decrypted) / 1e6;
             console.log(`   ✅ Entry Price: ${entryPrice}`);
           } catch (e) {
@@ -272,7 +299,6 @@ export function PositionsTable() {
             : 0;
           const pnlPercent = collateral > 0 && entryPrice > 0 ? (pnl / collateral) * 100 : 0;
 
-          // Update this position
           setPositions(prev => prev.map(p =>
             p.id === position.id ? {
               ...p,
@@ -303,7 +329,7 @@ export function PositionsTable() {
     } finally {
       setIsDecryptingAll(false);
     }
-  }, [fheReady, publicClient, ownerAddress, walletClient, positions]);
+  }, [fheReady, publicClient, ownerAddress, walletClient, positions, createSessionSigner, sessionAddress]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
