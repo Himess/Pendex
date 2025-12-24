@@ -174,8 +174,8 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
 
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
-  // Use session wallet for positions count (positions are owned by session wallet)
-  const { data: positionIds } = useUserPositions(sessionAddress as `0x${string}` | undefined);
+  // Query positions for MAIN wallet (positions stored under main wallet via _resolveTrader)
+  const { data: positionIds } = useUserPositions(address);
   const openPositionCount = positionIds?.length || 0;
 
   // sUSD Balance

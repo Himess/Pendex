@@ -67,13 +67,15 @@ export function PositionsTable() {
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
 
-  // Use session wallet for positions (positions are opened by session wallet!)
-  const { sessionAddress, isSessionActive, getSessionSigner } = useSessionWallet();
+  // Session wallet for signing, but positions are stored under MAIN WALLET
+  // Contract's _resolveTrader() converts session wallet → main wallet
+  const { sessionAddress, isSessionActive, getSessionSigner, mainWallet } = useSessionWallet();
   const { closePosition: closePositionWithSession, isTrading: isClosing, isSuccess: closeSuccess } = useTradeWithSession();
 
-  // Fetch positions for SESSION wallet address (not main wallet!)
+  // Fetch positions for MAIN WALLET address (positions are stored under main wallet!)
+  // Even though session wallet sends TX, _resolveTrader() resolves to main wallet
   const { data: positionIds, isLoading: isLoadingPositions, refetch: refetchPositions } = useUserPositions(
-    sessionAddress as `0x${string}` | undefined
+    (mainWallet || address) as `0x${string}` | undefined
   );
 
   const [positions, setPositions] = useState<Position[]>([]);
