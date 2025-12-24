@@ -4,12 +4,12 @@ export type SupportedNetwork = "sepolia" | "hardhat";
 // Contract addresses per network
 export const NETWORK_CONTRACTS = {
   sepolia: {
-    // Session 10 - FHE.allowTransient Fix for Cross-Contract Calls
-    shadowVault: "0x1713d51049EA31c19545De7f47AcB909e1050a71" as `0x${string}`,
-    shadowOracle: "0xadee307469f5FEF36485aB0194Bc1C042b7Cd2FE" as `0x${string}`,
-    shadowUsd: "0x6C365a341C2A7D94cb0204A3f22CC810A7357F18" as `0x${string}`,
-    shadowLiquidityPool: "0xF15e759229dc61f7ece238503368B1a0BafF0773" as `0x${string}`,
-    walletManager: "0x547481AC8130e985288BD36Cb9ba81204656eB7A" as `0x${string}`,
+    // Session 11 - Full redeploy with current @fhevm/solidity package
+    shadowVault: "0x6E1BE2fd9023FD8F3c9C27b35f57Aa74ec984E9c" as `0x${string}`,
+    shadowOracle: "0x4e819459EEE3061f10D7d0309F4Ba39Af5A68f81" as `0x${string}`,
+    shadowUsd: "0x6ABe3F3791B4Cee0f47dA1F10B4106c50C0EE6BC" as `0x${string}`,
+    shadowLiquidityPool: "0x548F8CbA6Fa4717BC6890D0f3175094c1FEeaa87" as `0x${string}`,
+    walletManager: "0x4de6E26b438e61ead479f46BCe309D5d0a16bD71" as `0x${string}`,
     hasFHE: true, // Sepolia with Zama FHE encryption
   },
   hardhat: {

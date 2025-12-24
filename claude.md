@@ -1,5 +1,5 @@
 # Pendex - Claude Memory File
-**Son Guncelleme:** 2025-12-20 (Session 8 - Direct sUSD Trading)
+**Son Guncelleme:** 2025-12-24 (Session 11 - Full FHE Contract Redeploy)
 
 ---
 
@@ -12,6 +12,12 @@
 **Durum:** 9/10 - FHE CALISIYOR!
 **Windows Path:** `C:\Users\USER\shadow-protocol\frontend`
 **Live URL:** https://shadow-protocol-nine.vercel.app/
+
+**Session 11'de Yapilanlar:**
+1. TUM CONTRACT'LAR YENIDEN DEPLOY EDILDI - eski FHE package sorunu cozuldu!
+2. Root cause: Eski contract'lar farkli CoprocessorAddress kullaniyordu
+3. Test contract'lar (SimpleCounter, MultiInputTest, CrossContractTest) calisti
+4. Yeni adresler: ShadowVault, ShadowOracle, ShadowUSD, LP, WalletManager
 
 **Session 8'de Yapilanlar:**
 1. DIRECT sUSD TRADING - Vault deposit gereksiz, Hyperliquid gibi!
@@ -265,16 +271,17 @@ const SEPOLIA_CONFIG = {
 
 ---
 
-## CONTRACT ADDRESSES (Sepolia) - Session 8 Deployment
+## CONTRACT ADDRESSES (Sepolia) - Session 11 Full Redeploy
 ```
-ShadowOracle:            0xadee307469f5FEF36485aB0194Bc1C042b7Cd2FE
-ShadowUSD:               0x6C365a341C2A7D94cb0204A3f22CC810A7357F18
-ShadowLiquidityPool:     0xF15e759229dc61f7ece238503368B1a0BafF0773
-ShadowVault:             0x7a4D60498083Bc2dCC0490d0B95fc9D07940B0FD
+ShadowOracle:            0x4e819459EEE3061f10D7d0309F4Ba39Af5A68f81
+ShadowUSD:               0x6ABe3F3791B4Cee0f47dA1F10B4106c50C0EE6BC
+ShadowLiquidityPool:     0x548F8CbA6Fa4717BC6890D0f3175094c1FEeaa87
+ShadowVault:             0x6E1BE2fd9023FD8F3c9C27b35f57Aa74ec984E9c
+WalletManager:           0x4de6E26b438e61ead479f46BCe309D5d0a16bD71
 Deployer:                0xad850C8eB45E80b99ad76A22fBDd0b04F4A1FD27
 ```
 
-### Eski Adresler (Session 7 ve oncesi)
+### Eski Adresler (Session 10 ve oncesi)
 ```
 ShadowOracle:            0x9A5Fec3b1999cCBfC3a33EF5cdf09fdecad52301
 ShadowUSD:               0xa1FFdD728C13Eb72F928491d3E6D9245AE614cf6
