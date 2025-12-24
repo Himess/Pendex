@@ -160,9 +160,13 @@ export const useChartInstance = ({ containerRef, onCrosshairMove }: UseChartInst
 
   // Son candle güncelleme (real-time için)
   const updateLastCandle = useCallback((candle: CandleData) => {
-    if (seriesRef.current) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      seriesRef.current.update(candle as any);
+    if (seriesRef.current && candle.time && typeof candle.time === 'number') {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        seriesRef.current.update(candle as any);
+      } catch {
+        // Ignore chart update errors (e.g., updating before data is set)
+      }
     }
   }, []);
 

@@ -102,22 +102,32 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
     }
   }, [chartReady, data, updateData, timeframe, selectedAsset?.price, addPriceLine, clearPriceLines]);
 
-  // Live price güncellemesi
+  // Live price güncellemesi - only if chart has data
   useEffect(() => {
-    if (!chartReady || !livePrice || livePrice <= 0) return;
+    // Don't update if chart not ready or no data
+    if (!chartReady || !livePrice || livePrice <= 0 || data.length === 0) return;
 
     const config = TIMEFRAMES[timeframe];
     const now = Math.floor(Date.now() / 1000);
     const barTime = now - (now % (config.minutes * 60));
 
-    updateLastCandle({
-      time: barTime,
-      open: livePrice * 0.999,
-      high: livePrice * 1.001,
-      low: livePrice * 0.998,
-      close: livePrice,
-    });
-  }, [chartReady, livePrice, timeframe, updateLastCandle]);
+    // Ensure barTime is after or equal to the last data point
+    const lastDataTime = data[data.length - 1]?.time || 0;
+    if (barTime < lastDataTime) return;
+
+    try {
+      updateLastCandle({
+        time: barTime,
+        open: livePrice * 0.999,
+        high: livePrice * 1.001,
+        low: livePrice * 0.998,
+        close: livePrice,
+      });
+    } catch (e) {
+      // Chart update error - ignore silently
+      console.debug('Chart update skipped:', e);
+    }
+  }, [chartReady, livePrice, timeframe, updateLastCandle, data]);
 
   // Timeframe değişikliği
   const handleTimeframeChange = useCallback((tf: TimeframeKey) => {
