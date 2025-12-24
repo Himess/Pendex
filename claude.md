@@ -1,5 +1,5 @@
 # Pendex - Claude Memory File
-**Son Guncelleme:** 2025-12-24 (Session 11 - Full FHE Contract Redeploy)
+**Son Guncelleme:** 2025-12-25 (Session 12 - Session Wallet ACL Fix)
 
 ---
 
@@ -12,6 +12,12 @@
 **Durum:** 9/10 - FHE CALISIYOR!
 **Windows Path:** `C:\Users\USER\shadow-protocol\frontend`
 **Live URL:** https://shadow-protocol-nine.vercel.app/
+
+**Session 12'de Yapilanlar:**
+1. Session wallet ile decrypt POPUP SORUNU COZULDU!
+2. FHE ACL artik session wallet'a da veriliyor (openPosition icinde)
+3. ShadowVault yeniden deploy edildi: `0x2ECB31ac17cF357B33CD81AA23983f39249c2322`
+4. Frontend session wallet signer ile decrypt yapiyor (popup yok!)
 
 **Session 11'de Yapilanlar:**
 1. TUM CONTRACT'LAR YENIDEN DEPLOY EDILDI - eski FHE package sorunu cozuldu!
@@ -271,14 +277,19 @@ const SEPOLIA_CONFIG = {
 
 ---
 
-## CONTRACT ADDRESSES (Sepolia) - Session 11 Full Redeploy
+## CONTRACT ADDRESSES (Sepolia) - Session 12 Redeploy (Session Wallet ACL)
 ```
 ShadowOracle:            0x4e819459EEE3061f10D7d0309F4Ba39Af5A68f81
 ShadowUSD:               0x6ABe3F3791B4Cee0f47dA1F10B4106c50C0EE6BC
 ShadowLiquidityPool:     0x548F8CbA6Fa4717BC6890D0f3175094c1FEeaa87
-ShadowVault:             0x6E1BE2fd9023FD8F3c9C27b35f57Aa74ec984E9c
+ShadowVault:             0x2ECB31ac17cF357B33CD81AA23983f39249c2322  ← YENİ!
 WalletManager:           0x4de6E26b438e61ead479f46BCe309D5d0a16bD71
 Deployer:                0xad850C8eB45E80b99ad76A22fBDd0b04F4A1FD27
+```
+
+### Eski Adresler (Session 11)
+```
+ShadowVault:             0x6E1BE2fd9023FD8F3c9C27b35f57Aa74ec984E9c
 ```
 
 ### Eski Adresler (Session 10 ve oncesi)

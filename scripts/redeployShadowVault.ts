@@ -6,11 +6,11 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log(`Deployer: ${deployer.address}`);
 
-  // Existing contract addresses from CLAUDE.md
-  const SHADOW_ORACLE = "0xadee307469f5FEF36485aB0194Bc1C042b7Cd2FE";
-  const SHADOW_USD = "0x6C365a341C2A7D94cb0204A3f22CC810A7357F18";
-  const LIQUIDITY_POOL = "0xF15e759229dc61f7ece238503368B1a0BafF0773";
-  const WALLET_MANAGER = "0x547481AC8130e985288BD36Cb9ba81204656eB7A";
+  // Existing contract addresses from CLAUDE.md (Session 11 Full Redeploy)
+  const SHADOW_ORACLE = "0x4e819459EEE3061f10D7d0309F4Ba39Af5A68f81";
+  const SHADOW_USD = "0x6ABe3F3791B4Cee0f47dA1F10B4106c50C0EE6BC";
+  const LIQUIDITY_POOL = "0x548F8CbA6Fa4717BC6890D0f3175094c1FEeaa87";
+  const WALLET_MANAGER = "0x4de6E26b438e61ead479f46BCe309D5d0a16bD71";
 
   // Deploy new ShadowVault
   console.log("\n1️⃣ Deploying new ShadowVault...");

@@ -4,8 +4,8 @@ export type SupportedNetwork = "sepolia" | "hardhat";
 // Contract addresses per network
 export const NETWORK_CONTRACTS = {
   sepolia: {
-    // Session 11 - Full redeploy with current @fhevm/solidity package
-    shadowVault: "0x6E1BE2fd9023FD8F3c9C27b35f57Aa74ec984E9c" as `0x${string}`,
+    // Session 12 - Redeploy with session wallet ACL support
+    shadowVault: "0x2ECB31ac17cF357B33CD81AA23983f39249c2322" as `0x${string}`,
     shadowOracle: "0x4e819459EEE3061f10D7d0309F4Ba39Af5A68f81" as `0x${string}`,
     shadowUsd: "0x6ABe3F3791B4Cee0f47dA1F10B4106c50C0EE6BC" as `0x${string}`,
     shadowLiquidityPool: "0x548F8CbA6Fa4717BC6890D0f3175094c1FEeaa87" as `0x${string}`,
