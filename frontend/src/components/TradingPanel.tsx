@@ -335,8 +335,10 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
     if (!isConnected) return "CONNECT WALLET";
     if (hasNoSession) return "SETUP SESSION FIRST";
     if (hasInactiveSession) return "ACTIVATE SESSION FIRST";
+    if (sUsdBalance === 0 && balanceDecrypted) return "GET sUSD FIRST";
     if (!selectedAsset) return "SELECT ASSET";
     if (!collateral) return "ENTER COLLATERAL";
+    if (hasInsufficientBalance && collateral) return "INSUFFICIENT BALANCE";
     if (orderType === "limit" && !limitPrice) return "ENTER LIMIT PRICE";
     if (fheInitializing) return "INITIALIZING FHE...";
     if (txStatus === "encrypting") return "ENCRYPTING...";
@@ -349,9 +351,10 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
     return `⚡ PLACE ${orderTypeLabel} ORDER`;
   };
 
+  const hasNoBalance = sUsdBalance === 0 && balanceDecrypted;
   const isButtonDisabled = !isConnected || !canTrade || !selectedAsset || !collateral ||
     fheInitializing || txStatus === "encrypting" || txStatus === "pending" ||
-    txStatus === "confirming" || (orderType === "limit" && !limitPrice) || hasInsufficientBalance;
+    txStatus === "confirming" || (orderType === "limit" && !limitPrice) || hasInsufficientBalance || hasNoBalance;
 
   const collateralNum = parseFloat(collateral) || 0;
   const positionSize = collateralNum * leverage;
