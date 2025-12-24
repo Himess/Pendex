@@ -187,17 +187,17 @@ export default function WalletPage() {
   // Load claimed amount and vault balance from localStorage on mount
   useEffect(() => {
     if (address) {
-      // Load sUSD balance from localStorage (synced with TradingPanel)
-      const storedSUsd = localStorage.getItem(`susd_balance_${address}`);
+      // Load sUSD balance from localStorage (versioned with contract address)
+      const storedSUsd = localStorage.getItem(`susd_balance_${CONTRACT_ADDRESSES.shadowUSD}_${address}`);
       if (storedSUsd) {
         setClaimedAmount(parseFloat(storedSUsd));
       }
-      // Also check legacy key for backwards compatibility
-      const storedClaimed = localStorage.getItem(`faucet_claimed_${address}`);
+      // Also check faucet claimed key (versioned)
+      const storedClaimed = localStorage.getItem(`faucet_claimed_${CONTRACT_ADDRESSES.shadowUSD}_${address}`);
       if (storedClaimed && !storedSUsd) {
         setClaimedAmount(parseFloat(storedClaimed));
       }
-      const storedVault = localStorage.getItem(`vault_balance_${address}`);
+      const storedVault = localStorage.getItem(`vault_balance_${CONTRACT_ADDRESSES.shadowVault}_${address}`);
       if (storedVault) {
         setLocalVaultBalance(parseFloat(storedVault));
       }
@@ -391,7 +391,7 @@ export default function WalletPage() {
     if (isFaucetSuccess && address) {
       const newClaimed = claimedAmount + 10000; // Faucet gives 10,000 sUSD
       setClaimedAmount(newClaimed);
-      localStorage.setItem(`faucet_claimed_${address}`, newClaimed.toString());
+      localStorage.setItem(`faucet_claimed_${CONTRACT_ADDRESSES.shadowUSD}_${address}`, newClaimed.toString());
       // Refetch balance check
       setTimeout(() => refetchUsdBalance(), 2000);
     }
@@ -406,12 +406,12 @@ export default function WalletPage() {
         // Update wallet balance (claimed from faucet)
         const newClaimed = Math.max(0, claimedAmount - depositedAmount);
         setClaimedAmount(newClaimed);
-        localStorage.setItem(`faucet_claimed_${address}`, newClaimed.toString());
+        localStorage.setItem(`faucet_claimed_${CONTRACT_ADDRESSES.shadowUSD}_${address}`, newClaimed.toString());
 
         // Update vault balance
         const newVaultBalance = localVaultBalance + depositedAmount;
         setLocalVaultBalance(newVaultBalance);
-        localStorage.setItem(`vault_balance_${address}`, newVaultBalance.toString());
+        localStorage.setItem(`vault_balance_${CONTRACT_ADDRESSES.shadowVault}_${address}`, newVaultBalance.toString());
       }
       setTimeout(() => {
         refetchVaultBalance();
@@ -635,7 +635,7 @@ export default function WalletPage() {
         // Update localStorage with real decrypted balance (for TradingPanel sync)
         const balanceNumber = Number(balance) / 1e6; // 6 decimals
         setClaimedAmount(balanceNumber);
-        localStorage.setItem(`susd_balance_${address}`, balanceNumber.toString());
+        localStorage.setItem(`susd_balance_${CONTRACT_ADDRESSES.shadowUSD}_${address}`, balanceNumber.toString());
         console.log("✅ Updated sUSD balance from FHE decryption:", balanceNumber);
       }
     } catch (error) {
@@ -801,7 +801,7 @@ export default function WalletPage() {
       if (handle === BigInt(0)) {
         setDecryptedValues((prev) => ({ ...prev, vaultBalance: BigInt(0) }));
         setLocalVaultBalance(0);
-        localStorage.setItem(`vault_balance_${address}`, "0");
+        localStorage.setItem(`vault_balance_${CONTRACT_ADDRESSES.shadowVault}_${address}`, "0");
         return;
       }
 
@@ -832,7 +832,7 @@ export default function WalletPage() {
         // Update localStorage for TradingPanel sync
         const balanceNumber = Number(balance) / 1e6;
         setLocalVaultBalance(balanceNumber);
-        localStorage.setItem(`vault_balance_${address}`, balanceNumber.toString());
+        localStorage.setItem(`vault_balance_${CONTRACT_ADDRESSES.shadowVault}_${address}`, balanceNumber.toString());
         console.log("✅ Vault balance decrypted:", balanceNumber);
       }
     } catch (error) {

@@ -206,10 +206,11 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
       const balance = Number(decryptedValue) / 1e6;
       setSUsdBalance(balance);
       setBalanceDecrypted(true);
-      localStorage.setItem(`susd_balance_${address}`, balance.toString());
+      // Version key with contract address to invalidate cache on redeploy
+      localStorage.setItem(`susd_balance_${CONTRACT_ADDRESSES.shadowUsd}_${address}`, balance.toString());
     } catch (error) {
       console.error("FHE balance decryption failed:", error);
-      const stored = localStorage.getItem(`susd_balance_${address}`);
+      const stored = localStorage.getItem(`susd_balance_${CONTRACT_ADDRESSES.shadowUsd}_${address}`);
       if (stored) setSUsdBalance(parseFloat(stored));
     } finally {
       setIsDecryptingBalance(false);
@@ -218,14 +219,15 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
 
   useEffect(() => {
     if (address) {
-      const stored = localStorage.getItem(`susd_balance_${address}`);
+      // Use versioned key to avoid stale cache from old contracts
+      const stored = localStorage.getItem(`susd_balance_${CONTRACT_ADDRESSES.shadowUsd}_${address}`);
       if (stored) setSUsdBalance(parseFloat(stored));
     }
   }, [address]);
 
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === `susd_balance_${address}` && e.newValue) {
+      if (e.key === `susd_balance_${CONTRACT_ADDRESSES.shadowUsd}_${address}` && e.newValue) {
         setSUsdBalance(parseFloat(e.newValue));
         setBalanceDecrypted(true);
       }
