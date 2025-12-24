@@ -14,6 +14,8 @@ import {
   decryptValue,
   getFheInstance,
 } from "@/lib/fhe/client";
+import { useSessionWallet } from "@/lib/session-wallet/hooks";
+import { useTradeWithSession } from "@/lib/session-wallet/useTradeWithSession";
 
 // Asset ID to symbol mapping
 const ASSET_ID_TO_NAME: Record<string, { name: string; symbol: string }> = {
@@ -64,8 +66,15 @@ export function PositionsTable() {
   const { address, isConnected } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
-  const { data: positionIds, isLoading: isLoadingPositions, refetch: refetchPositions } = useUserPositions(address);
-  const { closePosition, isPending: isClosing, isSuccess: closeSuccess } = useClosePosition();
+
+  // Use session wallet for positions (positions are opened by session wallet!)
+  const { sessionAddress, isSessionActive, getSessionSigner } = useSessionWallet();
+  const { closePosition: closePositionWithSession, isTrading: isClosing, isSuccess: closeSuccess } = useTradeWithSession();
+
+  // Fetch positions for SESSION wallet address (not main wallet!)
+  const { data: positionIds, isLoading: isLoadingPositions, refetch: refetchPositions } = useUserPositions(
+    sessionAddress as `0x${string}` | undefined
+  );
 
   const [positions, setPositions] = useState<Position[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -173,12 +182,51 @@ export function PositionsTable() {
     fetchPositionData();
   }, [fetchPositionData]);
 
-  // Decrypt position data
+  // Create a viem-compatible signer wrapper from ethers.js session wallet
+  const createViemCompatibleSigner = useCallback(() => {
+    if (!isSessionActive || !sessionAddress) return null;
+
+    const ethersSigner = getSessionSigner();
+    if (!ethersSigner) return null;
+
+    // Wrap ethers.js signer to use viem-style signTypedData API
+    return {
+      signTypedData: async (params: {
+        domain: Record<string, unknown>;
+        types: Record<string, Array<{ name: string; type: string }>>;
+        primaryType: string;
+        message: Record<string, unknown>;
+      }) => {
+        // ethers.js uses separate parameters, not object
+        // Also need to remove EIP712Domain from types (ethers handles it internally)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { EIP712Domain, ...typesWithoutDomain } = params.types;
+        const signature = await ethersSigner.signTypedData(
+          params.domain,
+          typesWithoutDomain,
+          params.message
+        );
+        return signature;
+      },
+    };
+  }, [isSessionActive, sessionAddress, getSessionSigner]);
+
+  // Decrypt position data using SESSION WALLET
   const decryptPosition = useCallback(async (positionId: string) => {
-    if (!walletClient || !address || !fheReady) return;
+    if (!isSessionActive || !sessionAddress || !fheReady) {
+      console.error("Session wallet or FHE not ready");
+      return;
+    }
 
     const position = positions.find(p => p.id === positionId);
     if (!position || position.isRevealed) return;
+
+    // Create viem-compatible signer from session wallet
+    const viemSigner = createViemCompatibleSigner();
+    if (!viemSigner) {
+      console.error("Failed to create viem-compatible signer");
+      return;
+    }
 
     // Mark as decrypting
     setPositions(prev => prev.map(p =>
@@ -186,15 +234,15 @@ export function PositionsTable() {
     ));
 
     try {
-      // Decrypt collateral
+      // Decrypt collateral using SESSION WALLET
       let collateral = 0;
       if (position.encryptedCollateral && position.encryptedCollateral !== "0x" + "0".repeat(64)) {
         try {
           const decrypted = await decryptValue(
             position.encryptedCollateral as `0x${string}`,
             CONTRACTS.shadowVault,
-            address,
-            walletClient
+            sessionAddress, // Use session wallet address!
+            viemSigner // Use wrapped session signer!
           );
           collateral = Number(decrypted) / 1e6;
         } catch (e) {
@@ -209,8 +257,8 @@ export function PositionsTable() {
           const decrypted = await decryptValue(
             position.encryptedLeverage as `0x${string}`,
             CONTRACTS.shadowVault,
-            address,
-            walletClient
+            sessionAddress,
+            viemSigner
           );
           leverage = Number(decrypted);
         } catch (e) {
@@ -225,8 +273,8 @@ export function PositionsTable() {
           const decrypted = await decryptValue(
             position.encryptedIsLong as `0x${string}`,
             CONTRACTS.shadowVault,
-            address,
-            walletClient
+            sessionAddress,
+            viemSigner
           );
           isLong = Number(decrypted) === 1;
         } catch (e) {
@@ -241,8 +289,8 @@ export function PositionsTable() {
           const decrypted = await decryptValue(
             position.encryptedEntryPrice as `0x${string}`,
             CONTRACTS.shadowVault,
-            address,
-            walletClient
+            sessionAddress,
+            viemSigner
           );
           entryPrice = Number(decrypted) / 1e6;
         } catch (e) {
@@ -279,7 +327,7 @@ export function PositionsTable() {
         p.id === positionId ? { ...p, isDecrypting: false } : p
       ));
     }
-  }, [positions, walletClient, address, fheReady]);
+  }, [positions, isSessionActive, sessionAddress, fheReady, createViemCompatibleSigner]);
 
   const toggleReveal = (positionId: string) => {
     const position = positions.find(p => p.id === positionId);
@@ -303,9 +351,13 @@ export function PositionsTable() {
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
-  const handleClosePosition = (positionId: bigint) => {
+  const handleClosePosition = async (positionId: bigint) => {
+    if (!isSessionActive) {
+      console.error("Session wallet not active");
+      return;
+    }
     setClosingPositionId(positionId);
-    closePosition(positionId);
+    await closePositionWithSession(positionId);
   };
 
   const EncryptedValue = ({ revealed, value, isLoading }: { revealed: boolean; value: string; isLoading?: boolean }) => (

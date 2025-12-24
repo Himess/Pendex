@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Lock, ArrowUp, ArrowDown, Loader2, CheckCircle, XCircle, ChevronDown, ShieldAlert, Target, Shield, Sparkles, Zap, Wallet, AlertTriangle } from "lucide-react";
+import { Lock, ArrowUp, ArrowDown, Loader2, CheckCircle, XCircle, ShieldAlert, Target, Shield, Sparkles, Zap, Wallet, AlertTriangle, ChevronDown } from "lucide-react";
 import { Asset } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
@@ -174,8 +174,8 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
 
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
-  const { data: positionIds } = useUserPositions(address);
-  const [showPositions, setShowPositions] = useState(false);
+  // Use session wallet for positions count (positions are owned by session wallet)
+  const { data: positionIds } = useUserPositions(sessionAddress as `0x${string}` | undefined);
   const openPositionCount = positionIds?.length || 0;
 
   // sUSD Balance
@@ -754,53 +754,17 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
             {hasFHE ? "🔒 FHE Encrypted" : "Demo Mode"}
           </div>
 
-          {/* Open Positions */}
-          {isConnected && (
+          {/* View Positions Link - positions shown in bottom panel */}
+          {isConnected && openPositionCount > 0 && (
             <div className="border-t border-border pt-2 mt-2">
-              <button
-                onClick={() => setShowPositions(!showPositions)}
-                className="w-full flex items-center justify-between py-1 text-[10px] text-text-secondary hover:text-text-primary transition-colors"
-              >
-                <div className="flex items-center gap-1">
+              <div className="flex items-center justify-between py-1 text-[10px]">
+                <div className="flex items-center gap-1 text-text-secondary">
                   <Lock className="w-3 h-3 text-gold" />
                   <span className="font-medium">Open Positions</span>
-                  {openPositionCount > 0 && (
-                    <span className="bg-gold/20 text-gold px-1 rounded text-[8px]">{openPositionCount}</span>
-                  )}
+                  <span className="bg-gold/20 text-gold px-1 rounded text-[8px]">{openPositionCount}</span>
                 </div>
-                <ChevronDown className={cn("w-3 h-3 transition-transform", showPositions && "rotate-180")} />
-              </button>
-
-              {showPositions && (
-                <div className="mt-2 space-y-1.5">
-                  {openPositionCount === 0 ? (
-                    <p className="text-[9px] text-text-muted text-center py-2">No open positions</p>
-                  ) : (
-                    <>
-                      {positionIds?.map((posId) => (
-                        <div key={posId.toString()} className="bg-background rounded p-1.5 border border-border">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[9px] font-mono text-gold">#{posId.toString()}</span>
-                            <div className="flex items-center gap-1">
-                              <span className="text-[8px] bg-success/20 text-success px-1 rounded">Open</span>
-                              <Lock className="w-2.5 h-2.5 text-gold" />
-                            </div>
-                          </div>
-                          <div className="flex justify-between mt-1 text-[8px] text-text-muted">
-                            <span>🔐 Encrypted position</span>
-                            <Link href={`/wallet?tab=positions&id=${posId.toString()}`} className="text-gold hover:underline">
-                              View →
-                            </Link>
-                          </div>
-                        </div>
-                      ))}
-                      <Link href="/wallet?tab=positions" className="block text-center text-[9px] text-gold hover:underline py-1">
-                        Manage All Positions →
-                      </Link>
-                    </>
-                  )}
-                </div>
-              )}
+                <span className="text-[9px] text-text-muted">See below ↓</span>
+              </div>
             </div>
           )}
         </div>
