@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useAccount } from "wagmi";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useAccount, usePublicClient } from "wagmi";
 import {
   History,
   Lock,
   ExternalLink,
-  Filter,
   RefreshCw,
   Shield,
   ArrowUpRight,
@@ -16,11 +15,14 @@ import {
   TrendingDown,
   Wallet,
   Repeat,
+  Loader2,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { cn } from "@/lib/utils";
 import { CONTRACTS } from "@/lib/contracts/config";
+import { SHADOW_VAULT_ABI } from "@/lib/contracts/abis";
+import { parseAbiItem } from "viem";
 
 type TransactionType = "DEPOSIT" | "WITHDRAW" | "OPEN_POSITION" | "CLOSE_POSITION" | "TRANSFER" | "LP_ADD" | "LP_REMOVE" | "CLAIM_REWARDS";
 
@@ -41,9 +43,15 @@ interface Transaction {
   lpTokens?: string;
 }
 
-// Transaction history - populated from on-chain events
-// Empty until user performs transactions
-const INITIAL_TRANSACTIONS: Transaction[] = [];
+// Asset ID to name mapping
+const ASSET_ID_TO_NAME: Record<string, string> = {
+  "0xbfe1b9d697e35df099bb4711224ecb98f2ce33a5a09fa3cf15dfb83fc9ec3cd9": "OpenAI",
+  "0xee2176d5e35f81b98746f5f98677beb44f0167ae70b6518fbb5b5bdc65da8fdd": "Anthropic",
+  "0x9fd352ac95c287d47bbccf4420d92735fe50f15b7f1bdc85ae12490f555114ab": "SpaceX",
+  "0x8eddee8eb3ba76411ebdccf6d0ad00841d58a803916546a295c2b0346ea86a11": "Stripe",
+  "0x0bf812f25cacc694be173fe6fd2b56e3f94f71dcee99e1f1280b2ce7fba46fca": "Databricks",
+  "0x7a8e8d0c5008129e8077f29f2b784b6f889f3420f121d5b70b5b3326476bbce1": "ByteDance",
+};
 
 const TX_TYPE_CONFIG: Record<TransactionType, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
   DEPOSIT: { label: "Deposit", icon: ArrowDownRight, color: "text-success" },
@@ -71,9 +79,105 @@ function formatTimestamp(ts: number): string {
 
 export default function HistoryPage() {
   const { address, isConnected } = useAccount();
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
+  const publicClient = usePublicClient();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [filter, setFilter] = useState<TransactionType | "ALL">("ALL");
+  const [hasFetched, setHasFetched] = useState(false);
+
+  // Fetch transaction history from blockchain events
+  const fetchTransactionHistory = useCallback(async () => {
+    if (!address || !publicClient) return;
+
+    setIsLoading(true);
+    console.log("📜 Fetching transaction history for:", address);
+
+    try {
+      const txList: Transaction[] = [];
+
+      // Get the current block number
+      const currentBlock = await publicClient.getBlockNumber();
+      // Look back ~1 week (assuming ~12 sec blocks)
+      const lookBack = BigInt(50000);
+      const fromBlock = currentBlock > lookBack ? currentBlock - lookBack : BigInt(0);
+
+      // Fetch PositionOpened events
+      const openedLogs = await publicClient.getLogs({
+        address: CONTRACTS.shadowVault as `0x${string}`,
+        event: parseAbiItem("event PositionOpened(uint256 indexed positionId, address indexed trader, bytes32 indexed assetId, uint256 timestamp)"),
+        fromBlock,
+        toBlock: "latest",
+      });
+
+      console.log(`   Found ${openedLogs.length} PositionOpened events`);
+
+      for (const log of openedLogs) {
+        // Filter by user address
+        const trader = log.args.trader?.toLowerCase();
+        if (trader !== address.toLowerCase()) continue;
+
+        const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
+        const assetId = log.args.assetId as string;
+        const assetName = ASSET_ID_TO_NAME[assetId.toLowerCase()] || "Unknown";
+
+        txList.push({
+          id: `open-${log.transactionHash}`,
+          type: "OPEN_POSITION",
+          hash: log.transactionHash?.slice(0, 10) + "..." + log.transactionHash?.slice(-8) || "",
+          timestamp: Number(block.timestamp) * 1000,
+          status: "confirmed",
+          asset: assetName,
+          isEncrypted: true,
+          positionId: log.args.positionId?.toString(),
+        });
+      }
+
+      // Fetch PositionClosed events
+      const closedLogs = await publicClient.getLogs({
+        address: CONTRACTS.shadowVault as `0x${string}`,
+        event: parseAbiItem("event PositionClosed(uint256 indexed positionId, address indexed trader, uint256 timestamp)"),
+        fromBlock,
+        toBlock: "latest",
+      });
+
+      console.log(`   Found ${closedLogs.length} PositionClosed events`);
+
+      for (const log of closedLogs) {
+        const trader = log.args.trader?.toLowerCase();
+        if (trader !== address.toLowerCase()) continue;
+
+        const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
+
+        txList.push({
+          id: `close-${log.transactionHash}`,
+          type: "CLOSE_POSITION",
+          hash: log.transactionHash?.slice(0, 10) + "..." + log.transactionHash?.slice(-8) || "",
+          timestamp: Number(block.timestamp) * 1000,
+          status: "confirmed",
+          isEncrypted: true,
+          positionId: log.args.positionId?.toString(),
+        });
+      }
+
+      // Sort by timestamp (newest first)
+      txList.sort((a, b) => b.timestamp - a.timestamp);
+
+      console.log(`   Total: ${txList.length} transactions`);
+      setTransactions(txList);
+      setHasFetched(true);
+    } catch (error) {
+      console.error("❌ Error fetching history:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [address, publicClient]);
+
+  // Fetch on mount and when address changes
+  useEffect(() => {
+    if (isConnected && address && !hasFetched) {
+      fetchTransactionHistory();
+    }
+  }, [isConnected, address, hasFetched, fetchTransactionHistory]);
 
   // Filter transactions
   const filteredTransactions = useMemo(() => {
@@ -82,10 +186,8 @@ export default function HistoryPage() {
   }, [transactions, filter]);
 
   const handleRefresh = async () => {
-    setIsLoading(true);
-    // In production, fetch from event logs or backend API
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsLoading(false);
+    setHasFetched(false);
+    await fetchTransactionHistory();
   };
 
   // Stats
@@ -206,12 +308,20 @@ export default function HistoryPage() {
                 Your encrypted transactions will appear here
               </p>
             </div>
+          ) : isLoading ? (
+            <div className="p-12 text-center">
+              <Loader2 className="w-12 h-12 text-gold mx-auto mb-4 animate-spin" />
+              <p className="text-text-secondary mb-2">Fetching transactions...</p>
+              <p className="text-sm text-text-muted">
+                Scanning blockchain for your transaction history
+              </p>
+            </div>
           ) : filteredTransactions.length === 0 ? (
             <div className="p-12 text-center">
               <History className="w-12 h-12 text-text-muted mx-auto mb-4" />
               <p className="text-text-secondary mb-2">No transactions found</p>
               <p className="text-sm text-text-muted">
-                Your transaction history will appear here
+                Your transaction history will appear here after you trade
               </p>
             </div>
           ) : (

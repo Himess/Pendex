@@ -299,6 +299,17 @@ export function PositionsTable() {
             : 0;
           const pnlPercent = collateral > 0 && entryPrice > 0 ? (pnl / collateral) * 100 : 0;
 
+          // Debug P&L calculation
+          console.log(`💰 P&L Calculation for ${position.id}:`);
+          console.log(`   Entry Price: $${entryPrice}`);
+          console.log(`   Current Price: $${position.currentPrice}`);
+          console.log(`   Price Diff: $${priceDiff}`);
+          console.log(`   Collateral: $${collateral}`);
+          console.log(`   Leverage: ${leverage}x`);
+          console.log(`   Size: $${size}`);
+          console.log(`   IsLong: ${isLong}`);
+          console.log(`   P&L: $${pnl.toFixed(2)} (${pnlPercent.toFixed(2)}%)`);
+
           setPositions(prev => prev.map(p =>
             p.id === position.id ? {
               ...p,
