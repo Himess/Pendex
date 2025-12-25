@@ -291,9 +291,24 @@ export function PositionsTable() {
             console.log("   ❌ Entry Price decrypt failed:", e);
           }
 
-          // Calculate size and P&L
+          // CRITICAL: Fetch LATEST price from Oracle (not the stale one from position load)
+          let latestCurrentPrice = position.currentPrice;
+          try {
+            const price = await publicClient.readContract({
+              address: CONTRACTS.shadowOracle as `0x${string}`,
+              abi: SHADOW_ORACLE_ABI,
+              functionName: "getCurrentPrice",
+              args: [position.assetId as `0x${string}`],
+            }) as bigint;
+            latestCurrentPrice = Number(price) / 1e6;
+            console.log(`   🔄 Latest Oracle Price: $${latestCurrentPrice}`);
+          } catch (e) {
+            console.log("   ⚠️ Could not fetch latest price, using cached:", e);
+          }
+
+          // Calculate size and P&L with LATEST price
           const size = collateral * leverage;
-          const priceDiff = position.currentPrice - entryPrice;
+          const priceDiff = latestCurrentPrice - entryPrice;
           const pnl = entryPrice > 0
             ? (isLong ? (priceDiff / entryPrice) * size : (-priceDiff / entryPrice) * size)
             : 0;
@@ -302,8 +317,8 @@ export function PositionsTable() {
           // Debug P&L calculation
           console.log(`💰 P&L Calculation for ${position.id}:`);
           console.log(`   Entry Price: $${entryPrice}`);
-          console.log(`   Current Price: $${position.currentPrice}`);
-          console.log(`   Price Diff: $${priceDiff}`);
+          console.log(`   Current Price: $${latestCurrentPrice} (LIVE from Oracle)`);
+          console.log(`   Price Diff: $${priceDiff.toFixed(2)}`);
           console.log(`   Collateral: $${collateral}`);
           console.log(`   Leverage: ${leverage}x`);
           console.log(`   Size: $${size}`);
@@ -317,6 +332,7 @@ export function PositionsTable() {
               leverage,
               side: isLong ? "LONG" : "SHORT",
               entryPrice,
+              currentPrice: latestCurrentPrice, // Update with LIVE price!
               size,
               pnl,
               pnlPercent,

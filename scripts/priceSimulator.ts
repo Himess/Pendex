@@ -6,7 +6,8 @@ import { ethers } from "hardhat";
  * Simulates realistic market price movements for demo
  */
 
-const ORACLE_ADDR = "0x9A5Fec3b1999cCBfC3a33EF5cdf09fdecad52301";
+// Session 12 - Updated Oracle address
+const ORACLE_ADDR = "0x4e819459EEE3061f10D7d0309F4Ba39Af5A68f81";
 
 // Asset base prices (in 6 decimals, so 250_000_000 = $250)
 const ASSETS = [
