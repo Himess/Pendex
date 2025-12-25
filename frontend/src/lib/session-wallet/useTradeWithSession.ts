@@ -179,6 +179,10 @@ export function useTradeWithSession(): UseTradeWithSessionReturn {
         }
 
         console.log("📝 Closing position with session wallet...");
+        console.log("   Position ID:", positionId.toString());
+        console.log("   Session Address:", sessionAddress);
+        console.log("   Main Wallet:", mainWallet);
+        console.log("   Vault Address:", CONTRACTS.shadowVault);
 
         // 2. Create contract instance with session signer
         const vaultContract = new ethers.Contract(
@@ -187,9 +191,39 @@ export function useTradeWithSession(): UseTradeWithSessionReturn {
           sessionSigner
         );
 
+        // 2.5 PRE-CHECK: Verify position exists and is open
+        try {
+          const positionData = await vaultContract.getPosition(positionId);
+          console.log("   Position data:", positionData);
+
+          const [owner, assetId, isOpen] = positionData;
+          console.log("   Owner:", owner);
+          console.log("   AssetId:", assetId);
+          console.log("   IsOpen:", isOpen);
+
+          if (!isOpen) {
+            throw new Error("Position is not open or does not exist in this vault");
+          }
+
+          // Check if we can close this position
+          const ownerLower = owner.toLowerCase();
+          const mainWalletLower = mainWallet?.toLowerCase();
+          const sessionLower = sessionAddress?.toLowerCase();
+
+          if (ownerLower !== mainWalletLower && ownerLower !== sessionLower) {
+            throw new Error(`Position belongs to ${owner}, not ${mainWallet}`);
+          }
+
+          console.log("   ✅ Position validation passed!");
+        } catch (checkErr) {
+          console.error("   ❌ Position check failed:", checkErr);
+          throw checkErr;
+        }
+
         // 3. Send transaction (NO METAMASK POPUP!)
+        console.log("   Sending closePosition transaction...");
         const tx = await vaultContract.closePosition(positionId, {
-          gasLimit: BigInt(10000000),
+          gasLimit: BigInt(15000000), // Increased gas for FHE operations
         });
 
         console.log("⏳ Waiting for confirmation...", tx.hash);
@@ -213,7 +247,7 @@ export function useTradeWithSession(): UseTradeWithSessionReturn {
         setIsTrading(false);
       }
     },
-    [isSessionActive, getSessionSigner, resetState]
+    [isSessionActive, getSessionSigner, resetState, sessionAddress, mainWallet]
   );
 
   return {
