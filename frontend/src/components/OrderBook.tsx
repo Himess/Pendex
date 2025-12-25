@@ -111,14 +111,7 @@ function generateOrderBook(
   return { asks: asks.reverse(), bids, spreadPercent: spreadPercent * 100 };
 }
 
-// Recent trade type
-interface RecentTrade {
-  id: string;
-  price: number;
-  size: number;
-  side: "buy" | "sell";
-  timestamp: number;
-}
+// Dark Pool: Recent trades interface removed for privacy
 
 export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookProps) {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -127,8 +120,7 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
   const [showInfo, setShowInfo] = useState(false);
   const [tick, setTick] = useState(0);
   const [flashPrice, setFlashPrice] = useState<"up" | "down" | null>(null);
-  const [recentTrades, setRecentTrades] = useState<RecentTrade[]>([]);
-  const [tradesPerSecond, setTradesPerSecond] = useState(0);
+  // Dark Pool: Recent trades removed for privacy
   const prevPriceRef = useRef<number>(0);
 
   const network = useCurrentNetwork();
@@ -163,29 +155,15 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
     prevPriceRef.current = livePrice;
   }, [livePrice]);
 
-  // Simulate live order flow - updates every 3-7s randomly (slower for stability)
+  // Simulate live order flow - updates every 3-7s randomly
   useEffect(() => {
     if (!selectedAsset) return;
 
     const updateInterval = () => {
-      const delay = 3000 + Math.random() * 4000; // 3s to 7s (more stable)
+      const delay = 3000 + Math.random() * 4000; // 3s to 7s
       return setTimeout(() => {
         setTick(t => t + 1);
         setLastUpdate(new Date());
-
-        // Simulate a trade
-        if (Math.random() > 0.3) {
-          const side = Math.random() > 0.5 ? "buy" : "sell";
-          const trade: RecentTrade = {
-            id: `trade-${Date.now()}`,
-            price: livePrice + (Math.random() - 0.5) * livePrice * 0.001,
-            size: 0.01 + Math.random() * 0.5,
-            side,
-            timestamp: Date.now(),
-          };
-          setRecentTrades(prev => [trade, ...prev].slice(0, 10));
-        }
-
         timer = updateInterval();
       }, delay);
     };
@@ -193,16 +171,6 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
     let timer = updateInterval();
     return () => clearTimeout(timer);
   }, [selectedAsset, livePrice]);
-
-  // Calculate trades per second
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = Date.now();
-      const recentCount = recentTrades.filter(t => now - t.timestamp < 5000).length;
-      setTradesPerSecond(Math.round(recentCount / 5 * 10) / 10);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [recentTrades]);
 
   // Manual refresh
   const handleRefresh = useCallback(async () => {
@@ -242,12 +210,6 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
         <div className="flex items-center gap-2">
           <Shield className="w-3.5 h-3.5 text-gold" />
           <span className="text-xs font-medium text-text-primary">FHE Order Book</span>
-          {tradesPerSecond > 0 && (
-            <span className="flex items-center gap-1 text-[9px] text-success bg-success/10 px-1.5 py-0.5 rounded">
-              <Zap className="w-2.5 h-2.5" />
-              {tradesPerSecond}/s
-            </span>
-          )}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -415,30 +377,7 @@ export function OrderBook({ selectedAsset, currentPrice: propPrice }: OrderBookP
         </div>
       </div>
 
-      {/* Recent Trades Ticker */}
-      {recentTrades.length > 0 && (
-        <div className="border-t border-border/50 bg-background/30">
-          <div className="px-3 py-1 text-[9px] text-text-muted flex items-center justify-between">
-            <span>Recent Trades</span>
-            <span>{recentTrades.length} trades</span>
-          </div>
-          <div className="px-3 pb-2 flex gap-2 overflow-x-auto scrollbar-none">
-            {recentTrades.slice(0, 5).map((trade) => (
-              <div
-                key={trade.id}
-                className={cn(
-                  "flex-shrink-0 px-2 py-1 rounded text-[10px] font-mono",
-                  trade.side === "buy" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
-                )}
-              >
-                <span className="font-medium">{trade.side === "buy" ? "B" : "S"}</span>
-                <span className="ml-1">${formatPrice(trade.price)}</span>
-                <span className="ml-1 opacity-60">×{trade.size.toFixed(3)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Dark Pool: Trade details are private - no Recent Trades shown */}
 
       {/* Last Update */}
       {lastUpdate && (

@@ -6,7 +6,7 @@ import { Asset } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 import { keccak256, toHex } from "viem";
-import { useContractAddresses, useUserPositions } from "@/lib/contracts/hooks";
+import { useContractAddresses } from "@/lib/contracts/hooks";
 import { CONTRACTS } from "@/lib/contracts/config";
 import Link from "next/link";
 import {
@@ -174,9 +174,7 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
 
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
-  // Query positions for MAIN wallet (positions stored under main wallet via _resolveTrader)
-  const { data: positionIds } = useUserPositions(address);
-  const openPositionCount = positionIds?.length || 0;
+  // Dark Pool: Position count query removed for privacy
 
   // sUSD Balance
   const [sUsdBalance, setSUsdBalance] = useState(0);
@@ -754,19 +752,7 @@ export function TradingPanel({ selectedAsset }: TradingPanelProps) {
             {hasFHE ? "🔒 FHE Encrypted" : "Demo Mode"}
           </div>
 
-          {/* View Positions Link - positions shown in bottom panel */}
-          {isConnected && openPositionCount > 0 && (
-            <div className="border-t border-border pt-2 mt-2">
-              <div className="flex items-center justify-between py-1 text-[10px]">
-                <div className="flex items-center gap-1 text-text-secondary">
-                  <Lock className="w-3 h-3 text-gold" />
-                  <span className="font-medium">Open Positions</span>
-                  <span className="bg-gold/20 text-gold px-1 rounded text-[8px]">{openPositionCount}</span>
-                </div>
-                <span className="text-[9px] text-text-muted">See below ↓</span>
-              </div>
-            </div>
-          )}
+          {/* Dark Pool: Position count hidden for privacy */}
         </div>
       </div>
     </>
