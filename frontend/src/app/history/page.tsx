@@ -92,6 +92,11 @@ export default function HistoryPage() {
     setIsLoading(true);
     console.log("📜 Fetching transaction history for:", address);
 
+    // Get session wallet address from localStorage
+    const sessionData = localStorage.getItem(`session_wallet_${address.toLowerCase()}`);
+    const sessionAddress = sessionData ? JSON.parse(sessionData).sessionAddress?.toLowerCase() : null;
+    console.log("   Session wallet:", sessionAddress);
+
     try {
       const txList: Transaction[] = [];
 
@@ -112,9 +117,10 @@ export default function HistoryPage() {
       console.log(`   Found ${openedLogs.length} PositionOpened events`);
 
       for (const log of openedLogs) {
-        // Filter by user address
+        // Filter by user address (main wallet OR session wallet)
         const trader = log.args.trader?.toLowerCase();
-        if (trader !== address.toLowerCase()) continue;
+        const isOurTx = trader === address.toLowerCase() || trader === sessionAddress;
+        if (!isOurTx) continue;
 
         const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
         const assetId = log.args.assetId as string;
@@ -143,8 +149,10 @@ export default function HistoryPage() {
       console.log(`   Found ${closedLogs.length} PositionClosed events`);
 
       for (const log of closedLogs) {
+        // Filter by user address (main wallet OR session wallet)
         const trader = log.args.trader?.toLowerCase();
-        if (trader !== address.toLowerCase()) continue;
+        const isOurTx = trader === address.toLowerCase() || trader === sessionAddress;
+        if (!isOurTx) continue;
 
         const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
 
