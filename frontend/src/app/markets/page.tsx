@@ -50,12 +50,16 @@ function generateMarketData(asset: Asset) {
   const activityScore = Math.min(10, (random(8) > 0.3 ? 10 : 5));
   const liquidityScore = Math.round(lpScore + volScore + oiScore + activityScore);
 
+  // Generate random 24h change between -8% and +12%
+  const change24h = (random(10) - 0.4) * 20; // Range: -8% to +12%
+
   return {
     volume24h: baseVolume,
     totalOI: baseVolume * 0.4,  // Total OI only - direction encrypted!
     fundingRate: (random(2) - 0.5) * 0.02,
     liquidityScore: Math.min(100, liquidityScore),
     liquidityCategory: liquidityScore >= 70 ? "HIGH" : liquidityScore >= 50 ? "MEDIUM" : "LOW",
+    change24h,
   };
 }
 
