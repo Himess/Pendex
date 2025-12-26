@@ -60,11 +60,10 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
   });
 
   // Chart data (timeframe değişince güncellenir)
-  // Static price kullan - historical data stable kalsın!
-  // Live price sadece son mumu günceller
+  // Oracle fiyatını kullan - static price değil!
   const { data, loading } = useChartData({
     symbol: selectedAsset?.symbol || 'ASSET',
-    basePrice: selectedAsset?.price || 100,  // Static, oracle'dan bağımsız
+    basePrice: livePrice > 0 ? livePrice : (selectedAsset?.price || 100),
     timeframe,
   });
 
@@ -103,28 +102,32 @@ export function PriceChart({ selectedAsset }: PriceChartProps) {
     }
   }, [chartReady, data, updateData, timeframe, selectedAsset?.price, addPriceLine, clearPriceLines]);
 
-  // Live price güncellemesi - sadece son mumun close/high/low'unu güncelle
+  // Live price güncellemesi - only if chart has data
   useEffect(() => {
     // Don't update if chart not ready or no data
     if (!chartReady || !livePrice || livePrice <= 0 || data.length === 0) return;
 
-    const lastCandle = data[data.length - 1];
-    if (!lastCandle) return;
+    const config = TIMEFRAMES[timeframe];
+    const now = Math.floor(Date.now() / 1000);
+    const barTime = now - (now % (config.minutes * 60));
+
+    // Ensure barTime is after or equal to the last data point
+    const lastDataTime = data[data.length - 1]?.time || 0;
+    if (barTime < lastDataTime) return;
 
     try {
-      // Son mumun değerlerini koru, sadece close/high/low güncelle
       updateLastCandle({
-        time: lastCandle.time,  // Mevcut mumun zamanını kullan
-        open: lastCandle.open,  // Open'ı koru!
-        high: Math.max(lastCandle.high, livePrice),  // Yeni high varsa güncelle
-        low: Math.min(lastCandle.low, livePrice),    // Yeni low varsa güncelle
-        close: livePrice,  // Close'u live price yap
+        time: barTime,
+        open: livePrice * 0.999,
+        high: livePrice * 1.001,
+        low: livePrice * 0.998,
+        close: livePrice,
       });
     } catch (e) {
       // Chart update error - ignore silently
       console.debug('Chart update skipped:', e);
     }
-  }, [chartReady, livePrice, updateLastCandle, data]);
+  }, [chartReady, livePrice, timeframe, updateLastCandle, data]);
 
   // Timeframe değişikliği
   const handleTimeframeChange = useCallback((tf: TimeframeKey) => {
