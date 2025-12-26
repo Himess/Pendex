@@ -12,8 +12,6 @@ import {
   TrendingDown,
   Lock,
   Activity,
-  Users,
-  DollarSign,
   ArrowRight,
   BarChart3,
   Shield,
@@ -27,8 +25,8 @@ import {
   X,
 } from "lucide-react";
 
-// Sort types - longRatio removed (direction is encrypted!)
-type SortField = "name" | "price" | "change" | "marketCap" | "volume" | "oi" | "funding" | "liquidity";
+// Sort types - longRatio and funding removed (Dark Pool)
+type SortField = "name" | "price" | "change" | "marketCap" | "volume" | "oi" | "liquidity";
 type SortDirection = "asc" | "desc" | null;
 
 // Items per page
@@ -61,16 +59,11 @@ function generateMarketData(asset: Asset) {
   };
 }
 
-// Platform stats - more realistic numbers
+// Platform stats - Dark Pool: only volume and OI shown
 const PLATFORM_STATS = {
   totalVolume: 847_523_891,
-  totalTrades: 12_847,
-  totalUsers: 3_241,
   totalOI: 156_234_567,
-  // Trend percentages
   volumeTrend: 12.5,
-  tradesTrend: 8.3,
-  usersTrend: 15.2,
   oiTrend: -2.1,
 };
 
@@ -265,9 +258,6 @@ export default function MarketsPage() {
           case "oi":
             comparison = dataA.totalOI - dataB.totalOI;
             break;
-          case "funding":
-            comparison = dataA.fundingRate - dataB.fundingRate;
-            break;
           case "liquidity":
             comparison = (dataA.liquidityScore ?? 0) - (dataB.liquidityScore ?? 0);
             break;
@@ -320,8 +310,8 @@ export default function MarketsPage() {
           </div>
         )}
 
-        {/* Platform Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {/* Platform Stats - Dark Pool: Only Volume and OI shown */}
+        <div className="grid grid-cols-2 gap-4 mb-8 max-w-xl">
           <div className="bg-gradient-to-br from-card to-card-hover border border-border rounded-xl p-4 hover:border-gold/30 hover:scale-[1.02] transition-all">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2 text-text-muted">
@@ -351,36 +341,6 @@ export default function MarketsPage() {
             <p className="text-xl font-bold text-text-primary flex items-center gap-2">
               {formatCompactUSD(PLATFORM_STATS.totalOI)}
               <Lock className="w-4 h-4 text-gold" />
-            </p>
-          </div>
-          <div className="bg-gradient-to-br from-card to-card-hover border border-border rounded-xl p-4 hover:border-gold/30 hover:scale-[1.02] transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-text-muted">
-                <DollarSign className="w-4 h-4 text-gold" />
-                <span className="text-xs uppercase">24h Trades</span>
-              </div>
-              <span className={cn("text-xs flex items-center gap-1", PLATFORM_STATS.tradesTrend >= 0 ? "text-success" : "text-danger")}>
-                {PLATFORM_STATS.tradesTrend >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                {PLATFORM_STATS.tradesTrend >= 0 ? "+" : ""}{PLATFORM_STATS.tradesTrend}%
-              </span>
-            </div>
-            <p className="text-xl font-bold text-text-primary">
-              {PLATFORM_STATS.totalTrades.toLocaleString()}
-            </p>
-          </div>
-          <div className="bg-gradient-to-br from-card to-card-hover border border-border rounded-xl p-4 hover:border-gold/30 hover:scale-[1.02] transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-text-muted">
-                <Users className="w-4 h-4 text-gold" />
-                <span className="text-xs uppercase">Active Traders</span>
-              </div>
-              <span className={cn("text-xs flex items-center gap-1", PLATFORM_STATS.usersTrend >= 0 ? "text-success" : "text-danger")}>
-                {PLATFORM_STATS.usersTrend >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                {PLATFORM_STATS.usersTrend >= 0 ? "+" : ""}{PLATFORM_STATS.usersTrend}%
-              </span>
-            </div>
-            <p className="text-xl font-bold text-text-primary">
-              {PLATFORM_STATS.totalUsers.toLocaleString()}
             </p>
           </div>
         </div>
@@ -477,14 +437,6 @@ export default function MarketsPage() {
                     currentDirection={sortDirection}
                     onSort={handleSort}
                     className="min-w-[120px] hidden xl:table-cell"
-                  />
-                  <SortableHeader
-                    field="funding"
-                    label="Funding"
-                    currentSort={sortField}
-                    currentDirection={sortDirection}
-                    onSort={handleSort}
-                    className="min-w-[80px] hidden xl:table-cell"
                   />
                   <SortableHeader
                     field="liquidity"
@@ -601,18 +553,6 @@ export default function MarketsPage() {
                         </span>
                       </td>
 
-                      {/* Funding Rate */}
-                      <td className="px-3 py-3 hidden xl:table-cell">
-                        <span
-                          className={cn(
-                            "font-medium text-sm",
-                            marketData.fundingRate >= 0 ? "text-success" : "text-danger"
-                          )}
-                        >
-                          {marketData.fundingRate >= 0 ? "+" : ""}
-                          {(marketData.fundingRate * 100).toFixed(3)}%
-                        </span>
-                      </td>
 
                       {/* Liquidity Score - replaces Long/Short (direction is now encrypted) */}
                       <td className="px-3 py-3 hidden md:table-cell">
