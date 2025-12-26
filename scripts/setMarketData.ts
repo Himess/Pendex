@@ -2,14 +2,18 @@ import { ethers } from "hardhat";
 
 /**
  * Set Market Data Script
- * Sets Open Interest for demo/video purposes
- * Liquidity Score is calculated dynamically from OI + volume
+ * Sets Open Interest, Volume, and LP Pool for target Liquidity Scores
+ *
+ * Score Formula:
+ * - LP Pool: (lpPoolSize * 40) / $10M = max 40 points
+ * - Volume: (volume24h * 30) / $5M = max 30 points
+ * - OI: (totalOI * 20) / $20M = max 20 points
+ * - Activity: 10 points (if trade in last hour)
+ * Total: 100 points max
  */
 
-// Current contract addresses
 const ORACLE_ADDR = "0x4e819459EEE3061f10D7d0309F4Ba39Af5A68f81";
 
-// Asset IDs (keccak256 hashes)
 const ASSET_IDS: Record<string, string> = {
   OPENAI: "0xbfe1b9d697e35df099bb4711224ecb98f2ce33a5a09fa3cf15dfb83fc9ec3cd9",
   ANTHROPIC: "0xee2176d5e35f81b98746f5f98677beb44f0167ae70b6518fbb5b5bdc65da8fdd",
@@ -19,32 +23,29 @@ const ASSET_IDS: Record<string, string> = {
   BYTEDANCE: "0x7a8e8d0c5008129e8077f29f2b784b6f889f3420f121d5b70b5b3326476bbce1",
 };
 
-// Market data to set (OI in USD with 6 decimals)
+// Target scores and calculated values (in USD, will multiply by 1e6)
+// Activity bonus (+10) will be added by updateMarketData call
 const marketData = [
-  { asset: "SPACEX", oi: 8_000_000, targetLs: 75 },
-  { asset: "OPENAI", oi: 12_000_000, targetLs: 82 },
-  { asset: "ANTHROPIC", oi: 5_000_000, targetLs: 68 },
-  { asset: "BYTEDANCE", oi: 10_000_000, targetLs: 78 },
-  { asset: "STRIPE", oi: 6_000_000, targetLs: 65 },
-  { asset: "DATABRICKS", oi: 4_000_000, targetLs: 58 },
+  { asset: "SPACEX",     targetScore: 88, lp: 7_500_000, vol: 4_600_000, oi: 20_000_000 },
+  { asset: "OPENAI",     targetScore: 91, lp: 10_000_000, vol: 4_200_000, oi: 16_000_000 },
+  { asset: "ANTHROPIC",  targetScore: 45, lp: 3_750_000, vol: 1_700_000, oi: 10_000_000 },
+  { asset: "BYTEDANCE",  targetScore: 74, lp: 7_500_000, vol: 3_300_000, oi: 14_000_000 },
+  { asset: "STRIPE",     targetScore: 15, lp: 500_000, vol: 300_000, oi: 1_000_000 },
+  { asset: "DATABRICKS", targetScore: 61, lp: 6_250_000, vol: 2_500_000, oi: 11_000_000 },
 ];
 
 async function main() {
-  console.log("\n📊 Setting Market Data for Demo\n");
+  console.log("\n📊 Setting Market Data for Target Liquidity Scores\n");
   console.log("=".repeat(60));
 
   const [deployer] = await ethers.getSigners();
   console.log(`👤 Deployer: ${deployer.address}`);
 
-  // Get Oracle contract
   const oracle = await ethers.getContractAt("ShadowOracle", ORACLE_ADDR);
   console.log(`📍 Oracle: ${ORACLE_ADDR}`);
 
-  // Check if deployer is authorized
+  // Check/set authorization
   const isAuth = await oracle.authorizedContracts(deployer.address);
-  console.log(`🔑 Deployer authorized: ${isAuth}`);
-
-  // Authorize deployer if needed
   if (!isAuth) {
     console.log("\n🔐 Authorizing deployer...");
     const authTx = await oracle.setAuthorizedContract(deployer.address, true);
@@ -52,71 +53,53 @@ async function main() {
     console.log("   ✅ Deployer authorized");
   }
 
-  console.log("\n📈 Setting Open Interest for each asset...\n");
+  console.log("\n📈 Setting market data for each asset...\n");
 
   for (const data of marketData) {
     const assetId = ASSET_IDS[data.asset];
-    if (!assetId) {
-      console.log(`   ⚠️  ${data.asset}: Asset ID not found, skipping`);
-      continue;
-    }
+    if (!assetId) continue;
+
+    console.log(`   ${data.asset} (target: ${data.targetScore}):`);
 
     try {
-      // Get current OI
-      const currentOI = await oracle.getTotalOI(assetId);
-      console.log(`   ${data.asset}:`);
-      console.log(`      Current OI: $${Number(currentOI) / 1e6}`);
-      console.log(`      Target OI:  $${data.oi}`);
+      // 1. Set LP Pool Size
+      const lpSize = BigInt(data.lp) * BigInt(1e6);
+      const lpTx = await oracle.updateLpPoolSize(assetId, lpSize);
+      await lpTx.wait();
+      console.log(`      LP Pool: $${data.lp.toLocaleString()}`);
 
-      // Calculate delta (convert to 6 decimals)
+      // 2. Set Volume via updateMarketData (also triggers activity bonus)
+      const volSize = BigInt(data.vol) * BigInt(1e6);
+      const price = 100 * 1e6; // dummy price
+      const volTx = await oracle.updateMarketData(assetId, price, volSize);
+      await volTx.wait();
+      console.log(`      Volume:  $${data.vol.toLocaleString()}`);
+
+      // 3. Set OI
+      const currentOI = await oracle.getTotalOI(assetId);
       const targetOI = BigInt(data.oi) * BigInt(1e6);
       const currentOIBig = BigInt(currentOI.toString());
 
       if (targetOI > currentOIBig) {
-        // Need to increase
         const delta = targetOI - currentOIBig;
         const halfDelta = delta / BigInt(2);
-
-        console.log(`      Increasing by: $${Number(delta) / 1e6}`);
-
-        const tx = await oracle.updateOpenInterestLegacy(
-          assetId,
-          halfDelta,  // longDelta
-          halfDelta,  // shortDelta (balanced)
-          true        // isIncrease
-        );
-        await tx.wait();
-        console.log(`      ✅ Updated`);
+        const oiTx = await oracle.updateOpenInterestLegacy(assetId, halfDelta, halfDelta, true);
+        await oiTx.wait();
       } else if (targetOI < currentOIBig) {
-        // Need to decrease
         const delta = currentOIBig - targetOI;
         const halfDelta = delta / BigInt(2);
-
-        console.log(`      Decreasing by: $${Number(delta) / 1e6}`);
-
-        const tx = await oracle.updateOpenInterestLegacy(
-          assetId,
-          halfDelta,
-          halfDelta,
-          false  // isIncrease = false
-        );
-        await tx.wait();
-        console.log(`      ✅ Updated`);
-      } else {
-        console.log(`      ⏭️  Already at target`);
+        const oiTx = await oracle.updateOpenInterestLegacy(assetId, halfDelta, halfDelta, false);
+        await oiTx.wait();
       }
+      console.log(`      OI:      $${data.oi.toLocaleString()}`);
 
-      // Verify new OI
-      const newOI = await oracle.getTotalOI(assetId);
-      console.log(`      New OI: $${Number(newOI) / 1e6}`);
-
-      // Get liquidity score
-      const [ls, cat] = await oracle.getLiquidityScore(assetId);
-      console.log(`      Liquidity Score: ${ls} (${cat === 0 ? "LOW" : cat === 1 ? "MEDIUM" : "HIGH"})`);
+      // Verify final score
+      const [score, category] = await oracle.getLiquidityScore(assetId);
+      console.log(`      ✅ Score: ${score} (${category})`);
       console.log();
 
     } catch (error: any) {
-      console.log(`      ❌ Error: ${error.message}`);
+      console.log(`      ❌ Error: ${error.message}\n`);
     }
   }
 
