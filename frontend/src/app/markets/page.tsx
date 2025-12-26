@@ -513,10 +513,10 @@ export default function MarketsPage() {
                         </div>
                       </td>
 
-                      {/* 24h Change - use live data if available */}
+                      {/* 24h Change - use generated random data */}
                       <td className="px-3 py-3">
                         {(() => {
-                          const change = asset.liveChange24h ?? asset.change24h;
+                          const change = asset.liveChange24h ?? marketData.change24h;
                           return (
                             <span
                               className={cn(
