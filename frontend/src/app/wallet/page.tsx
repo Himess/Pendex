@@ -597,17 +597,8 @@ export default function WalletPage() {
         return;
       }
 
-      // Step 2: Actually execute the call to grant ACL (simulate doesn't change state)
-      const hash = await walletClient.writeContract({
-        address: CONTRACT_ADDRESSES.shadowUsd as `0x${string}`,
-        abi: SHADOW_USD_ABI,
-        functionName: "confidentialBalanceOf",
-        args: [address],
-      });
-
-      console.log("✅ ACL granted, tx:", hash);
-
-      // Step 3: Request decryption with EIP-712 signature
+      // Step 2: Request decryption with EIP-712 signature
+      // ACL is already granted inside the contract during openPosition/faucet
       console.log("🔐 Requesting user decryption...");
       const results = await requestUserDecryption(
         [
