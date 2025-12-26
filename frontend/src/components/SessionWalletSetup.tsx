@@ -25,14 +25,17 @@ export function SessionWalletSetup({ onComplete, className }: SessionWalletSetup
     needsSetup,
     sessionBalance,
     isWithdrawing,
+    isRefunding,
     setupSessionWallet,
     initializeSession,
     clearSession,
     withdrawToMainWallet,
+    refundSessionWallet,
   } = useSessionWallet();
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [fundAmount, setFundAmount] = useState("0.5");
+  const [showRefundOptions, setShowRefundOptions] = useState(false);
 
   // Handle setup
   const handleSetup = async () => {
@@ -55,6 +58,15 @@ export function SessionWalletSetup({ onComplete, className }: SessionWalletSetup
     const txHash = await withdrawToMainWallet();
     if (txHash) {
       console.log("Withdraw successful:", txHash);
+      setShowRefundOptions(true); // Show refund options after withdraw
+    }
+  };
+
+  // Handle refund session wallet
+  const handleRefund = async (amount: string) => {
+    const success = await refundSessionWallet(amount);
+    if (success) {
+      setShowRefundOptions(false);
     }
   };
 
@@ -62,12 +74,7 @@ export function SessionWalletSetup({ onComplete, className }: SessionWalletSetup
   if (isSessionActive) {
     const balanceNum = parseFloat(sessionBalance);
     const isLowBalance = balanceNum < 0.1;
-
-    const copyAddress = () => {
-      if (sessionAddress) {
-        navigator.clipboard.writeText(sessionAddress);
-      }
-    };
+    const needsRefund = isLowBalance || showRefundOptions;
 
     return (
       <div className={cn("rounded-xl overflow-hidden", className)}>
@@ -100,16 +107,7 @@ export function SessionWalletSetup({ onComplete, className }: SessionWalletSetup
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {isLowBalance && (
-              <button
-                onClick={copyAddress}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-warning/20 text-warning hover:bg-warning/30 transition-colors"
-                title="Copy session address to send ETH"
-              >
-                Top Up
-              </button>
-            )}
-            {balanceNum > 0.001 && (
+            {!needsRefund && balanceNum > 0.001 && (
               <button
                 onClick={handleWithdraw}
                 disabled={isWithdrawing}
@@ -132,14 +130,41 @@ export function SessionWalletSetup({ onComplete, className }: SessionWalletSetup
             </button>
           </div>
         </div>
-        {isLowBalance && (
-          <div className="px-4 py-2 bg-warning/5 border-t border-warning/20">
-            <p className="text-xs text-text-muted">
-              FHE trades need ~0.15 ETH gas. Send ETH to:{" "}
-              <button onClick={copyAddress} className="text-warning hover:underline font-mono">
-                {sessionAddress?.slice(0, 6)}...{sessionAddress?.slice(-4)}
-              </button>
+
+        {/* Refund Options Panel */}
+        {needsRefund && (
+          <div className="px-4 py-3 bg-card border-t border-border">
+            <p className="text-xs text-text-muted mb-3">
+              FHE trades need ~0.15 ETH gas. Select amount to fund:
             </p>
+            <div className="flex gap-2">
+              {["0.1", "0.5", "1"].map((amount) => (
+                <button
+                  key={amount}
+                  onClick={() => handleRefund(amount)}
+                  disabled={isRefunding}
+                  className={cn(
+                    "flex-1 py-2.5 rounded-lg text-xs font-medium transition-all",
+                    "bg-gold/20 text-gold border border-gold/30 hover:bg-gold/30",
+                    isRefunding && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  {isRefunding ? (
+                    <Loader2 className="w-3 h-3 animate-spin mx-auto" />
+                  ) : (
+                    `${amount} ETH`
+                  )}
+                </button>
+              ))}
+            </div>
+            {showRefundOptions && !isLowBalance && (
+              <button
+                onClick={() => setShowRefundOptions(false)}
+                className="w-full mt-2 text-xs text-text-muted hover:text-text-secondary"
+              >
+                Cancel
+              </button>
+            )}
           </div>
         )}
       </div>

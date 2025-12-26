@@ -15,6 +15,7 @@ export interface UseSessionWalletReturn {
   needsSetup: boolean;
   sessionBalance: string;
   isWithdrawing: boolean;
+  isRefunding: boolean;
 
   // Actions
   setupSessionWallet: (fundAmount?: string) => Promise<boolean>;
@@ -24,6 +25,7 @@ export interface UseSessionWalletReturn {
   clearSession: () => void;
   refreshBalance: () => Promise<void>;
   withdrawToMainWallet: () => Promise<string | null>;
+  refundSessionWallet: (amount: string) => Promise<boolean>;
 }
 
 /**
@@ -48,6 +50,7 @@ export function useSessionWallet(): UseSessionWalletReturn {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [sessionBalance, setSessionBalance] = useState("0");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [isRefunding, setIsRefunding] = useState(false);
 
   // Create ethers provider from viem client
   const ethersProvider = useMemo(() => {
@@ -339,6 +342,41 @@ export function useSessionWallet(): UseSessionWalletReturn {
     }
   }, [ethersProvider, refreshBalance]);
 
+  // Refund session wallet with ETH from main wallet
+  const refundSessionWallet = useCallback(async (amount: string): Promise<boolean> => {
+    if (!walletClient || !ethersProvider || !sessionAddress) {
+      setError("Session not active");
+      return false;
+    }
+
+    setIsRefunding(true);
+    setError(null);
+
+    try {
+      // Create ethers signer from wallet client
+      const provider = new ethers.BrowserProvider(walletClient.transport);
+      const signer = await provider.getSigner();
+
+      // Send ETH to session wallet
+      console.log(`💰 Refunding session wallet with ${amount} ETH...`);
+      const tx = await signer.sendTransaction({
+        to: sessionAddress,
+        value: ethers.parseEther(amount),
+      });
+      await tx.wait();
+
+      await refreshBalance();
+      console.log(`✅ Refunded session wallet with ${amount} ETH`);
+      return true;
+    } catch (err) {
+      console.error("Refund failed:", err);
+      setError(err instanceof Error ? err.message : "Failed to refund");
+      return false;
+    } finally {
+      setIsRefunding(false);
+    }
+  }, [walletClient, ethersProvider, sessionAddress, refreshBalance]);
+
   return {
     // State
     isSessionActive,
@@ -349,6 +387,7 @@ export function useSessionWallet(): UseSessionWalletReturn {
     needsSetup,
     sessionBalance,
     isWithdrawing,
+    isRefunding,
 
     // Actions
     setupSessionWallet,
@@ -358,5 +397,6 @@ export function useSessionWallet(): UseSessionWalletReturn {
     clearSession,
     refreshBalance,
     withdrawToMainWallet,
+    refundSessionWallet,
   };
 }
