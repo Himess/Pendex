@@ -159,6 +159,8 @@ export default function MarketsPage() {
       if (liveData) {
         return {
           ...asset,
+          price: liveData.price, // Update price from Oracle
+          marketCap: liveData.price, // marketCap = price (1B shares assumption)
           livePrice: liveData.price,
           liveChange24h: liveData.change24h,
           totalOI: liveData.totalOI,
@@ -459,7 +461,7 @@ export default function MarketsPage() {
                   />
                   <SortableHeader
                     field="marketCap"
-                    label="MCap"
+                    label="Valuation"
                     currentSort={sortField}
                     currentDirection={sortDirection}
                     onSort={handleSort}

@@ -27,6 +27,8 @@ import {
   getRankChangeDisplay,
   categoryIcons,
 } from '@/lib/companyData';
+import { useLiveOracle } from '@/hooks/useLiveOracle';
+import { useCurrentNetwork } from '@/lib/contracts/hooks';
 
 // Items per page
 const ITEMS_PER_PAGE = 12;
@@ -35,12 +37,47 @@ const ITEMS_PER_PAGE = 12;
 type SortField = 'rank' | 'name' | 'valuation' | 'change';
 type SortDirection = 'asc' | 'desc' | null;
 
+// Extended company type with live data
+interface CompanyWithLiveData extends Company {
+  liveValuation?: number;
+  isLive?: boolean;
+}
+
 export default function CompaniesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField | null>('rank');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  // Live oracle data
+  const network = useCurrentNetwork();
+  const { assets: liveAssets } = useLiveOracle(network);
+
+  // Create a map for quick lookup of live data
+  const liveDataMap = useMemo(() => {
+    const map = new Map<string, number>();
+    liveAssets.forEach(asset => {
+      map.set(asset.symbol.toLowerCase(), asset.price);
+    });
+    return map;
+  }, [liveAssets]);
+
+  // Merge companies with live valuation data
+  const companiesWithLiveData: CompanyWithLiveData[] = useMemo(() => {
+    return companies.map(company => {
+      const livePrice = liveDataMap.get(company.symbol.toLowerCase());
+      if (livePrice) {
+        return {
+          ...company,
+          valuationBn: livePrice, // Update valuation from Oracle
+          liveValuation: livePrice,
+          isLive: true,
+        };
+      }
+      return { ...company, isLive: false };
+    });
+  }, [liveDataMap]);
 
   // Load bookmarks from localStorage
   useEffect(() => {
@@ -91,8 +128,8 @@ export default function CompaniesPage() {
 
   // Filter, search, sort companies
   const processedCompanies = useMemo(() => {
-    // Step 1: Start with all companies
-    let filtered = [...companies];
+    // Step 1: Start with all companies (with live data)
+    let filtered: CompanyWithLiveData[] = [...companiesWithLiveData];
 
     // Step 2: Search
     if (searchQuery.trim()) {
@@ -110,7 +147,7 @@ export default function CompaniesPage() {
     const nonBookmarked = filtered.filter(c => !bookmarks.has(c.symbol));
 
     // Step 4: Sort each group
-    const sortItems = (items: Company[]) => {
+    const sortItems = (items: CompanyWithLiveData[]) => {
       if (!sortField || !sortDirection) return items;
 
       return [...items].sort((a, b) => {
@@ -138,7 +175,7 @@ export default function CompaniesPage() {
     };
 
     return [...sortItems(bookmarked), ...sortItems(nonBookmarked)];
-  }, [searchQuery, bookmarks, sortField, sortDirection]);
+  }, [companiesWithLiveData, searchQuery, bookmarks, sortField, sortDirection]);
 
   // Pagination
   const totalPages = Math.ceil(processedCompanies.length / ITEMS_PER_PAGE);
