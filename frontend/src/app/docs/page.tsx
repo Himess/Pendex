@@ -40,6 +40,9 @@ interface FAQSection {
 }
 
 const FAQ_SECTIONS: FAQSection[] = [
+  // ============================================
+  // 1. WHAT IS PENDEX?
+  // ============================================
   {
     title: "What is Pendex?",
     icon: <Shield className="w-5 h-5" />,
@@ -159,6 +162,124 @@ const FAQ_SECTIONS: FAQSection[] = [
       },
     ],
   },
+
+  // ============================================
+  // 2. DARK POOL & PRIVACY (NEW)
+  // ============================================
+  {
+    title: "Dark Pool & Privacy",
+    icon: <EyeOff className="w-5 h-5" />,
+    items: [
+      {
+        question: "What is a Dark Pool?",
+        answer: (
+          <div className="space-y-3">
+            <p>
+              A <strong>Dark Pool</strong> is a private exchange where trades are not visible
+              to the public until after execution.
+            </p>
+            <div className="bg-card-hover rounded-lg p-4">
+              <h4 className="font-medium mb-3">Why Dark Pools Exist:</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-danger mt-0.5" />
+                  <span><strong>Problem:</strong> Large orders on public exchanges move the market against you</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-success mt-0.5" />
+                  <span><strong>Solution:</strong> Dark pools hide order details until execution</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-sm text-text-muted">
+              In traditional finance, institutional investors use dark pools to prevent
+              front-running and market manipulation. Pendex brings this concept to DeFi with FHE.
+            </p>
+          </div>
+        ),
+      },
+      {
+        question: "What can others see about my trades?",
+        answer: (
+          <div className="space-y-3">
+            <p>
+              Thanks to FHE encryption, external observers have <strong>very limited</strong> visibility:
+            </p>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="bg-danger/10 border border-danger/30 rounded-lg p-4">
+                <h4 className="font-semibold text-danger mb-2 flex items-center gap-2">
+                  <EyeOff className="w-4 h-4" /> They CANNOT See
+                </h4>
+                <ul className="text-sm space-y-1">
+                  <li>❌ Your position size</li>
+                  <li>❌ Long or Short direction</li>
+                  <li>❌ Entry price</li>
+                  <li>❌ Leverage amount</li>
+                  <li>❌ Your P&L</li>
+                  <li>❌ Your balance</li>
+                </ul>
+              </div>
+              <div className="bg-card-hover rounded-lg p-4">
+                <h4 className="font-semibold mb-2 flex items-center gap-2">
+                  <Eye className="w-4 h-4" /> They CAN See
+                </h4>
+                <ul className="text-sm space-y-1 text-text-muted">
+                  <li>✓ Your wallet has positions (not details)</li>
+                  <li>✓ Total platform Open Interest</li>
+                  <li>✓ Liquidity Score</li>
+                  <li>✓ Oracle prices</li>
+                </ul>
+              </div>
+            </div>
+            <div className="bg-gold/10 border border-gold/30 rounded-lg p-3 mt-2">
+              <p className="text-sm">
+                <strong>Example:</strong> Someone can see "Wallet 0x123 has 3 open positions"
+                but NOT "Wallet 0x123 is $50K long on SpaceX with 5x leverage"
+              </p>
+            </div>
+          </div>
+        ),
+      },
+      {
+        question: "Why are Open Interest and Liquidity public?",
+        answer: (
+          <div className="space-y-3">
+            <p>
+              These are <strong>aggregate metrics</strong> that don't reveal individual positions
+              but help traders make informed decisions:
+            </p>
+            <div className="space-y-3">
+              <div className="bg-card-hover rounded-lg p-4">
+                <h4 className="font-medium mb-2 flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-gold" /> Open Interest
+                </h4>
+                <p className="text-sm text-text-muted">
+                  Shows total market activity. Traders need this to gauge market depth
+                  and potential price impact of their trades.
+                </p>
+              </div>
+              <div className="bg-card-hover rounded-lg p-4">
+                <h4 className="font-medium mb-2 flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-gold" /> Liquidity Score
+                </h4>
+                <p className="text-sm text-text-muted">
+                  Indicates expected slippage. Higher score = lower slippage = better execution.
+                  Essential for planning trade size.
+                </p>
+              </div>
+            </div>
+            <p className="text-sm text-text-muted">
+              Even traditional dark pools publish aggregate volume data. Individual privacy is preserved.
+            </p>
+          </div>
+        ),
+      },
+    ],
+  },
+
+  // ============================================
+  // 3. SYNTHETIC PRICING & VALUATION
+  // ============================================
   {
     title: "Synthetic Pricing & Valuation",
     icon: <Calculator className="w-5 h-5" />,
@@ -239,8 +360,81 @@ const FAQ_SECTIONS: FAQSection[] = [
           </div>
         ),
       },
+      {
+        question: "What's the difference between synthetic and real shares?",
+        answer: (
+          <div className="space-y-3">
+            <p>
+              Pendex offers <strong>synthetic exposure</strong> to Pre-IPO companies,
+              not actual equity ownership.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-2 px-3">Feature</th>
+                    <th className="text-left py-2 px-3">Real Shares</th>
+                    <th className="text-left py-2 px-3">Pendex Synthetic</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  <tr>
+                    <td className="py-2 px-3">Ownership</td>
+                    <td className="py-2 px-3 text-text-muted">Company equity</td>
+                    <td className="py-2 px-3 text-gold">Price exposure only</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 px-3">Voting Rights</td>
+                    <td className="py-2 px-3 text-success">Yes</td>
+                    <td className="py-2 px-3 text-danger">No</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 px-3">Dividends</td>
+                    <td className="py-2 px-3 text-success">Yes</td>
+                    <td className="py-2 px-3 text-danger">No</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 px-3">Short Selling</td>
+                    <td className="py-2 px-3 text-danger">Very difficult</td>
+                    <td className="py-2 px-3 text-success">Easy (1-click)</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 px-3">Leverage</td>
+                    <td className="py-2 px-3 text-danger">Requires margin account</td>
+                    <td className="py-2 px-3 text-success">Built-in (1-10x)</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 px-3">Minimum Investment</td>
+                    <td className="py-2 px-3 text-danger">$100,000+</td>
+                    <td className="py-2 px-3 text-success">$1</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 px-3">KYC Required</td>
+                    <td className="py-2 px-3 text-danger">Yes (accredited)</td>
+                    <td className="py-2 px-3 text-success">No</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 px-3">Trading Hours</td>
+                    <td className="py-2 px-3 text-danger">Business hours</td>
+                    <td className="py-2 px-3 text-success">24/7</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 px-3">Privacy</td>
+                    <td className="py-2 px-3 text-danger">Fully tracked</td>
+                    <td className="py-2 px-3 text-success">FHE encrypted</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ),
+      },
     ],
   },
+
+  // ============================================
+  // 4. ORACLE & PRICE MECHANISM
+  // ============================================
   {
     title: "Oracle & Price Mechanism",
     icon: <BarChart3 className="w-5 h-5" />,
@@ -328,54 +522,152 @@ const FAQ_SECTIONS: FAQSection[] = [
           </div>
         ),
       },
+    ],
+  },
+
+  // ============================================
+  // 5. SESSION WALLET (NEW)
+  // ============================================
+  {
+    title: "Session Wallet",
+    icon: <Wallet className="w-5 h-5" />,
+    items: [
       {
-        question: "How does Funding Rate work?",
+        question: "What is Session Wallet?",
         answer: (
           <div className="space-y-3">
             <p>
-              <strong>Funding Rate</strong> is a periodic payment used to maintain balance
-              between long and short positions.
+              <strong>Session Wallet</strong> is a temporary wallet that trades on your behalf,
+              eliminating the need for MetaMask confirmation popups on every transaction.
             </p>
-            <div className="bg-card-hover rounded-lg p-4">
-              <h4 className="font-medium mb-3">How it works:</h4>
-              <div className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-success/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-success text-xs">+</span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-success">Positive Funding</p>
-                    <p className="text-sm text-text-muted">
-                      Longs pay Shorts (too many longs)
-                    </p>
-                  </div>
+            <div className="bg-card-hover border border-gold/30 rounded-lg p-4">
+              <h4 className="font-semibold text-gold mb-2 flex items-center gap-2">
+                <Zap className="w-4 h-4" /> How It Works
+              </h4>
+              <div className="space-y-2 text-sm">
+                <p>1. You create a session wallet (one-time setup)</p>
+                <p>2. Send a small amount of ETH for gas fees</p>
+                <p>3. Session wallet executes trades on your behalf</p>
+                <p>4. Your funds stay in your main wallet - always in your control</p>
+              </div>
+            </div>
+            <div className="bg-success/10 border border-success/30 rounded-lg p-3">
+              <p className="text-sm">
+                <strong>Result:</strong> Open and close positions instantly without any popups!
+              </p>
+            </div>
+          </div>
+        ),
+      },
+      {
+        question: "Is Session Wallet secure?",
+        answer: (
+          <div className="space-y-3">
+            <p>
+              <strong>Yes!</strong> Session wallet is designed with security in mind:
+            </p>
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <Shield className="w-5 h-5 text-success mt-0.5" />
+                <div>
+                  <p className="font-medium">Limited Permissions</p>
+                  <p className="text-sm text-text-muted">
+                    Session wallet can ONLY execute trades. It cannot access or transfer your main wallet funds.
+                  </p>
                 </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-danger/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-danger text-xs">-</span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-danger">Negative Funding</p>
-                    <p className="text-sm text-text-muted">
-                      Shorts pay Longs (too many shorts)
-                    </p>
-                  </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Lock className="w-5 h-5 text-success mt-0.5" />
+                <div>
+                  <p className="font-medium">Encrypted Storage</p>
+                  <p className="text-sm text-text-muted">
+                    Private key is encrypted with FHE and stored on-chain. Only you can decrypt it.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-warning mt-0.5" />
+                <div>
+                  <p className="font-medium">Worst Case Scenario</p>
+                  <p className="text-sm text-text-muted">
+                    If compromised, only the small ETH amount for gas is at risk. Your trading funds are safe!
+                  </p>
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-sm text-text-muted">
-              <Clock className="w-4 h-4" />
-              <span>Funding is calculated every 8 hours</span>
+          </div>
+        ),
+      },
+      {
+        question: "How much ETH do I need for gas?",
+        answer: (
+          <div className="space-y-3">
+            <p>
+              A small amount of ETH is needed for transaction gas fees:
+            </p>
+            <div className="bg-card-hover rounded-lg p-4">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Recommended:</span>
+                  <span className="text-gold font-medium">0.1 - 0.5 ETH</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Per FHE trade (approx):</span>
+                  <span className="text-text-muted">~0.15 ETH</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Trades possible with 0.5 ETH:</span>
+                  <span className="text-success">~3 trades</span>
+                </div>
+              </div>
             </div>
+            <p className="text-sm text-text-muted">
+              FHE transactions are more expensive than regular transactions due to encryption overhead.
+              You can withdraw unused ETH back to your main wallet anytime.
+            </p>
           </div>
         ),
       },
     ],
   },
+
+  // ============================================
+  // 6. TRADING & FEES
+  // ============================================
   {
     title: "Trading & Fees",
     icon: <DollarSign className="w-5 h-5" />,
     items: [
+      {
+        question: "What is sUSD?",
+        answer: (
+          <div className="space-y-3">
+            <p>
+              <strong>sUSD (Shadow USD)</strong> is Pendex's native stablecoin, pegged 1:1 to USD.
+            </p>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="bg-card-hover rounded-lg p-4">
+                <h4 className="font-medium mb-2 text-gold">On Testnet</h4>
+                <p className="text-sm text-text-muted">
+                  Get free sUSD from the faucet. No real value - for testing only.
+                </p>
+              </div>
+              <div className="bg-card-hover rounded-lg p-4">
+                <h4 className="font-medium mb-2">On Mainnet (Planned)</h4>
+                <p className="text-sm text-text-muted">
+                  Swap USDC/USDT for sUSD at 1:1 rate.
+                </p>
+              </div>
+            </div>
+            <div className="bg-gold/10 border border-gold/30 rounded-lg p-3 flex items-center gap-3">
+              <Info className="w-5 h-5 text-gold flex-shrink-0" />
+              <p className="text-sm">
+                sUSD is used for all trading collateral. Your sUSD balance is FHE encrypted.
+              </p>
+            </div>
+          </div>
+        ),
+      },
       {
         question: "How do I open a trade?",
         answer: (
@@ -383,10 +675,12 @@ const FAQ_SECTIONS: FAQSection[] = [
             <div className="flex flex-col gap-3">
               {[
                 { step: 1, title: "Connect Wallet", desc: "Connect with MetaMask or supported wallet" },
-                { step: 2, title: "Get sUSD", desc: "Get test tokens from faucet or deposit" },
-                { step: 3, title: "Deposit to Vault", desc: "Deposit sUSD to the vault" },
-                { step: 4, title: "Select Asset", desc: "Choose from 6 Pre-IPO companies" },
-                { step: 5, title: "Open Position", desc: "Set Long/Short, leverage, and amount" },
+                { step: 2, title: "Setup Session Wallet", desc: "One-time setup for popup-free trading" },
+                { step: 3, title: "Fund Session Wallet", desc: "Send ETH for gas fees (0.1-0.5 ETH)" },
+                { step: 4, title: "Get sUSD", desc: "Get test tokens from faucet" },
+                { step: 5, title: "Select Asset", desc: "Choose from 6 Pre-IPO companies" },
+                { step: 6, title: "Configure Position", desc: "Set Long/Short, leverage, and amount" },
+                { step: 7, title: "Trade!", desc: "Execute trades without MetaMask popups" },
               ].map((item) => (
                 <div key={item.step} className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center flex-shrink-0">
@@ -420,11 +714,6 @@ const FAQ_SECTIONS: FAQSection[] = [
                     <td className="py-2 px-3 font-medium">Trading Fee</td>
                     <td className="py-2 px-3 text-gold">0.3%</td>
                     <td className="py-2 px-3 text-text-muted">Position open/close</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2 px-3 font-medium">Funding Fee</td>
-                    <td className="py-2 px-3 text-gold">Variable</td>
-                    <td className="py-2 px-3 text-text-muted">Every 8 hours, based on OI balance</td>
                   </tr>
                   <tr>
                     <td className="py-2 px-3 font-medium">Liquidation Fee</td>
@@ -523,6 +812,10 @@ const FAQ_SECTIONS: FAQSection[] = [
       },
     ],
   },
+
+  // ============================================
+  // 7. LIQUIDITY POOL (LP)
+  // ============================================
   {
     title: "Liquidity Pool (LP)",
     icon: <Coins className="w-5 h-5" />,
@@ -630,6 +923,10 @@ const FAQ_SECTIONS: FAQSection[] = [
       },
     ],
   },
+
+  // ============================================
+  // 8. EPOCH & STAKING
+  // ============================================
   {
     title: "Epoch & Staking",
     icon: <Clock className="w-5 h-5" />,
@@ -724,6 +1021,10 @@ const FAQ_SECTIONS: FAQSection[] = [
       },
     ],
   },
+
+  // ============================================
+  // 9. SECURITY & PRIVACY
+  // ============================================
   {
     title: "Security & Privacy",
     icon: <Lock className="w-5 h-5" />,
@@ -756,10 +1057,11 @@ const FAQ_SECTIONS: FAQSection[] = [
                 </h4>
                 <ul className="text-sm space-y-1 text-text-muted">
                   <li>• Wallet address</li>
-                  <li>• Position ID</li>
+                  <li>• Position ID (not contents)</li>
                   <li>• Position open/closed status</li>
-                  <li>• Total OI (aggregate)</li>
-                  <li>• Total pool size</li>
+                  <li>• Total Open Interest (aggregate)</li>
+                  <li>• Liquidity Score</li>
+                  <li>• Oracle prices</li>
                 </ul>
               </div>
             </div>
