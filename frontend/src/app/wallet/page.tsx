@@ -58,12 +58,6 @@ import {
   CheckCircle,
   Loader2,
   Send,
-  Key,
-  Unlock,
-  Users,
-  UserPlus,
-  UserMinus,
-  Trash2,
   Droplet,
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -78,11 +72,8 @@ const CONTRACT_ADDRESSES = {
   shadowLiquidityPool: CONTRACTS.shadowLiquidityPool,
 };
 
-// ShadowUSD ABI for operator functions (ERC-7984) and encrypted balance
+// ShadowUSD ABI for encrypted balance
 const SHADOW_USD_ABI = parseAbi([
-  "function setOperator(address operator, bool approved) external",
-  "function isOperator(address owner, address operator) external view returns (bool)",
-  "function operatorTransfer(address from, address to, bytes32 encryptedAmount, bytes calldata inputProof) external returns (bool)",
   "function confidentialBalanceOf(address account) external returns (uint256)",
 ]);
 
@@ -125,13 +116,6 @@ interface Transaction {
   timestamp: string;
   status: string;
   txHash?: string;
-}
-
-// Operator interface
-interface Operator {
-  address: string;
-  isActive: boolean;
-  addedAt: number;
 }
 
 // Helper to format bigint to number (6 decimals for sUSD)
@@ -452,18 +436,7 @@ export default function WalletPage() {
   }), [lpBalance, pendingRewards, timeUntilUnlock, timeUntilNextEpoch, currentEpoch, lastClaimedEpoch, currentApy, totalLiquidity, poolStats, lpLoading, rewardsLoading]);
 
   const [showBalance, setShowBalance] = useState(true); // Show by default - clean UI
-  const [activeTab, setActiveTab] = useState<"overview" | "history" | "deposit" | "liquidity" | "transfer" | "operators">("overview");
-
-  // Operator state (ERC-7984)
-  const [operators, setOperators] = useState<Operator[]>([]);
-  const [newOperatorAddress, setNewOperatorAddress] = useState("");
-  const [isAddingOperator, setIsAddingOperator] = useState(false);
-  const [isRemovingOperator, setIsRemovingOperator] = useState<string | null>(null);
-  const [operatorError, setOperatorError] = useState<string | null>(null);
-  const [operatorSuccess, setOperatorSuccess] = useState<string | null>(null);
-  const [checkOperatorAddress, setCheckOperatorAddress] = useState("");
-  const [checkOperatorResult, setCheckOperatorResult] = useState<boolean | null>(null);
-  const [isCheckingOperator, setIsCheckingOperator] = useState(false);
+  const [activeTab, setActiveTab] = useState<"overview" | "history" | "faucet" | "liquidity" | "transfer">("overview");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [lpDepositAmount, setLpDepositAmount] = useState("");
   const [lpWithdrawAmount, setLpWithdrawAmount] = useState("");
@@ -996,136 +969,6 @@ export default function WalletPage() {
     }
   };
 
-  // ERC-7984 Operator Functions
-  const handleAddOperator = async () => {
-    if (!newOperatorAddress || !walletClient || !address) return;
-
-    // Validate address format
-    if (!/^0x[a-fA-F0-9]{40}$/.test(newOperatorAddress)) {
-      setOperatorError("Invalid address format");
-      return;
-    }
-
-    // Check if adding self
-    if (newOperatorAddress.toLowerCase() === address.toLowerCase()) {
-      setOperatorError("Cannot set yourself as operator");
-      return;
-    }
-
-    setIsAddingOperator(true);
-    setOperatorError(null);
-    setOperatorSuccess(null);
-
-    try {
-      // Create wallet client for transaction
-      const client = createWalletClient({
-        chain: sepolia,
-        transport: custom(walletClient.transport),
-      });
-
-      // Call setOperator(address, true)
-      const hash = await client.writeContract({
-        address: CONTRACT_ADDRESSES.shadowUsd,
-        abi: SHADOW_USD_ABI,
-        functionName: "setOperator",
-        args: [newOperatorAddress as `0x${string}`, true],
-        account: address,
-      });
-
-      console.log("setOperator tx:", hash);
-
-      // Add to local state
-      setOperators((prev) => [
-        ...prev,
-        {
-          address: newOperatorAddress,
-          isActive: true,
-          addedAt: Date.now(),
-        },
-      ]);
-
-      setOperatorSuccess(`Operator added! Tx: ${hash.slice(0, 10)}...`);
-      setNewOperatorAddress("");
-    } catch (error) {
-      console.error("Failed to add operator:", error);
-      setOperatorError(error instanceof Error ? error.message : "Failed to add operator");
-    } finally {
-      setIsAddingOperator(false);
-    }
-  };
-
-  const handleRemoveOperator = async (operatorAddress: string) => {
-    if (!walletClient || !address) return;
-
-    setIsRemovingOperator(operatorAddress);
-    setOperatorError(null);
-    setOperatorSuccess(null);
-
-    try {
-      const client = createWalletClient({
-        chain: sepolia,
-        transport: custom(walletClient.transport),
-      });
-
-      // Call setOperator(address, false)
-      const hash = await client.writeContract({
-        address: CONTRACT_ADDRESSES.shadowUsd,
-        abi: SHADOW_USD_ABI,
-        functionName: "setOperator",
-        args: [operatorAddress as `0x${string}`, false],
-        account: address,
-      });
-
-      console.log("removeOperator tx:", hash);
-
-      // Remove from local state
-      setOperators((prev) => prev.filter((op) => op.address.toLowerCase() !== operatorAddress.toLowerCase()));
-
-      setOperatorSuccess(`Operator removed! Tx: ${hash.slice(0, 10)}...`);
-    } catch (error) {
-      console.error("Failed to remove operator:", error);
-      setOperatorError(error instanceof Error ? error.message : "Failed to remove operator");
-    } finally {
-      setIsRemovingOperator(null);
-    }
-  };
-
-  const handleCheckOperator = async () => {
-    if (!checkOperatorAddress || !address) return;
-
-    // Validate address format
-    if (!/^0x[a-fA-F0-9]{40}$/.test(checkOperatorAddress)) {
-      setOperatorError("Invalid address format");
-      return;
-    }
-
-    setIsCheckingOperator(true);
-    setCheckOperatorResult(null);
-    setOperatorError(null);
-
-    try {
-      const publicClient = createPublicClient({
-        chain: sepolia,
-        transport: http(),
-      });
-
-      // Call isOperator(owner, operator)
-      const isOp = await publicClient.readContract({
-        address: CONTRACT_ADDRESSES.shadowUsd,
-        abi: SHADOW_USD_ABI,
-        functionName: "isOperator",
-        args: [address, checkOperatorAddress as `0x${string}`],
-      });
-
-      setCheckOperatorResult(isOp as boolean);
-    } catch (error) {
-      console.error("Failed to check operator:", error);
-      setOperatorError(error instanceof Error ? error.message : "Failed to check operator status");
-    } finally {
-      setIsCheckingOperator(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
@@ -1280,11 +1123,10 @@ export default function WalletPage() {
         <div className="flex gap-2 mb-6 border-b border-border overflow-x-auto">
           {[
             { id: "overview", label: "Overview", icon: <PieChart className="w-4 h-4" /> },
+            { id: "faucet", label: "Get sUSD", icon: <Droplet className="w-4 h-4" /> },
             { id: "transfer", label: "Transfer sUSD", icon: <Send className="w-4 h-4" /> },
-            { id: "operators", label: "Operators", icon: <Users className="w-4 h-4" /> },
             { id: "liquidity", label: "Liquidity Pool", icon: <Coins className="w-4 h-4" /> },
             { id: "history", label: "History", icon: <History className="w-4 h-4" /> },
-            { id: "deposit", label: "Deposit / Withdraw", icon: <DollarSign className="w-4 h-4" /> },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -1462,290 +1304,6 @@ export default function WalletPage() {
                     <h4 className="font-medium text-text-primary mb-1">Private Transfer</h4>
                     <p className="text-sm text-text-muted">
                       The contract processes encrypted values - only sender and receiver know the amount.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === "operators" && (
-          <div className="max-w-3xl mx-auto space-y-6">
-            {/* Header */}
-            <div className="bg-card border border-border rounded-xl p-8">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-14 h-14 rounded-full bg-gold/20 text-gold flex items-center justify-center">
-                  <Users className="w-7 h-7" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-text-primary">Operator Management</h2>
-                  <p className="text-text-muted">ERC-7984: Authorize addresses to transfer on your behalf</p>
-                </div>
-              </div>
-
-              {/* Connection Check */}
-              {!isConnected ? (
-                <div className="p-6 bg-warning/10 border border-warning/30 rounded-lg text-center">
-                  <Wallet className="w-12 h-12 text-warning mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-text-primary mb-2">Wallet Not Connected</h3>
-                  <p className="text-text-muted">Connect your wallet to manage operators.</p>
-                </div>
-              ) : chainId !== 11155111 ? (
-                <div className="p-6 bg-warning/10 border border-warning/30 rounded-lg text-center">
-                  <AlertTriangle className="w-12 h-12 text-warning mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-text-primary mb-2">Wrong Network</h3>
-                  <p className="text-text-muted">Please switch to <strong>Sepolia testnet</strong>.</p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* Success/Error Messages */}
-                  {operatorSuccess && (
-                    <div className="p-4 bg-success/20 border border-success/30 rounded-lg flex items-center gap-3">
-                      <CheckCircle className="w-5 h-5 text-success" />
-                      <p className="text-success font-medium">{operatorSuccess}</p>
-                      <button onClick={() => setOperatorSuccess(null)} className="ml-auto text-success hover:text-success/70">×</button>
-                    </div>
-                  )}
-                  {operatorError && (
-                    <div className="p-4 bg-danger/20 border border-danger/30 rounded-lg flex items-center gap-3">
-                      <AlertTriangle className="w-5 h-5 text-danger" />
-                      <p className="text-danger font-medium">{operatorError}</p>
-                      <button onClick={() => setOperatorError(null)} className="ml-auto text-danger hover:text-danger/70">×</button>
-                    </div>
-                  )}
-
-                  {/* Add New Operator */}
-                  <div className="p-6 bg-background rounded-lg border border-border">
-                    <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
-                      <UserPlus className="w-5 h-5 text-gold" />
-                      Add New Operator
-                    </h3>
-                    <div className="flex gap-3">
-                      <input
-                        type="text"
-                        value={newOperatorAddress}
-                        onChange={(e) => setNewOperatorAddress(e.target.value)}
-                        placeholder="0x... operator address"
-                        className="input-field flex-1 font-mono"
-                      />
-                      <button
-                        onClick={handleAddOperator}
-                        disabled={!newOperatorAddress || isAddingOperator}
-                        className="px-6 py-3 bg-gold text-background rounded-lg font-semibold hover:bg-gold/90 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isAddingOperator ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Adding...
-                          </>
-                        ) : (
-                          <>
-                            <UserPlus className="w-4 h-4" />
-                            Add Operator
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    <p className="text-xs text-text-muted mt-2">
-                      Operators can transfer sUSD from your account without amount limits.
-                    </p>
-                  </div>
-
-                  {/* Current Operators List */}
-                  <div className="p-6 bg-background rounded-lg border border-border">
-                    <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
-                      <Users className="w-5 h-5 text-gold" />
-                      Your Operators ({operators.length})
-                    </h3>
-                    {operators.length === 0 ? (
-                      <div className="text-center py-8 text-text-muted">
-                        <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                        <p>No operators added yet</p>
-                        <p className="text-sm">Add an operator above to grant transfer permissions</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {operators.map((op) => (
-                          <div
-                            key={op.address}
-                            className="flex items-center justify-between p-4 bg-card rounded-lg border border-border"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-gold/20 flex items-center justify-center">
-                                <Users className="w-5 h-5 text-gold" />
-                              </div>
-                              <div>
-                                <p className="font-mono text-text-primary">
-                                  {op.address.slice(0, 10)}...{op.address.slice(-8)}
-                                </p>
-                                <p className="text-xs text-text-muted">
-                                  Added: {new Date(op.addedAt).toLocaleDateString()}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="px-2 py-1 bg-success/20 text-success text-xs rounded-full">
-                                Active
-                              </span>
-                              <button
-                                onClick={() => handleRemoveOperator(op.address)}
-                                disabled={isRemovingOperator === op.address}
-                                className="p-2 text-danger hover:bg-danger/10 rounded-lg transition-colors disabled:opacity-50"
-                              >
-                                {isRemovingOperator === op.address ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <Trash2 className="w-4 h-4" />
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Check Operator Status */}
-                  <div className="p-6 bg-background rounded-lg border border-border">
-                    <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
-                      <Eye className="w-5 h-5 text-gold" />
-                      Check Operator Status
-                    </h3>
-                    <div className="flex gap-3">
-                      <input
-                        type="text"
-                        value={checkOperatorAddress}
-                        onChange={(e) => {
-                          setCheckOperatorAddress(e.target.value);
-                          setCheckOperatorResult(null);
-                        }}
-                        placeholder="0x... address to check"
-                        className="input-field flex-1 font-mono"
-                      />
-                      <button
-                        onClick={handleCheckOperator}
-                        disabled={!checkOperatorAddress || isCheckingOperator}
-                        className="px-6 py-3 bg-card border border-border text-text-primary rounded-lg font-semibold hover:bg-card-hover transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isCheckingOperator ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Checking...
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="w-4 h-4" />
-                            Check
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    {checkOperatorResult !== null && (
-                      <div className={cn(
-                        "mt-4 p-4 rounded-lg flex items-center gap-3",
-                        checkOperatorResult
-                          ? "bg-success/20 border border-success/30"
-                          : "bg-danger/20 border border-danger/30"
-                      )}>
-                        {checkOperatorResult ? (
-                          <>
-                            <CheckCircle className="w-5 h-5 text-success" />
-                            <span className="text-success font-medium">This address IS an operator for your account</span>
-                          </>
-                        ) : (
-                          <>
-                            <UserMinus className="w-5 h-5 text-danger" />
-                            <span className="text-danger font-medium">This address is NOT an operator</span>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* How Operators Work */}
-            <div className="bg-card border border-border rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
-                <Shield className="w-5 h-5 text-gold" />
-                How ERC-7984 Operators Work
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold flex-shrink-0">
-                    1
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-text-primary mb-1">Grant Permission</h4>
-                    <p className="text-sm text-text-muted">
-                      Authorize an address as your operator using setOperator().
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold flex-shrink-0">
-                    2
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-text-primary mb-1">Operator Transfers</h4>
-                    <p className="text-sm text-text-muted">
-                      Operators can call operatorTransfer() to move your encrypted funds.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold flex-shrink-0">
-                    3
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-text-primary mb-1">Revoke Anytime</h4>
-                    <p className="text-sm text-text-muted">
-                      Remove operator access instantly by setting approved = false.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Use Cases */}
-            <div className="bg-gold/5 border border-gold/20 rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-gold mb-4">Common Use Cases</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex items-start gap-3">
-                  <Shield className="w-5 h-5 text-gold mt-0.5" />
-                  <div>
-                    <h4 className="font-medium text-text-primary">Smart Contract Vaults</h4>
-                    <p className="text-sm text-text-muted">
-                      Allow DeFi protocols to manage your encrypted positions.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Users className="w-5 h-5 text-gold mt-0.5" />
-                  <div>
-                    <h4 className="font-medium text-text-primary">Multi-Sig Wallets</h4>
-                    <p className="text-sm text-text-muted">
-                      Enable multi-signature control over confidential funds.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Key className="w-5 h-5 text-gold mt-0.5" />
-                  <div>
-                    <h4 className="font-medium text-text-primary">Delegated Trading</h4>
-                    <p className="text-sm text-text-muted">
-                      Let trading bots or strategies operate on your behalf.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Lock className="w-5 h-5 text-gold mt-0.5" />
-                  <div>
-                    <h4 className="font-medium text-text-primary">Recovery Systems</h4>
-                    <p className="text-sm text-text-muted">
-                      Set up trusted addresses for account recovery.
                     </p>
                   </div>
                 </div>
@@ -2415,36 +1973,35 @@ export default function WalletPage() {
           </div>
         )}
 
-        {activeTab === "deposit" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Step 1: Faucet - Get Test sUSD */}
-            <div className="bg-card border border-border rounded-xl p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center text-sm font-bold">
-                  1
+        {activeTab === "faucet" && (
+          <div className="max-w-md mx-auto">
+            <div className="bg-card border border-border rounded-xl p-8">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-14 h-14 rounded-full bg-gold/20 text-gold flex items-center justify-center">
+                  <Droplet className="w-7 h-7" />
                 </div>
-                <h3 className="text-lg font-semibold text-text-primary">Get Test sUSD</h3>
+                <div>
+                  <h2 className="text-2xl font-bold text-text-primary">Testnet Faucet</h2>
+                  <p className="text-text-muted">Get free sUSD for testing</p>
+                </div>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div className="p-4 bg-background rounded-lg">
-                  <div className="flex items-center gap-3 mb-3">
-                    <Droplet className="w-8 h-8 text-gold" />
-                    <div>
-                      <p className="text-sm font-medium text-text-primary">Testnet Faucet</p>
-                      <p className="text-xs text-text-muted">Get up to 10,000 sUSD for testing</p>
-                    </div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-text-muted">Current Balance</span>
+                    <span className="text-2xl font-bold text-gold">{formatUSD(walletData.balance)}</span>
                   </div>
-                  <div className="text-xs text-text-muted mb-2">
-                    Current Wallet Balance: <span className="text-gold font-medium">{formatUSD(walletData.balance)}</span>
-                  </div>
+                  <p className="text-xs text-text-muted">
+                    Use sUSD directly for trading - no deposit required!
+                  </p>
                 </div>
 
                 <button
                   onClick={() => claimFaucet()}
                   disabled={isFaucetPending || !isConnected}
                   className={cn(
-                    "w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2",
+                    "w-full py-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 text-lg",
                     isFaucetPending
                       ? "bg-gold/50 cursor-not-allowed"
                       : isFaucetSuccess
@@ -2454,17 +2011,17 @@ export default function WalletPage() {
                 >
                   {isFaucetPending ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-5 h-5 animate-spin" />
                       Claiming...
                     </>
                   ) : isFaucetSuccess ? (
                     <>
-                      <CheckCircle className="w-4 h-4" />
+                      <CheckCircle className="w-5 h-5" />
                       Claimed 10,000 sUSD!
                     </>
                   ) : (
                     <>
-                      <Droplet className="w-4 h-4" />
+                      <Droplet className="w-5 h-5" />
                       Claim 10,000 sUSD
                     </>
                   )}
@@ -2475,178 +2032,20 @@ export default function WalletPage() {
                     href={`https://sepolia.etherscan.io/tx/${faucetHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-gold hover:underline flex items-center justify-center gap-1"
+                    className="text-sm text-gold hover:underline flex items-center justify-center gap-1"
                   >
-                    View transaction <ExternalLink className="w-3 h-3" />
+                    View transaction <ExternalLink className="w-4 h-4" />
                   </a>
                 )}
-              </div>
-            </div>
 
-            {/* Step 2: Deposit to Vault */}
-            <div className="bg-card border border-border rounded-xl p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-full bg-success/20 text-success flex items-center justify-center text-sm font-bold">
-                  2
+                <div className="p-4 bg-gold/10 border border-gold/30 rounded-lg">
+                  <h4 className="font-medium text-gold mb-2">How it works</h4>
+                  <ol className="text-sm text-text-muted space-y-1">
+                    <li>1. Click "Claim 10,000 sUSD" above</li>
+                    <li>2. Confirm the transaction in MetaMask</li>
+                    <li>3. Go to Trade page and start trading!</li>
+                  </ol>
                 </div>
-                <h3 className="text-lg font-semibold text-text-primary">Deposit to Vault</h3>
-              </div>
-
-              <div className="space-y-4">
-                <div className="p-3 bg-background rounded-lg space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-text-muted">Wallet Balance</span>
-                    <span className="text-text-primary font-medium">{formatUSD(walletData.balance)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-text-muted">Vault Balance</span>
-                    <span className="text-gold font-medium">{formatUSD(walletData.vaultBalance)}</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm text-text-muted mb-2 block">Amount to Deposit</label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={depositAmount}
-                      onChange={(e) => setDepositAmount(e.target.value)}
-                      placeholder="0.00"
-                      className="input-field pr-16"
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted text-sm">
-                      sUSD
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  {[100, 500, 1000].map((amount) => (
-                    <button
-                      key={amount}
-                      onClick={() => setDepositAmount(amount.toString())}
-                      className="flex-1 py-2 text-xs bg-background rounded-lg text-text-muted hover:text-text-primary hover:bg-card-hover transition-colors"
-                    >
-                      ${amount}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setDepositAmount(walletData.balance.toString())}
-                    className="flex-1 py-2 text-xs bg-background rounded-lg text-gold hover:bg-card-hover transition-colors"
-                  >
-                    MAX
-                  </button>
-                </div>
-
-                <button
-                  onClick={handleFheDeposit}
-                  disabled={isDepositPending || !depositAmount || parseFloat(depositAmount) <= 0 || !isFheReady}
-                  className={cn(
-                    "w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2",
-                    isDepositPending
-                      ? "bg-success/50 cursor-not-allowed"
-                      : isDepositSuccess
-                      ? "bg-success text-white"
-                      : "bg-success text-white hover:bg-success/90"
-                  )}
-                >
-                  {isDepositPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Depositing...
-                    </>
-                  ) : isDepositSuccess ? (
-                    <>
-                      <CheckCircle className="w-4 h-4" />
-                      Deposited!
-                    </>
-                  ) : (
-                    <>
-                      <ArrowDownToLine className="w-4 h-4" />
-                      Deposit to Vault
-                    </>
-                  )}
-                </button>
-
-                <p className="text-xs text-text-muted text-center">
-                  Vault balance is used for trading
-                </p>
-              </div>
-            </div>
-
-            {/* Step 3: Withdraw from Vault */}
-            <div className="bg-card border border-border rounded-xl p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-full bg-danger/20 text-danger flex items-center justify-center text-sm font-bold">
-                  3
-                </div>
-                <h3 className="text-lg font-semibold text-text-primary">Withdraw</h3>
-              </div>
-
-              <div className="space-y-4">
-                <div className="p-3 bg-background rounded-lg">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-text-muted">Available in Vault</span>
-                    <span className="text-text-primary font-medium">{formatUSD(walletData.vaultBalance)}</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm text-text-muted mb-2 block">Amount to Withdraw</label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={withdrawAmount}
-                      onChange={(e) => setWithdrawAmount(e.target.value)}
-                      placeholder="0.00"
-                      className="input-field pr-16"
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted text-sm">
-                      sUSD
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setWithdrawAmount(walletData.vaultBalance.toString())}
-                  className="w-full py-2 text-sm bg-background rounded-lg text-gold hover:bg-card-hover transition-colors"
-                >
-                  Withdraw Max
-                </button>
-
-                <button
-                  onClick={handleFheWithdraw}
-                  disabled={isWithdrawPending || !withdrawAmount || parseFloat(withdrawAmount) <= 0 || !isFheReady}
-                  className={cn(
-                    "w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2",
-                    isWithdrawPending
-                      ? "bg-danger/50 cursor-not-allowed"
-                      : isWithdrawSuccess
-                      ? "bg-success text-white"
-                      : "bg-danger text-white hover:bg-danger/90"
-                  )}
-                >
-                  {isWithdrawPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Withdrawing...
-                    </>
-                  ) : isWithdrawSuccess ? (
-                    <>
-                      <CheckCircle className="w-4 h-4" />
-                      Withdrawn!
-                    </>
-                  ) : (
-                    <>
-                      <ArrowUpFromLine className="w-4 h-4" />
-                      Withdraw from Vault
-                    </>
-                  )}
-                </button>
-
-                <p className="text-xs text-text-muted text-center">
-                  Withdrawals may take up to 24 hours to process
-                </p>
               </div>
             </div>
           </div>
