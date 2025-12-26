@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useSessionWallet } from "@/lib/session-wallet/hooks";
-import { Zap, Shield, AlertCircle, CheckCircle2, Loader2, ChevronDown, ChevronUp, Info } from "lucide-react";
+import { Zap, Shield, AlertCircle, CheckCircle2, Loader2, ChevronDown, ChevronUp, Info, ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface SessionWalletSetupProps {
@@ -24,9 +24,11 @@ export function SessionWalletSetup({ onComplete, className }: SessionWalletSetup
     error,
     needsSetup,
     sessionBalance,
+    isWithdrawing,
     setupSessionWallet,
     initializeSession,
     clearSession,
+    withdrawToMainWallet,
   } = useSessionWallet();
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -45,6 +47,14 @@ export function SessionWalletSetup({ onComplete, className }: SessionWalletSetup
     const success = await initializeSession();
     if (success && onComplete) {
       onComplete();
+    }
+  };
+
+  // Handle withdraw to main wallet
+  const handleWithdraw = async () => {
+    const txHash = await withdrawToMainWallet();
+    if (txHash) {
+      console.log("Withdraw successful:", txHash);
     }
   };
 
@@ -97,6 +107,21 @@ export function SessionWalletSetup({ onComplete, className }: SessionWalletSetup
                 title="Copy session address to send ETH"
               >
                 Top Up
+              </button>
+            )}
+            {balanceNum > 0.001 && (
+              <button
+                onClick={handleWithdraw}
+                disabled={isWithdrawing}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-gold/20 text-gold hover:bg-gold/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Withdraw remaining ETH to main wallet"
+              >
+                {isWithdrawing ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <ArrowUpRight className="w-3 h-3" />
+                )}
+                Withdraw
               </button>
             )}
             <button

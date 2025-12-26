@@ -14,6 +14,7 @@ export interface UseSessionWalletReturn {
   error: string | null;
   needsSetup: boolean;
   sessionBalance: string;
+  isWithdrawing: boolean;
 
   // Actions
   setupSessionWallet: (fundAmount?: string) => Promise<boolean>;
@@ -22,6 +23,7 @@ export interface UseSessionWalletReturn {
   revokeSession: () => Promise<void>;
   clearSession: () => void;
   refreshBalance: () => Promise<void>;
+  withdrawToMainWallet: () => Promise<string | null>;
 }
 
 /**
@@ -45,6 +47,7 @@ export function useSessionWallet(): UseSessionWalletReturn {
   const [error, setError] = useState<string | null>(null);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [sessionBalance, setSessionBalance] = useState("0");
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   // Create ethers provider from viem client
   const ethersProvider = useMemo(() => {
@@ -312,6 +315,30 @@ export function useSessionWallet(): UseSessionWalletReturn {
     }
   }, [ethersProvider]);
 
+  // Withdraw remaining ETH from session wallet to main wallet
+  const withdrawToMainWallet = useCallback(async (): Promise<string | null> => {
+    if (!ethersProvider || !sessionWalletManager.isSessionActive()) {
+      setError("Session not active");
+      return null;
+    }
+
+    setIsWithdrawing(true);
+    setError(null);
+
+    try {
+      const txHash = await sessionWalletManager.withdrawToMainWallet(ethersProvider);
+      await refreshBalance();
+      console.log("✅ Withdrawn to main wallet:", txHash);
+      return txHash;
+    } catch (err) {
+      console.error("Withdraw failed:", err);
+      setError(err instanceof Error ? err.message : "Failed to withdraw");
+      return null;
+    } finally {
+      setIsWithdrawing(false);
+    }
+  }, [ethersProvider, refreshBalance]);
+
   return {
     // State
     isSessionActive,
@@ -321,6 +348,7 @@ export function useSessionWallet(): UseSessionWalletReturn {
     error,
     needsSetup,
     sessionBalance,
+    isWithdrawing,
 
     // Actions
     setupSessionWallet,
@@ -329,5 +357,6 @@ export function useSessionWallet(): UseSessionWalletReturn {
     revokeSession,
     clearSession,
     refreshBalance,
+    withdrawToMainWallet,
   };
 }

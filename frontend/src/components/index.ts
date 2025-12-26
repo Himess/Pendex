@@ -9,3 +9,4 @@ export { NetworkSelector, NetworkSelectorCompact } from "./NetworkSelector";
 export { OrderBook } from "./OrderBook";
 export { MarketStats } from "./MarketStats";
 export { SessionWalletSetup } from "./SessionWalletSetup";
+export { TradeHistory } from "./TradeHistory";

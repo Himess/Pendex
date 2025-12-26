@@ -428,6 +428,50 @@ export class SessionWalletManager {
     const balance = await this.getSessionBalance(provider);
     return parseFloat(balance) >= parseFloat(minEth);
   }
+
+  /**
+   * Withdraw remaining ETH from session wallet back to main wallet
+   * @param provider Ethereum provider
+   * @returns Transaction hash
+   */
+  async withdrawToMainWallet(provider: ethers.Provider): Promise<string> {
+    if (!this.sessionData) {
+      throw new Error("Session not initialized");
+    }
+
+    const sessionSigner = this.getSessionSigner(provider);
+    const balance = await provider.getBalance(this.sessionData.sessionAddress);
+
+    if (balance === BigInt(0)) {
+      throw new Error("No balance to withdraw");
+    }
+
+    // Calculate gas cost and subtract from balance
+    const feeData = await provider.getFeeData();
+    const gasPrice = feeData.gasPrice || ethers.parseUnits("20", "gwei");
+    const gasLimit = BigInt(21000); // Standard ETH transfer
+    const gasCost = gasPrice * gasLimit;
+
+    if (balance <= gasCost) {
+      throw new Error("Balance too low to cover gas fees");
+    }
+
+    const amountToSend = balance - gasCost;
+
+    console.log(`💸 Withdrawing ${ethers.formatEther(amountToSend)} ETH to main wallet...`);
+
+    const tx = await sessionSigner.sendTransaction({
+      to: this.sessionData.mainWallet,
+      value: amountToSend,
+      gasLimit: gasLimit,
+      gasPrice: gasPrice,
+    });
+
+    await tx.wait();
+    console.log(`✅ Withdrawn to main wallet. TX: ${tx.hash}`);
+
+    return tx.hash;
+  }
 }
 
 // Export singleton instance

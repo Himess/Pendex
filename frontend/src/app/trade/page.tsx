@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { Header, TradingPanel, PositionsTable, PriceChart, OrderBook, MarketStats, SessionWalletSetup } from "@/components";
+import { Header, TradingPanel, PositionsTable, PriceChart, OrderBook, MarketStats, SessionWalletSetup, TradeHistory } from "@/components";
 import { Asset, ASSETS } from "@/lib/constants";
 import { Lock, ChevronDown, X, BookOpen, GripHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -290,11 +290,7 @@ function TradeContent() {
                   No open orders
                 </div>
               )}
-              {bottomTab === "history" && (
-                <div className="h-full flex items-center justify-center text-text-muted text-sm">
-                  No trade history
-                </div>
-              )}
+              {bottomTab === "history" && <TradeHistory />}
             </div>
           </div>
         </div>
