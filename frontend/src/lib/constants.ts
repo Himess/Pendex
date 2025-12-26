@@ -22,14 +22,14 @@ export interface Asset {
   // Example: SpaceX $350B valuation → price = $350 per synthetic share
 }
 
-// Logo URLs from Clearbit/public sources
+// Local SVG logos (Simple Icons)
 const LOGOS = {
-  openai: "https://logo.clearbit.com/openai.com",
-  anthropic: "https://logo.clearbit.com/anthropic.com",
-  spacex: "https://logo.clearbit.com/spacex.com",
-  stripe: "https://logo.clearbit.com/stripe.com",
-  databricks: "https://logo.clearbit.com/databricks.com",
-  bytedance: "https://logo.clearbit.com/bytedance.com",
+  openai: "/logos/openai.svg",
+  anthropic: "/logos/anthropic.svg",
+  spacex: "/logos/spacex.svg",
+  stripe: "/logos/stripe.svg",
+  databricks: "/logos/databricks.svg",
+  bytedance: "/logos/bytedance.svg",
 };
 
 // Top 6 Pre-IPO Companies by Valuation
