@@ -57,8 +57,8 @@ export function TradeHistory() {
       const tradeItems: TradeHistoryItem[] = [];
       const currentBlock = await publicClient.getBlockNumber();
 
-      // Alchemy free tier limit: fetch last 100 blocks only (works for recent trades)
-      const fromBlock = currentBlock > BigInt(100) ? currentBlock - BigInt(100) : BigInt(0);
+      // Alchemy free tier limit: only 10 blocks allowed!
+      const fromBlock = currentBlock > BigInt(10) ? currentBlock - BigInt(10) : BigInt(0);
 
       console.log(`📊 Fetching events from block ${fromBlock} to ${currentBlock}`);
 
