@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { Header, Footer } from "@/components";
-import { ASSETS, CATEGORIES, Asset, formatUSD, formatPercent, formatMarketCap, formatCompactUSD } from "@/lib/constants";
+import { ASSETS, Asset, formatUSD, formatPercent, formatMarketCap, formatCompactUSD } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useLiveOracle, LiveAsset } from "@/hooks/useLiveOracle";
 import { useCurrentNetwork } from "@/lib/contracts/hooks";
@@ -31,15 +31,6 @@ import {
   ChevronRight,
   X,
 } from "lucide-react";
-
-// Category icons
-const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  AI: <Cpu className="w-5 h-5" />,
-  AEROSPACE: <Rocket className="w-5 h-5" />,
-  FINTECH: <CreditCard className="w-5 h-5" />,
-  DATA: <Database className="w-5 h-5" />,
-  SOCIAL: <UsersIcon className="w-5 h-5" />,
-};
 
 // Sort types - longRatio removed (direction is encrypted!)
 type SortField = "name" | "price" | "change" | "marketCap" | "volume" | "oi" | "funding" | "liquidity";
@@ -142,7 +133,6 @@ interface AssetWithLiveData extends Asset {
 }
 
 export default function MarketsPage() {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField | null>("marketCap");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [searchQuery, setSearchQuery] = useState("");
@@ -232,10 +222,8 @@ export default function MarketsPage() {
 
   // Filter, search, and sort assets - then apply bookmarks on top
   const processedAssets = useMemo(() => {
-    // Step 1: Filter by category
-    let filtered = selectedCategory
-      ? assetsWithLiveData.filter(a => a.category === selectedCategory)
-      : [...assetsWithLiveData];
+    // Step 1: Start with all assets
+    let filtered = [...assetsWithLiveData];
 
     // Step 2: Search (global - searches all data)
     if (searchQuery.trim()) {
@@ -294,7 +282,7 @@ export default function MarketsPage() {
 
     // Sort both groups and combine (bookmarked first)
     return [...sortItems(bookmarked), ...sortItems(nonBookmarked)];
-  }, [selectedCategory, sortField, sortDirection, searchQuery, bookmarks, assetsWithLiveData]);
+  }, [sortField, sortDirection, searchQuery, bookmarks, assetsWithLiveData]);
 
   // Pagination
   const totalPages = Math.ceil(processedAssets.length / ITEMS_PER_PAGE);
@@ -306,7 +294,7 @@ export default function MarketsPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCategory, searchQuery, sortField, sortDirection]);
+  }, [searchQuery, sortField, sortDirection]);
 
   const clearSearch = () => {
     setSearchQuery("");
@@ -398,36 +386,6 @@ export default function MarketsPage() {
               {PLATFORM_STATS.totalUsers.toLocaleString()}
             </p>
           </div>
-        </div>
-
-        {/* Category Filter */}
-        <div className="flex items-center gap-3 mb-4 overflow-x-auto pb-2">
-          <button
-            onClick={() => setSelectedCategory(null)}
-            className={cn(
-              "px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap",
-              selectedCategory === null
-                ? "bg-gold/20 text-gold border border-gold/30"
-                : "bg-card border border-border text-text-muted hover:text-text-primary"
-            )}
-          >
-            All Markets
-          </button>
-          {Object.entries(CATEGORIES).map(([key, category]) => (
-            <button
-              key={key}
-              onClick={() => setSelectedCategory(key)}
-              className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-2",
-                selectedCategory === key
-                  ? "bg-gold/20 text-gold border border-gold/30"
-                  : "bg-card border border-border text-text-muted hover:text-text-primary"
-              )}
-            >
-              {CATEGORY_ICONS[key]}
-              {category.name}
-            </button>
-          ))}
         </div>
 
         {/* Search Input */}

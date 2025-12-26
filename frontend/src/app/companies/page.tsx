@@ -28,14 +28,6 @@ import {
   categoryIcons,
 } from '@/lib/companyData';
 
-const allCategories: CompanyCategory[] = [
-  'AI',
-  'AEROSPACE',
-  'FINTECH',
-  'DATA',
-  'SOCIAL',
-];
-
 // Items per page
 const ITEMS_PER_PAGE = 12;
 
@@ -45,7 +37,6 @@ type SortDirection = 'asc' | 'desc' | null;
 
 export default function CompaniesPage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<CompanyCategory | 'ALL'>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField | null>('rank');
@@ -100,10 +91,8 @@ export default function CompaniesPage() {
 
   // Filter, search, sort companies
   const processedCompanies = useMemo(() => {
-    // Step 1: Filter by category
-    let filtered = selectedCategory === 'ALL'
-      ? [...companies]
-      : companies.filter(c => c.category === selectedCategory);
+    // Step 1: Start with all companies
+    let filtered = [...companies];
 
     // Step 2: Search
     if (searchQuery.trim()) {
@@ -149,7 +138,7 @@ export default function CompaniesPage() {
     };
 
     return [...sortItems(bookmarked), ...sortItems(nonBookmarked)];
-  }, [selectedCategory, searchQuery, bookmarks, sortField, sortDirection]);
+  }, [searchQuery, bookmarks, sortField, sortDirection]);
 
   // Pagination
   const totalPages = Math.ceil(processedCompanies.length / ITEMS_PER_PAGE);
@@ -161,7 +150,7 @@ export default function CompaniesPage() {
   // Reset page on filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCategory, searchQuery, sortField, sortDirection]);
+  }, [searchQuery, sortField, sortDirection]);
 
   const clearSearch = () => setSearchQuery('');
 
@@ -183,35 +172,6 @@ export default function CompaniesPage() {
             <Lock className="w-3 h-3 text-gold" />
             6 Tradable Assets
           </p>
-        </div>
-
-        {/* Category Filter */}
-        <div className="flex items-center gap-3 mb-4 overflow-x-auto pb-2">
-          <button
-            onClick={() => setSelectedCategory('ALL')}
-            className={cn(
-              "px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap",
-              selectedCategory === 'ALL'
-                ? "bg-gold/20 text-gold border border-gold/30"
-                : "bg-card border border-border text-text-muted hover:text-text-primary"
-            )}
-          >
-            All Companies
-          </button>
-          {allCategories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-2",
-                selectedCategory === cat
-                  ? "bg-gold/20 text-gold border border-gold/30"
-                  : "bg-card border border-border text-text-muted hover:text-text-primary"
-              )}
-            >
-              {categoryIcons[cat]} {cat}
-            </button>
-          ))}
         </div>
 
         {/* Search Input */}
