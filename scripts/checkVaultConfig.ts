@@ -6,7 +6,7 @@ import { ethers } from "hardhat";
 
 const SHADOW_USD_ADDRESS = "0x6C365a341C2A7D94cb0204A3f22CC810A7357F18";
 const FRONTEND_VAULT = "0x1713d51049EA31c19545De7f47AcB909e1050a71";
-const CLAUDE_MD_VAULT = "0x7a4D60498083Bc2dCC0490d0B95fc9D07940B0FD";
+const SESSION_8_VAULT = "0x7a4D60498083Bc2dCC0490d0B95fc9D07940B0FD";
 
 const SHADOW_USD_ABI = [
   "function vault() external view returns (address)"
@@ -28,7 +28,7 @@ async function main() {
   console.log("\n📋 Vault addresses:");
   console.log("   Current vault in ShadowUSD:", currentVault);
   console.log("   Frontend using (Session 10):", FRONTEND_VAULT);
-  console.log("   CLAUDE.md (Session 8):", CLAUDE_MD_VAULT);
+  console.log("   Session 8 vault:", SESSION_8_VAULT);
 
   console.log("\n📋 Comparison:");
 
@@ -39,10 +39,10 @@ async function main() {
     console.log("   This means vaultDeposit() calls will fail with 'Only vault'");
   }
 
-  if (currentVault.toLowerCase() === CLAUDE_MD_VAULT.toLowerCase()) {
-    console.log("   ✅ ShadowUSD vault matches CLAUDE.md (Session 8)");
+  if (currentVault.toLowerCase() === SESSION_8_VAULT.toLowerCase()) {
+    console.log("   ✅ ShadowUSD vault matches Session 8 config");
   } else {
-    console.log("   ❌ ShadowUSD vault DOES NOT match CLAUDE.md (Session 8)");
+    console.log("   ❌ ShadowUSD vault DOES NOT match Session 8 config");
   }
 
   console.log("\n" + "=".repeat(60));

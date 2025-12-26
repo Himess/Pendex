@@ -6,7 +6,7 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log(`Deployer: ${deployer.address}`);
 
-  // Current contract addresses from CLAUDE.md
+  // Current contract addresses
   const SHADOW_VAULT_ADDRESS = "0x7a4D60498083Bc2dCC0490d0B95fc9D07940B0FD";
 
   // Deploy WalletManager (no constructor args - uses msg.sender as owner)

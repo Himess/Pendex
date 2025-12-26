@@ -6,7 +6,7 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log(`Deployer: ${deployer.address}`);
 
-  // Existing contract addresses from CLAUDE.md (Session 11 Full Redeploy)
+  // Existing contract addresses (Session 11 Full Redeploy)
   const SHADOW_ORACLE = "0x4e819459EEE3061f10D7d0309F4Ba39Af5A68f81";
   const SHADOW_USD = "0x6ABe3F3791B4Cee0f47dA1F10B4106c50C0EE6BC";
   const LIQUIDITY_POOL = "0x548F8CbA6Fa4717BC6890D0f3175094c1FEeaa87";
@@ -88,7 +88,6 @@ async function main() {
   console.log(`   ShadowVault (NEW): ${vaultAddress}`);
   console.log("\n📝 Update these files:");
   console.log(`   - frontend/src/lib/contracts/config.ts`);
-  console.log(`   - CLAUDE.md`);
   console.log("\n" + "=".repeat(60));
 }
 
