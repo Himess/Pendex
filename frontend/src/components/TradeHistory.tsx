@@ -55,10 +55,12 @@ export function TradeHistory() {
 
     try {
       const tradeItems: TradeHistoryItem[] = [];
-
-      // Get PositionOpened events (last 10000 blocks ~= last few days)
       const currentBlock = await publicClient.getBlockNumber();
-      const fromBlock = currentBlock > BigInt(10000) ? currentBlock - BigInt(10000) : BigInt(0);
+
+      // Alchemy free tier limit: fetch last 100 blocks only (works for recent trades)
+      const fromBlock = currentBlock > BigInt(100) ? currentBlock - BigInt(100) : BigInt(0);
+
+      console.log(`📊 Fetching events from block ${fromBlock} to ${currentBlock}`);
 
       // Fetch PositionOpened events
       const openedLogs = await publicClient.getLogs({
@@ -76,7 +78,7 @@ export function TradeHistory() {
           owner: ownerAddress,
         },
         fromBlock,
-        toBlock: "latest",
+        toBlock: currentBlock,
       });
 
       console.log(`📊 Found ${openedLogs.length} PositionOpened events`);
@@ -96,7 +98,7 @@ export function TradeHistory() {
           owner: ownerAddress,
         },
         fromBlock,
-        toBlock: "latest",
+        toBlock: currentBlock,
       });
 
       console.log(`📊 Found ${closedLogs.length} PositionClosed events`);
