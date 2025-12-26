@@ -522,6 +522,62 @@ const FAQ_SECTIONS: FAQSection[] = [
           </div>
         ),
       },
+      {
+        question: "How is the Liquidity Score calculated?",
+        answer: (
+          <div className="space-y-4">
+            <p>
+              The <strong>Liquidity Score</strong> (0-100) indicates the expected execution quality
+              for trades on each asset. Higher score = lower slippage.
+            </p>
+            <div className="bg-card-hover border border-gold/30 rounded-lg p-4">
+              <h4 className="font-semibold text-gold mb-3 flex items-center gap-2">
+                <Calculator className="w-4 h-4" /> Score Formula
+              </h4>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between bg-background rounded p-2">
+                  <span className="text-sm">LP Pool Size</span>
+                  <span className="font-mono text-gold">(pool / $10M) × 40 pts</span>
+                </div>
+                <div className="flex items-center justify-between bg-background rounded p-2">
+                  <span className="text-sm">24h Volume</span>
+                  <span className="font-mono text-gold">(volume / $5M) × 30 pts</span>
+                </div>
+                <div className="flex items-center justify-between bg-background rounded p-2">
+                  <span className="text-sm">Open Interest</span>
+                  <span className="font-mono text-gold">(OI / $20M) × 20 pts</span>
+                </div>
+                <div className="flex items-center justify-between bg-background rounded p-2">
+                  <span className="text-sm">Recent Activity</span>
+                  <span className="font-mono text-gold">+10 pts (if trade in last hour)</span>
+                </div>
+              </div>
+            </div>
+            <div className="bg-background rounded-lg p-4 font-mono text-sm">
+              <p className="text-text-muted mb-2">// Example: OpenAI</p>
+              <p>LP Pool: $10M → 40 pts</p>
+              <p>Volume: $4.2M → 25 pts</p>
+              <p>OI: $16M → 16 pts</p>
+              <p>Activity: Yes → 10 pts</p>
+              <p className="mt-2 pt-2 border-t border-border">Total: <span className="text-success">91 pts</span></p>
+            </div>
+            <div className="grid md:grid-cols-3 gap-3 mt-4">
+              <div className="bg-success/10 border border-success/30 rounded-lg p-3 text-center">
+                <p className="text-2xl font-bold text-success">80-100</p>
+                <p className="text-xs text-text-muted">Excellent</p>
+              </div>
+              <div className="bg-gold/10 border border-gold/30 rounded-lg p-3 text-center">
+                <p className="text-2xl font-bold text-gold">40-79</p>
+                <p className="text-xs text-text-muted">Good</p>
+              </div>
+              <div className="bg-danger/10 border border-danger/30 rounded-lg p-3 text-center">
+                <p className="text-2xl font-bold text-danger">0-39</p>
+                <p className="text-xs text-text-muted">Low</p>
+              </div>
+            </div>
+          </div>
+        ),
+      },
     ],
   },
 
@@ -1237,7 +1293,7 @@ export default function DocsPage() {
               Discord
             </a>
             <a
-              href="https://github.com/poppyseedDev"
+              href="https://github.com/Himess/Pendex"
               target="_blank"
               rel="noopener noreferrer"
               className="px-4 py-2 bg-gold text-background rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"

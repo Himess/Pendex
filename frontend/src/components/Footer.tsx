@@ -64,7 +64,7 @@ export function Footer() {
           {/* Social Links */}
           <div className="flex items-center gap-4">
             <a
-              href="https://github.com/poppyseedDev"
+              href="https://github.com/Himess/Pendex"
               target="_blank"
               rel="noopener noreferrer"
               className="text-text-muted hover:text-text-primary transition-colors"
@@ -75,7 +75,7 @@ export function Footer() {
               </svg>
             </a>
             <a
-              href="https://x.com/AuroraHimess"
+              href="https://x.com/Himess__"
               target="_blank"
               rel="noopener noreferrer"
               className="text-text-muted hover:text-text-primary transition-colors"
