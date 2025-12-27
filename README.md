@@ -586,34 +586,6 @@ npm run dev
 
 ---
 
-## Project Status
-
-### Completed Features
-
-- [x] FHE encrypted trading (collateral, leverage, direction)
-- [x] Session wallet for popup-free trading
-- [x] Encrypted session key storage (WalletManager)
-- [x] Direct sUSD trading (no vault deposit needed)
-- [x] Balance decryption with EIP-712
-- [x] Auto-decrypt on page load
-- [x] 6 Pre-IPO assets with real valuations
-- [x] Limit orders (encrypted trigger prices)
-- [x] Anonymous mode with eaddress
-- [x] Transaction history from blockchain events
-- [x] P&L tracking
-- [x] Liquidity Pool staking
-- [x] Admin dashboard
-- [x] Professional documentation
-
-### Roadmap
-
-- [ ] Mobile responsive optimization
-- [ ] Additional Pre-IPO assets
-- [ ] Mainnet deployment
-- [ ] Cross-chain support
-
----
-
 ## Built For
 
 <div align="center">
@@ -642,8 +614,8 @@ BSD-3-Clause-Clear - See [LICENSE](LICENSE) for details.
 
 ## Links
 
-- [Live Demo](https://shadow-protocol-nine.vercel.app/)
-- [Documentation](https://shadow-protocol-nine.vercel.app/docs)
+- [Live Demo](https://github.com/Himess/Pendex/)
+- [Documentation](https://https://github.com/Himess/Pendex/docs)
 - [Zama fhEVM Docs](https://docs.zama.ai/fhevm)
 
 ---
