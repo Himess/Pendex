@@ -615,7 +615,7 @@ BSD-3-Clause-Clear - See [LICENSE](LICENSE) for details.
 ## Links
 
 - [Live Demo](https://github.com/Himess/Pendex/)
-- [Documentation](https://https://github.com/Himess/Pendex/docs)
+- [Documentation](https://github.com/Himess/Pendex/docs)
 - [Zama fhEVM Docs](https://docs.zama.ai/fhevm)
 
 ---
